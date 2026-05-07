@@ -1,0 +1,21 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/cron/follow-up",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/quarterly-reminder",
+      "schedule": "0 1 * * 1"
+    },
+    {
+      "path": "/api/cron/proactive-coach",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/sessions-cleanup",
+      "schedule": "0 2 * * *"
+    }
+  ]
+}

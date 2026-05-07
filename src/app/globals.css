@@ -1,0 +1,387 @@
+@import "tailwindcss";
+
+/* ============================================================
+   Kinder Stick OS — Design Tokens
+   원본 KinderBoard 페이퍼/잉크 에디토리얼 톤 보존
+   ============================================================ */
+
+:root {
+  --ink: #0e1116;
+  --ink-soft: #2a2f3a;
+  --paper: #f6f1e8;
+  --paper-soft: #efe8db;
+  --paper-deep: #e5dccb;
+  --rule: #1a1d24;
+  --accent: #d4452c;
+  --accent-deep: #a02f1f;
+  --gold: #b89651;
+  --green: #2d5e3e;
+  --amber: #c47a2a;
+  --red: #c0392b;
+  --cobalt: #1e3a5f;
+  --soft-red: #f0d4c8;
+  --soft-amber: #f0e0c4;
+  --soft-green: #d4e2d0;
+  --soft-cobalt: #d4dde8;
+}
+
+@theme inline {
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-paper: var(--paper);
+  --color-paper-soft: var(--paper-soft);
+  --color-paper-deep: var(--paper-deep);
+  --color-accent: var(--accent);
+  --color-accent-deep: var(--accent-deep);
+  --color-gold: var(--gold);
+  --color-signal-green: var(--green);
+  --color-signal-amber: var(--amber);
+  --color-signal-red: var(--red);
+  --color-cobalt: var(--cobalt);
+  --color-soft-red: var(--soft-red);
+  --color-soft-amber: var(--soft-amber);
+  --color-soft-green: var(--soft-green);
+  --color-soft-cobalt: var(--soft-cobalt);
+
+  --font-display: "Fraunces", "Pretendard", serif;
+  --font-sans: "Pretendard", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html,
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-feature-settings: "ss01", "ss02";
+}
+
+/* ---- Paper background + grain noise ---- */
+.paper-bg {
+  background-color: var(--paper);
+  background-image:
+    radial-gradient(circle at 20% 30%, rgba(212, 69, 44, 0.04) 0%, transparent 50%),
+    radial-gradient(circle at 80% 70%, rgba(184, 150, 81, 0.05) 0%, transparent 50%),
+    repeating-linear-gradient(0deg, transparent, transparent 30px, rgba(26, 29, 36, 0.012) 30px, rgba(26, 29, 36, 0.012) 31px);
+}
+
+.grain::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.35;
+  z-index: 1;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.05 0 0 0 0 0.06 0 0 0 0 0.08 0 0 0 0.55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  mix-blend-mode: multiply;
+}
+
+/* ---- Typography utilities ---- */
+.font-display {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+}
+.font-sans {
+  font-family: var(--font-sans);
+}
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+.kicker {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.label-mono {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: var(--ink-soft);
+}
+
+.section-num {
+  font-family: var(--font-display);
+  font-weight: 300;
+  font-size: 0.7em;
+  letter-spacing: 0.05em;
+}
+
+/* ---- Tags ---- */
+.tag {
+  display: inline-block;
+  padding: 2px 9px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border: 1px solid var(--ink);
+  background: transparent;
+}
+.tag-filled {
+  background: var(--ink);
+  color: var(--paper);
+}
+.tag-accent {
+  background: var(--accent);
+  color: var(--paper);
+  border-color: var(--accent);
+}
+.tag-gold {
+  background: var(--gold);
+  color: var(--ink);
+  border-color: var(--gold);
+}
+.tag-green {
+  background: var(--green);
+  color: var(--paper);
+  border-color: var(--green);
+}
+.tag-red {
+  background: var(--red);
+  color: var(--paper);
+  border-color: var(--red);
+}
+
+/* ---- Buttons ---- */
+.btn-primary {
+  background: var(--ink);
+  color: var(--paper);
+  padding: 14px 28px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 2px solid var(--ink);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.btn-primary:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+.btn-secondary {
+  background: transparent;
+  color: var(--ink);
+  padding: 14px 28px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 2px solid var(--ink);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.btn-secondary:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* ---- Rules / dividers ---- */
+.rule-thick {
+  border-color: var(--ink);
+  border-style: solid;
+}
+.dotted-rule {
+  border-top: 1px dashed var(--ink-soft);
+  opacity: 0.5;
+}
+.divider-ornament {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--ink-soft);
+}
+.divider-ornament::before,
+.divider-ornament::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--ink-soft);
+  opacity: 0.4;
+}
+
+/* ---- Cards / area-card ---- */
+.area-card {
+  border: 1.5px solid var(--ink);
+  padding: 22px;
+  background: var(--paper-soft);
+}
+.metric-card {
+  border: 1px solid var(--ink-soft);
+  padding: 16px;
+  background: var(--paper-soft);
+}
+.metric-card .num {
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 600;
+  line-height: 1;
+}
+.note-box {
+  background: var(--paper-deep);
+  border-left: 3px solid var(--accent);
+  padding: 12px 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+}
+
+/* ---- Likert / radio (사용 예정) ---- */
+.likert-option {
+  border: 1.5px solid var(--ink-soft);
+  padding: 14px 12px;
+  background: var(--paper-soft);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+  font-weight: 500;
+  user-select: none;
+}
+.likert-option:hover {
+  border-color: var(--ink);
+  background: var(--paper-deep);
+}
+.likert-option.selected {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+.likert-option .num {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.likert-option .label {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.evidence-input {
+  border: 1.5px solid var(--ink-soft);
+  background: var(--paper-soft);
+  padding: 12px 14px;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  width: 100%;
+  transition: all 0.15s;
+}
+.evidence-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--paper);
+}
+
+/* ---- Bars ---- */
+.bar-track {
+  height: 28px;
+  background: var(--paper-deep);
+  border: 1px solid var(--ink);
+  position: relative;
+  overflow: hidden;
+}
+.bar-fill {
+  height: 100%;
+  position: relative;
+  transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.bar-fill.green {
+  background: var(--green);
+}
+.bar-fill.cobalt {
+  background: var(--cobalt);
+}
+.bar-fill.amber {
+  background: var(--amber);
+}
+.bar-fill.accent {
+  background: var(--accent);
+}
+.bar-fill.red {
+  background: var(--red);
+}
+.bar-bg-pattern {
+  background-image: repeating-linear-gradient(
+    90deg,
+    transparent,
+    transparent 9px,
+    rgba(0, 0, 0, 0.05) 9px,
+    rgba(0, 0, 0, 0.05) 10px
+  );
+}
+
+/* ---- Animations ---- */
+.fade-in {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.slide-up {
+  animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.marquee-text {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-weight: 300;
+  letter-spacing: -0.02em;
+}
+
+/* ---- Print ---- */
+.print-only {
+  display: none;
+}
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  body {
+    background: white;
+  }
+  .paper-bg {
+    background: white;
+  }
+  .grain::before {
+    display: none;
+  }
+  .area-card {
+    page-break-inside: avoid;
+  }
+}

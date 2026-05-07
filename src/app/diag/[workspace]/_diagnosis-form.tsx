@@ -1,0 +1,743 @@
+"use client";
+
+import {
+  useEffect,
+  useMemo,
+  useState,
+  useTransition,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
+import { useRouter } from "next/navigation";
+import type {
+  Domain,
+  FrameworkConfig,
+  SubItem,
+} from "@/lib/framework/loader";
+
+type Tab = "context" | "critical" | "optional";
+
+// ============================================================
+// Types
+// ============================================================
+
+type Belief = 1 | 2 | 3 | 4 | 5;
+type Evidence = 1 | 2 | 3 | 4 | 5;
+
+interface Response {
+  belief?: Belief;
+  evidence?: Evidence;
+  na?: boolean; // "측정 안 함" 명시 — evidence 자동으로 1로 맵핑되어 점수 계산되지만 UI에선 별도 표시
+}
+
+type ResponsesMap = Record<string, Response>;
+
+interface Context {
+  role: string;
+  perspective: string;
+  stage: "pre_seed" | "seed" | "series_a" | "series_b" | "series_c_plus";
+  team_size: string;
+}
+
+interface PersistShape {
+  context: Context;
+  responses: ResponsesMap;
+  v: number; // schema version for migration safety
+}
+
+const DEFAULT_CONTEXT: Context = {
+  role: "",
+  perspective: "founder",
+  stage: "seed",
+  team_size: "",
+};
+
+const STORAGE_VERSION = 1;
+
+// ============================================================
+// Component
+// ============================================================
+
+export function DiagnosisForm({
+  workspace,
+  framework,
+}: {
+  workspace: string;
+  framework: FrameworkConfig;
+}) {
+  const router = useRouter();
+  const storageKey = `kso-diag-${workspace}`;
+
+  const [context, setContext] = useState<Context>(DEFAULT_CONTEXT);
+  const [responses, setResponses] = useState<ResponsesMap>({});
+  const [hydrated, setHydrated] = useState(false);
+  const [submitting, startSubmitting] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  // ---- Hydrate from localStorage ----
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw) as PersistShape;
+        if (parsed.v === STORAGE_VERSION) {
+          setContext(parsed.context);
+          setResponses(parsed.responses);
+        }
+      }
+    } catch {
+      // ignore corrupt storage
+    } finally {
+      setHydrated(true);
+    }
+  }, [storageKey]);
+
+  // ---- Persist on change ----
+  useEffect(() => {
+    if (!hydrated) return;
+    const payload: PersistShape = {
+      context,
+      responses,
+      v: STORAGE_VERSION,
+    };
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(payload));
+    } catch {
+      // localStorage quota or disabled — ignore
+    }
+  }, [hydrated, storageKey, context, responses]);
+
+  // ---- Compute progress ----
+  const allSubItems = useMemo(
+    () => framework.domains.flatMap((d) => d.groups.flatMap((g) => g.sub_items)),
+    [framework],
+  );
+
+  const completed = useMemo(
+    () =>
+      allSubItems.filter((s) => {
+        const r = responses[s.code];
+        return r && r.belief && (r.evidence || r.na);
+      }).length,
+    [allSubItems, responses],
+  );
+
+  const total = allSubItems.length;
+  const pct = total === 0 ? 0 : Math.round((completed / total) * 100);
+  const ready = completed >= 1; // 최소 1개 응답 시 제출 허용 (전체 응답을 강제하지 않음)
+  const fullyComplete = completed === total;
+
+  // ---- Stage groupings (Critical-first UX) ----
+  const criticalDomains = useMemo(
+    () => framework.domains.filter((d) => d.tier === "critical"),
+    [framework],
+  );
+  const optionalDomains = useMemo(
+    () => framework.domains.filter((d) => d.tier !== "critical"),
+    [framework],
+  );
+
+  const criticalSubs = useMemo(
+    () => criticalDomains.flatMap((d) => d.groups.flatMap((g) => g.sub_items)),
+    [criticalDomains],
+  );
+  const optionalSubs = useMemo(
+    () => optionalDomains.flatMap((d) => d.groups.flatMap((g) => g.sub_items)),
+    [optionalDomains],
+  );
+
+  const criticalAnswered = criticalSubs.filter((s) => {
+    const r = responses[s.code];
+    return r && r.belief && (r.evidence || r.na);
+  }).length;
+  const optionalAnswered = optionalSubs.filter((s) => {
+    const r = responses[s.code];
+    return r && r.belief && (r.evidence || r.na);
+  }).length;
+
+  const contextFilled = !!context.role.trim();
+
+  const [tab, setTab] = useState<Tab>("context");
+  // 처음 진입 시 context 미작성 → context 탭, 작성됐으면 critical
+  useEffect(() => {
+    if (!hydrated) return;
+    if (contextFilled && tab === "context" && criticalAnswered === 0) {
+      setTab("critical");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated]);
+
+  // ---- Handlers ----
+  function setResponse(code: string, patch: Partial<Response>) {
+    setResponses((prev) => ({
+      ...prev,
+      [code]: { ...prev[code], ...patch },
+    }));
+  }
+
+  async function submit() {
+    setError(null);
+    startSubmitting(async () => {
+      const recordedAt = new Date().toISOString();
+      const payload = {
+        workspace_id: workspace,
+        context,
+        responses: Object.fromEntries(
+          Object.entries(responses)
+            .filter(([, v]) => v && v.belief && (v.evidence || v.na))
+            .map(([k, v]) => [
+              k,
+              {
+                belief: v.belief,
+                evidence: v.na ? null : v.evidence,
+                na: !!v.na,
+                evidence_recorded_at: recordedAt,
+              },
+            ]),
+        ),
+      };
+
+      try {
+        const res = await fetch("/api/diagnosis/submit", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const json = await res.json();
+        if (!res.ok || !json.ok) {
+          setError(json.message ?? "제출 실패");
+          return;
+        }
+        // localStorage 보존 (이력 보기용). 결과 페이지로 이동
+        router.push(
+          `/diag/${workspace}/result?session=${encodeURIComponent(json.session_id ?? "")}&respondent=${json.respondent_num ?? ""}`,
+        );
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    });
+  }
+
+  function clearAll() {
+    if (!confirm("이 워크스페이스의 모든 응답을 지웁니다. 계속할까요?")) return;
+    setContext(DEFAULT_CONTEXT);
+    setResponses({});
+    localStorage.removeItem(storageKey);
+  }
+
+  return (
+    <main className="min-h-dvh w-full pb-32">
+      {/* ==================== MASTHEAD ==================== */}
+      <header className="border-b-2 border-ink">
+        <div className="max-w-5xl mx-auto px-6 sm:px-10 py-6 flex items-baseline justify-between gap-6">
+          <div className="flex items-baseline gap-3">
+            <a href="/diag" className="kicker hover:text-ink">
+              ← Domain Map
+            </a>
+            <span className="hidden sm:inline label-mono">·</span>
+            <span className="hidden sm:inline label-mono">
+              workspace · {workspace}
+            </span>
+          </div>
+          <span className="label-mono">DIAGNOSIS / RESPONSE</span>
+        </div>
+      </header>
+
+      {/* ==================== HERO ==================== */}
+      <section className="max-w-5xl mx-auto px-6 sm:px-10 pt-12 pb-6">
+        <p className="kicker mb-4">No. 04 · 분기 진단</p>
+        <h1 className="font-display text-5xl sm:text-6xl leading-[0.95] tracking-tight">
+          진단 응답
+        </h1>
+        <p className="mt-5 max-w-3xl text-base leading-relaxed text-ink-soft">
+          단계: <strong>① 컨텍스트 → ② Critical {criticalDomains.length}개 →
+          ③ Optional {optionalDomains.length}개</strong>. Critical만으로도 제출
+          가능합니다. Belief(5점) × Evidence(5단계). 진척은 자동 저장돼
+          이어서 답할 수 있습니다.
+        </p>
+      </section>
+
+      {/* ==================== TAB NAV (sticky) ==================== */}
+      <nav className="sticky top-0 z-20 border-b border-ink-soft paper-bg">
+        <div className="max-w-5xl mx-auto px-6 sm:px-10 py-3 flex items-stretch gap-1 overflow-x-auto">
+          <TabButton
+            active={tab === "context"}
+            onClick={() => setTab("context")}
+            label="① Context"
+            sub={contextFilled ? "✓ filled" : "필수"}
+            tone={contextFilled ? "green" : "amber"}
+          />
+          <TabButton
+            active={tab === "critical"}
+            onClick={() => setTab("critical")}
+            label={`② Critical · ${criticalDomains.length}`}
+            sub={`${criticalAnswered} / ${criticalSubs.length}`}
+            tone={
+              criticalAnswered === criticalSubs.length
+                ? "green"
+                : criticalAnswered > 0
+                  ? "amber"
+                  : undefined
+            }
+          />
+          <TabButton
+            active={tab === "optional"}
+            onClick={() => setTab("optional")}
+            label={`③ Optional · ${optionalDomains.length}`}
+            sub={`${optionalAnswered} / ${optionalSubs.length}`}
+            tone={
+              optionalAnswered === optionalSubs.length && optionalSubs.length > 0
+                ? "green"
+                : optionalAnswered > 0
+                  ? "amber"
+                  : undefined
+            }
+          />
+        </div>
+      </nav>
+
+      {/* ==================== TAB BODY ==================== */}
+      {tab === "context" ? (
+        <ContextStage
+          context={context}
+          setContext={setContext}
+          onContinue={() => setTab("critical")}
+        />
+      ) : null}
+
+      {tab === "critical" ? (
+        <DomainStage
+          title="Critical Domains"
+          subtitle="실패 확률에 가장 강하게 기여하는 8개 영역. 모두 답할 것을 권장."
+          domains={criticalDomains}
+          responses={responses}
+          setResponse={setResponse}
+          onContinue={() => setTab("optional")}
+          continueLabel="다음 — Optional →"
+        />
+      ) : null}
+
+      {tab === "optional" ? (
+        <DomainStage
+          title="Important + Supporting"
+          subtitle="가중치는 낮지만 운영 OS의 균형을 잡는 6개 영역. 시간이 없으면 건너뛰어도 좋습니다."
+          domains={optionalDomains}
+          responses={responses}
+          setResponse={setResponse}
+          onContinue={() => setTab("critical")}
+          continueLabel="← Critical 로 돌아가기"
+        />
+      ) : null}
+
+      {/* ==================== STICKY SUBMIT BAR ==================== */}
+      <div className="fixed bottom-0 left-0 right-0 z-30 border-t-2 border-ink paper-bg">
+        <div className="max-w-5xl mx-auto px-6 sm:px-10 py-4 flex flex-col sm:flex-row gap-4 items-stretch sm:items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 flex-1 min-w-0">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-baseline justify-between mb-1">
+                <span className="kicker">progress</span>
+                <span className="font-mono text-xs text-ink-soft">
+                  {completed} / {total} ({pct}%)
+                  {fullyComplete ? " · all complete" : ""}
+                </span>
+              </div>
+              <div className="bar-track">
+                <div
+                  className={`bar-fill ${
+                    pct >= 100 ? "green" : pct >= 50 ? "amber" : "accent"
+                  }`}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={clearAll}
+              className="btn-secondary !py-3 !px-4 text-sm"
+            >
+              초기화
+            </button>
+            <button
+              type="button"
+              onClick={submit}
+              disabled={!ready || submitting}
+              className="btn-primary !py-3 !px-5 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {submitting ? "제출 중…" : "제출 → 결과 보기"}
+              <span className="font-mono text-xs">→</span>
+            </button>
+          </div>
+        </div>
+        {error ? (
+          <div className="border-t border-signal-red bg-soft-red text-signal-red font-mono text-xs px-6 sm:px-10 py-2">
+            ⚠ {error}
+          </div>
+        ) : null}
+      </div>
+    </main>
+  );
+}
+
+// ============================================================
+// Sub-components
+// ============================================================
+
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="label-mono mb-1 block">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  label,
+  sub,
+  tone,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  sub: string;
+  tone?: "green" | "amber";
+}) {
+  const subColor =
+    tone === "green"
+      ? "text-signal-green"
+      : tone === "amber"
+        ? "text-signal-amber"
+        : "text-ink-soft";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex-1 min-w-[140px] text-left px-4 py-2 border-2 transition ${
+        active
+          ? "border-ink bg-ink text-paper"
+          : "border-ink-soft hover:border-ink"
+      }`}
+    >
+      <p className={`font-display text-base leading-tight ${active ? "text-paper" : ""}`}>
+        {label}
+      </p>
+      <p
+        className={`label-mono mt-0.5 ${
+          active ? "!text-paper" : subColor
+        }`}
+      >
+        {sub}
+      </p>
+    </button>
+  );
+}
+
+function ContextStage({
+  context,
+  setContext,
+  onContinue,
+}: {
+  context: Context;
+  setContext: Dispatch<SetStateAction<Context>>;
+  onContinue: () => void;
+}) {
+  return (
+    <section className="max-w-5xl mx-auto px-6 sm:px-10 mt-8">
+      <div className="area-card">
+        <p className="kicker mb-2">§ Stage 1 · Respondent context</p>
+        <h2 className="font-display text-3xl mb-4">응답자 정보</h2>
+        <p className="text-ink-soft mb-5 text-sm">
+          역할과 회사 단계는 Bayesian failure probability 산출에 직접 사용됩니다.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Field label="역할 (자유 기재)">
+            <input
+              type="text"
+              placeholder="예: Founder/CEO, Head of Product, ..."
+              value={context.role}
+              onChange={(e) =>
+                setContext((c) => ({ ...c, role: e.target.value }))
+              }
+              className="evidence-input"
+            />
+          </Field>
+          <Field label="관점">
+            <select
+              value={context.perspective}
+              onChange={(e) =>
+                setContext((c) => ({ ...c, perspective: e.target.value }))
+              }
+              className="evidence-input"
+            >
+              <option value="founder">창립자/경영진</option>
+              <option value="product">제품·엔지니어링</option>
+              <option value="growth">마케팅·영업·CS</option>
+              <option value="ops">운영·재무</option>
+              <option value="advisor">자문·외부</option>
+            </select>
+          </Field>
+          <Field label="회사 단계 (Bayesian prior에 적용)">
+            <select
+              value={context.stage}
+              onChange={(e) =>
+                setContext((c) => ({
+                  ...c,
+                  stage: e.target.value as Context["stage"],
+                }))
+              }
+              className="evidence-input"
+            >
+              <option value="pre_seed">Pre-seed</option>
+              <option value="seed">Seed</option>
+              <option value="series_a">Series A</option>
+              <option value="series_b">Series B</option>
+              <option value="series_c_plus">Series C+</option>
+            </select>
+          </Field>
+          <Field label="팀 규모 (선택)">
+            <input
+              type="text"
+              placeholder="예: 6명"
+              value={context.team_size}
+              onChange={(e) =>
+                setContext((c) => ({ ...c, team_size: e.target.value }))
+              }
+              className="evidence-input"
+            />
+          </Field>
+        </div>
+        <div className="mt-6 dotted-rule pt-4 flex justify-end">
+          <button type="button" onClick={onContinue} className="btn-primary">
+            다음 — Critical 8개 시작
+            <span className="font-mono text-xs">→</span>
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function DomainStage({
+  title,
+  subtitle,
+  domains,
+  responses,
+  setResponse,
+  onContinue,
+  continueLabel,
+}: {
+  title: string;
+  subtitle: string;
+  domains: Domain[];
+  responses: ResponsesMap;
+  setResponse: (code: string, patch: Partial<Response>) => void;
+  onContinue: () => void;
+  continueLabel: string;
+}) {
+  return (
+    <>
+      <section className="max-w-5xl mx-auto px-6 sm:px-10 mt-8">
+        <p className="kicker mb-1">§ {title}</p>
+        <h2 className="font-display text-3xl">{domains.length} domains</h2>
+        <p className="mt-2 text-ink-soft text-sm max-w-2xl">{subtitle}</p>
+      </section>
+      <div className="max-w-5xl mx-auto px-6 sm:px-10 mt-8 space-y-12">
+        {domains.map((d) => (
+          <DomainSection
+            key={d.code}
+            domain={d}
+            responses={responses}
+            setResponse={setResponse}
+          />
+        ))}
+      </div>
+      <div className="max-w-5xl mx-auto px-6 sm:px-10 mt-10 flex justify-end">
+        <button type="button" onClick={onContinue} className="btn-secondary">
+          {continueLabel}
+        </button>
+      </div>
+    </>
+  );
+}
+
+function tierTagClass(tier: SubItem["tier"]): string {
+  switch (tier) {
+    case "critical":
+      return "tag-accent";
+    case "important":
+      return "tag-gold";
+    case "supporting":
+      return "tag";
+  }
+}
+
+function DomainSection({
+  domain,
+  responses,
+  setResponse,
+}: {
+  domain: Domain;
+  responses: ResponsesMap;
+  setResponse: (code: string, patch: Partial<Response>) => void;
+}) {
+  const subs = domain.groups.flatMap((g) => g.sub_items);
+  const answered = subs.filter((s) => {
+    const r = responses[s.code];
+    return r && r.belief && (r.evidence || r.na);
+  }).length;
+
+  return (
+    <section
+      id={`domain-${domain.code}`}
+      className="border-t border-ink-soft pt-8"
+    >
+      <header className="flex items-baseline justify-between gap-4 flex-wrap">
+        <div>
+          <span className="kicker">
+            <span className="section-num">No. </span>
+            {domain.code}
+          </span>
+          <h2 className="mt-1 font-display text-3xl leading-tight">
+            {domain.name_ko}
+          </h2>
+          <p className="label-mono">{domain.name_en}</p>
+        </div>
+        <div className="text-right">
+          <span className="font-mono text-xs">
+            {answered} / {subs.length}
+          </span>
+          <p className="label-mono">
+            가중치 {domain.weight}% · {domain.tier}
+          </p>
+        </div>
+      </header>
+
+      {subs.length === 0 ? (
+        <div className="mt-4 note-box">
+          이 도메인은 아직 sub-item이 시드되지 않았습니다 (확장 가이드에 명시된
+          항목을 추가 시드하면 활성화).
+        </div>
+      ) : (
+        <div className="mt-6 space-y-8">
+          {subs.map((s) => (
+            <SubItemForm
+              key={s.code}
+              sub={s}
+              response={responses[s.code]}
+              onChange={(patch) => setResponse(s.code, patch)}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function SubItemForm({
+  sub,
+  response,
+  onChange,
+}: {
+  sub: SubItem;
+  response: Response | undefined;
+  onChange: (patch: Partial<Response>) => void;
+}) {
+  const beliefVal = response?.belief;
+  const evidenceVal = response?.evidence;
+  const na = !!response?.na;
+
+  return (
+    <article className="area-card">
+      <header className="flex items-baseline justify-between gap-3 flex-wrap">
+        <span className="font-mono text-xs text-ink-soft">{sub.code}</span>
+        <span className={`tag ${tierTagClass(sub.tier)}`}>
+          {sub.tier.toUpperCase()}
+        </span>
+      </header>
+
+      {/* BELIEF */}
+      <div className="mt-3">
+        <p className="font-display text-lg leading-snug">{sub.belief.q}</p>
+        {sub.belief.help ? (
+          <p className="mt-1 text-sm text-ink-soft">{sub.belief.help}</p>
+        ) : null}
+        <div className="mt-3 grid grid-cols-5 gap-2">
+          {sub.belief.anchors.map((label, i) => {
+            const v = (i + 1) as Belief;
+            const selected = beliefVal === v;
+            return (
+              <button
+                type="button"
+                key={i}
+                onClick={() => onChange({ belief: v })}
+                className={`likert-option ${selected ? "selected" : ""}`}
+              >
+                <span className="num">{v}</span>
+                <span className="label">{label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* EVIDENCE */}
+      <div className="mt-5">
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="kicker">Evidence</p>
+          {sub.evidence.kpi_source ? (
+            <span className="label-mono">
+              kpi: {sub.evidence.kpi_source}
+            </span>
+          ) : null}
+        </div>
+        <p className="mt-1 text-sm">{sub.evidence.q}</p>
+        {sub.evidence.options ? (
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-5 gap-2">
+            {sub.evidence.options.map((opt) => {
+              const selected = !na && evidenceVal === opt.v;
+              return (
+                <button
+                  type="button"
+                  key={opt.v}
+                  onClick={() =>
+                    onChange({ evidence: opt.v as Evidence, na: false })
+                  }
+                  className={`likert-option ${selected ? "selected" : ""}`}
+                >
+                  <span className="num">{opt.v}</span>
+                  <span className="label">{opt.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => onChange({ na: !na, evidence: undefined })}
+          className={`mt-2 text-xs font-mono underline-offset-2 ${
+            na ? "text-accent underline" : "text-ink-soft hover:text-ink"
+          }`}
+        >
+          {na
+            ? "✓ 측정/기록 없음 — 데이터 부족으로 표시 (선택 해제하기)"
+            : "측정/기록 없음으로 표시"}
+        </button>
+      </div>
+
+      {/* CITATION */}
+      <p className="mt-4 dotted-rule pt-3 label-mono">
+        근거: {sub.citation}
+      </p>
+    </article>
+  );
+}

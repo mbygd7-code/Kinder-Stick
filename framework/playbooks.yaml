@@ -1,0 +1,724 @@
+# =====================================================================
+# Kinder Stick OS — playbooks.yaml
+# 42 Failure-Mode Coaching Playbooks (14 domains × 3 modes)
+#
+# 각 playbook은 AI 코치가 결손 감지 후 사용자와 대화할 때
+# 진단 질문 → SMART 3단계 액션 → 검증 KPI로 이어지는 골격을 제공한다.
+# Claude API 호출 시 (1) 사용자 컨텍스트 + KPI + 증거를 retrieve →
+# (2) 가장 매칭되는 playbook을 1-shot으로 시스템 프롬프트에 주입 →
+# (3) AI 코치가 회사 상황에 맞춰 변형 출력.
+# =====================================================================
+
+version: "1.0.0"
+updated: "2026-05-07"
+
+playbooks:
+
+# =========================================================
+# A1 — 시장-문제 적합성
+# =========================================================
+- id: F1-1
+  domain: A1
+  title: "Urgent 분류 부재 — 'Important하지만 사지 않는' 문제"
+  trigger:
+    primary: "A1.JTBD.URGENCY.evidence.v <= 2"
+    secondary: ["last_purchase_decision_cycle > 90d", "win-rate trending down"]
+  diagnostic_q: |
+    원장 인터뷰 5명을 떠올려보세요. 그들이 우리 솔루션을 듣고 다음 분기에 도입을 결정한 분이 몇 명인가요?
+    결정 안 한 분들은 무엇을 더 급하다고 느끼고 있었나요?
+  smart_actions:
+    - { owner: "Founder", deadline_days: 14, action: "결제 취소·미결제 원장 8명 1:1 인터뷰 — Mom Test §3 push/pull 질문 사용" }
+    - { owner: "PM",      deadline_days: 21, action: "Push-Pull-Anxiety-Habit 매트릭스로 분류, 'urgent' 표현 추출" }
+    - { owner: "Founder", deadline_days: 30, action: "ICP를 'urgent 케이스'로 좁힌 한 문장 가설 명문화 + 다음 30 deal에서 검증" }
+  verify:
+    metric: "A1.JTBD.URGENCY.evidence.v >= 3 AND 신규 deal cycle < 60d"
+    after_days: 60
+  cite: "Christensen *Competing Against Luck* (2016); Re:Wired Group 'Forces of Progress'; Fitzpatrick *The Mom Test*"
+
+- id: F1-2
+  domain: A1
+  title: "세그먼트 흐려짐 — 모두에게 팔려고 한다"
+  trigger:
+    primary: "A1.SEG.ICP.evidence.v <= 2 OR active_segments > 3"
+  diagnostic_q: "지난 분기 결제 원장 10명의 (지역·기관 규모·운영 형태)를 표로 그려보면, 가장 큰 클러스터가 전체의 몇 %를 차지하나요?"
+  smart_actions:
+    - { owner: "PM", deadline_days: 7,  action: "결제 원장 코호트 분석 — 가장 큰 클러스터 식별" }
+    - { owner: "Founder", deadline_days: 14, action: "ICP 한 문장 정의 (예: '서울·경기 100명 미만 사립 어린이집의 50대 원장')" }
+    - { owner: "Marketing", deadline_days: 30, action: "ICP 외 채널·광고·이벤트 비용 30% 컷, ICP에 재배분" }
+  verify:
+    metric: "ICP segment의 신규 결제율 +30%"
+    after_days: 90
+  cite: "April Dunford *Obviously Awesome* (2019)"
+
+- id: F1-3
+  domain: A1
+  title: "인터뷰 부족 — 가설을 검증하지 못한 채 만들고 있다"
+  trigger:
+    primary: "A1.JTBD.LANG.evidence.v <= 2"
+  diagnostic_q: "지난 30일 동안 잠재 고객(원장 또는 교사)과 1:1 대화를 몇 번 했나요?"
+  smart_actions:
+    - { owner: "Founder", deadline_days: 7,  action: "다음 21일 안에 8명 인터뷰 일정 잡기 — 결제·미결제·이탈 각 카테고리에서" }
+    - { owner: "PM",      deadline_days: 21, action: "인터뷰 노트 텍스트 분석 — 동일 표현 빈도 카운트" }
+    - { owner: "PM",      deadline_days: 30, action: "Top 3 표현으로 product copy 1차 재작성, A/B 테스트" }
+  verify:
+    metric: "동일 표현 빈도 ≥ 6/10 인터뷰"
+    after_days: 30
+  cite: "The Mom Test §2; Steve Blank *Four Steps to the Epiphany*"
+
+# =========================================================
+# A2 — PMF
+# =========================================================
+- id: F2-1
+  domain: A2
+  title: "핵심 세그먼트 미식별 — Sean Ellis 25–39%"
+  trigger:
+    primary: "A2.SE.40.evidence.v == 3"
+    secondary: ["A2.CORE.ICP.evidence.v <= 3"]
+  diagnostic_q: "Very disappointed라고 답한 사람들의 직무·기관 유형·사용 빈도가 다른 응답자와 다른 점은 무엇인가요?"
+  smart_actions:
+    - { owner: "PM",       deadline_days: 14, action: "VD 응답자 8명 1:1 인터뷰 (Mom Test 방식)" }
+    - { owner: "Founder",  deadline_days: 7,  action: "ICP 한 문장 재정의" }
+    - { owner: "PM",       deadline_days: 21, action: "핵심 세그먼트 전용 onboarding 분기 A/B" }
+  verify:
+    metric: "핵심 세그먼트의 M1 retention >= 60%"
+    after_days: 30
+  cite: "Christensen JTBD interview script; Rob Fitzpatrick *Mom Test*"
+
+- id: F2-2
+  domain: A2
+  title: "가치 명제 분산 — 사용자가 우리 단어로 안 말한다"
+  trigger:
+    primary: "A2.VALUE.ECHO.evidence.v <= 2"
+  diagnostic_q: "사용자가 자기 입으로 가치를 말한 5개 quote 중 우리 마케팅 카피와 겹치는 단어는 몇 개인가요?"
+  smart_actions:
+    - { owner: "Founder",  deadline_days: 7,  action: "최근 30일 NPS·인터뷰·고객지원 대화에서 30 quote 수집" }
+    - { owner: "PMM",      deadline_days: 14, action: "Top-3 user-language phrase 도출" }
+    - { owner: "Marketing", deadline_days: 21, action: "랜딩페이지 카피 전면 교체, 5초 테스트로 검증" }
+  verify:
+    metric: "신규 가입 funnel CVR +15%, value-prop comprehension test ≥ 80%"
+    after_days: 30
+  cite: "April Dunford *Obviously Awesome*; Wynter messaging tests"
+
+- id: F2-3
+  domain: A2
+  title: "Retention 결손형 PMF — 가짜 PMF"
+  trigger:
+    primary: "A2.RET.M3.evidence.v <= 2 AND A2.SE.40.evidence.v >= 3"
+    secondary: ["M1 retention 양호하지만 M3 급락"]
+  diagnostic_q: "사용자들이 도구를 멈추는 시점에 그들이 풀려고 했던 일이 끝났는가요, 아니면 다른 방법으로 옮겨갔나요?"
+  smart_actions:
+    - { owner: "PM",  deadline_days: 7,  action: "최근 churn 30명 인터뷰 (이탈 사유)" }
+    - { owner: "Product", deadline_days: 14, action: "weekly habit loop 1개 명시 (Hooked 모델)" }
+    - { owner: "Eng", deadline_days: 30, action: "reactivation 트리거(이메일·푸시) 구현" }
+  verify:
+    metric: "M3 retention curve flatten (slope w8→w12 ≥ -1pp)"
+    after_days: 60
+  cite: "Andrew Chen 'leaky bucket'; Reforge Retention course; Eyal *Hooked*"
+
+# =========================================================
+# A3 — Buyer Economics
+# =========================================================
+- id: F3-1
+  domain: A3
+  title: "결제 원장 0명 — 무료 사용은 늘어도 결제 안 함"
+  trigger:
+    primary: "A3.BUYER.WTP.evidence.v == 1 AND stage IN [seed, series_a]"
+  diagnostic_q: "지난 6개월 동안 우리 제품을 무료로 쓰던 원장 중에 결제 의사를 명시적으로 보였다가 안 한 분이 몇 명인가요? 그분들이 든 이유는?"
+  smart_actions:
+    - { owner: "Founder", deadline_days: 14, action: "결제 의사 보였던 5명 직접 영업 — 막힌 지점 파악" }
+    - { owner: "PMM",     deadline_days: 21, action: "ROI 한 페이지 자료 작성 (시간절감/평가제/학부모만족)" }
+    - { owner: "Founder", deadline_days: 30, action: "5명에게 paid pilot 제안 — 첫 결제 만들기" }
+  verify:
+    metric: "첫 결제 원장 ≥ 3명"
+    after_days: 60
+  cite: "Patrick Campbell (ProfitWell) 'Pricing Strategy'"
+
+- id: F3-2
+  domain: A3
+  title: "ROI 자료 부재 — 원장이 의사결정 근거를 만들지 못한다"
+  trigger:
+    primary: "A3.BUYER.ROI.evidence.v <= 2"
+  diagnostic_q: "원장이 다음 학기 예산을 짤 때 우리 제품의 ROI를 누구에게 어떤 자료로 설명하나요?"
+  smart_actions:
+    - { owner: "PMM", deadline_days: 14, action: "결제 원장 5명 인터뷰 — '얼마/어떻게 절감되는지' 정량화" }
+    - { owner: "PMM", deadline_days: 21, action: "ROI 한 페이지 작성 (시간 X시간/주 절감 → 인건비 환산)" }
+    - { owner: "Sales", deadline_days: 30, action: "다음 30 deal에서 ROI 자료 사용, conversion 측정" }
+  verify:
+    metric: "deal cycle -20% AND close rate +10%"
+    after_days: 60
+  cite: "Bessemer 'Five Cs of Cloud Finance'"
+
+- id: F3-3
+  domain: A3
+  title: "Renewal 위기 — 학기 끝나면 갱신 안 한다"
+  trigger:
+    primary: "renewal_rate < 70% AND domain_stage post-revenue"
+  diagnostic_q: "지난 학기 갱신 안 한 원장 5명에게 '왜 안 했는지' 직접 들었나요?"
+  smart_actions:
+    - { owner: "CS",    deadline_days: 7,  action: "이탈 5명 인터뷰" }
+    - { owner: "Product", deadline_days: 21, action: "이탈 사유 Top 3 중 1개를 다음 분기 로드맵에 반영" }
+    - { owner: "CS",    deadline_days: 30, action: "갱신 60일 전 health check 자동 트리거 도입" }
+  verify:
+    metric: "다음 학기 renewal_rate >= 85%"
+    after_days: 90
+  cite: "Bessemer NRR; Gainsight Customer Health Score"
+
+# =========================================================
+# A4 — Activation & Retention
+# =========================================================
+- id: F4-1
+  domain: A4
+  title: "D1 activation < 20% — 가입자가 첫날에 가치를 못 본다"
+  trigger:
+    primary: "A4.ACT.D1.evidence.v == 1"
+  diagnostic_q: "신규 가입자가 우리 제품에서 처음 가치를 느끼는 'Aha moment'를 우리는 어떻게 정의하고 있나요? 그 정의가 데이터로 검증됐나요?"
+  smart_actions:
+    - { owner: "PM",    deadline_days: 7,  action: "Aha moment 정의 (예: '교사가 첫 활동 자료 1개 다운로드 + 학급 1개 등록')" }
+    - { owner: "Eng",   deadline_days: 14, action: "활성화 funnel 이벤트 인스트루먼테이션" }
+    - { owner: "PM",    deadline_days: 30, action: "onboarding 동선 3-step 단축, A/B 테스트" }
+  verify:
+    metric: "D1 activation >= 35%"
+    after_days: 30
+  cite: "Reforge Activation; First Round 'How Pinterest Increased Activation'"
+
+- id: F4-2
+  domain: A4
+  title: "Habit Loop 부재 — WAU/MAU < 30%"
+  trigger:
+    primary: "A4.HABIT.WAU_MAU.evidence.v <= 2"
+  diagnostic_q: "사용자가 우리 제품을 한 주에 몇 번, 어떤 트리거로 열어보길 기대하나요? 그게 실제 데이터에서 보이나요?"
+  smart_actions:
+    - { owner: "Product", deadline_days: 14, action: "habit loop 설계 (외부 트리거 → 행동 → 가변 보상 → 투자)" }
+    - { owner: "Eng",     deadline_days: 21, action: "weekly digest 이메일 도입 (사용자 기관별 맞춤)" }
+    - { owner: "PM",      deadline_days: 30, action: "weekly engagement 측정 대시보드 구축" }
+  verify:
+    metric: "WAU/MAU >= 40%"
+    after_days: 60
+  cite: "Eyal *Hooked* (2014); Sequoia engagement metric"
+
+- id: F4-3
+  domain: A4
+  title: "이탈 후 재활성 부재 — 한 번 떠나면 끝"
+  trigger:
+    primary: "reactivation_rate < 5% AND churn cohort > 100/month"
+  diagnostic_q: "이탈한 사용자에게 우리는 어떤 시점에 무엇을 보내고 있나요?"
+  smart_actions:
+    - { owner: "Marketing", deadline_days: 14, action: "이탈 후 7일·30일·90일 재활성 시퀀스 설계" }
+    - { owner: "Eng",       deadline_days: 21, action: "이메일/푸시 자동화 구현" }
+    - { owner: "PM",        deadline_days: 30, action: "재활성 메시지 A/B (가치 vs 인센티브)" }
+  verify:
+    metric: "reactivation rate >= 15%"
+    after_days: 90
+  cite: "Lenny Rachitsky 'Resurrected users'"
+
+# =========================================================
+# A5 — Unit Economics
+# =========================================================
+- id: F5-1
+  domain: A5
+  title: "Gross Margin < 50% — 인프라/CS 비용이 매출을 갉아먹는다"
+  trigger:
+    primary: "A5.GROSS.MARGIN.evidence.v <= 2 AND stage != pre_seed"
+  diagnostic_q: "매출 1만원당 직접 원가(서버 + 결제수수료 + CS 인건비)는 얼마인가요? 가장 큰 항목은 무엇인가요?"
+  smart_actions:
+    - { owner: "CFO/CEO", deadline_days: 14, action: "COGS 항목별 분석 — 가장 큰 3개 식별" }
+    - { owner: "CTO",     deadline_days: 30, action: "서버 비용 30% 절감 plan (instance rightsizing, caching, CDN)" }
+    - { owner: "CS",      deadline_days: 30, action: "CS 자동화 — Top 5 inquiry self-serve 전환" }
+  verify:
+    metric: "Gross margin >= 65%"
+    after_days: 90
+  cite: "Bessemer State of the Cloud 2025"
+
+- id: F5-2
+  domain: A5
+  title: "CAC payback > 24개월 — 광고 끄면 회사가 멈춘다"
+  trigger:
+    primary: "A5.CAC.PAYBACK.evidence.v == 1"
+  diagnostic_q: "지난 분기 Net New ARR을 만든 채널 중 marginal CAC payback이 24개월 이상인 것은 무엇인가요?"
+  smart_actions:
+    - { owner: "CFO",     deadline_days: 7,  action: "채널별 CAC payback 분석" }
+    - { owner: "Growth",  deadline_days: 14, action: "BM>3 채널 즉시 pause" }
+    - { owner: "CEO",     deadline_days: 30, action: "efficient growth plan 재제출 (CAC payback 12개월 목표)" }
+  verify:
+    metric: "다음 분기 CAC payback <= 12개월"
+    after_days: 90
+  cite: "OpenView Efficient Growth; Sacks Burn Multiple"
+
+- id: F5-3
+  domain: A5
+  title: "LTV:CAC < 3:1 — 고객 평생가치가 획득비용을 못 따라간다"
+  trigger:
+    primary: "A5.LTV.RATIO.evidence.v <= 2"
+  diagnostic_q: "고객의 평균 수명(개월)과 월 ARPU를 곱한 LTV는 얼마인가요? 우리 CAC와 비교하면?"
+  smart_actions:
+    - { owner: "CS",        deadline_days: 30, action: "이탈 사유 분석 → top 1 사유 해결 (retention 연장)" }
+    - { owner: "PM",        deadline_days: 30, action: "ARPU 확장 — upsell 기능 1개 출시" }
+    - { owner: "Marketing", deadline_days: 30, action: "low-CAC 채널 (콘텐츠·SEO·referral) 비중 50%+ 확대" }
+  verify:
+    metric: "LTV:CAC >= 3:1"
+    after_days: 90
+  cite: "Bessemer 'LTV/CAC Cookbook'"
+
+# =========================================================
+# A6 — GTM
+# =========================================================
+- id: F6-1
+  domain: A6
+  title: "반복 가능 채널 0–1개 — 매번 새로 발명한다"
+  trigger:
+    primary: "A6.CHANNEL.REPEAT.evidence.v <= 2"
+  diagnostic_q: "지난 6개월 동안 동일한 채널·동일한 메시지로 두 달 연속 신규 고객을 만든 적이 있나요?"
+  smart_actions:
+    - { owner: "Growth", deadline_days: 7,  action: "Bullseye Framework 19개 채널 중 우선순위 3개 선정" }
+    - { owner: "Growth", deadline_days: 30, action: "3개 채널 각각 4주 실험 (실험 design, budget 동일)" }
+    - { owner: "Growth", deadline_days: 60, action: "Winner 1개 double down — 60일간 비용 3배" }
+  verify:
+    metric: "1개 채널이 월 신규 고객의 30%+ 일관 공급"
+    after_days: 90
+  cite: "Weinberg & Mares *Traction* (2014); First Round 'How to Find Your Channel'"
+
+- id: F6-2
+  domain: A6
+  title: "Pipeline Velocity 정체 — 리드는 들어오는데 안 닫힌다"
+  trigger:
+    primary: "deal_cycle_days > 60 AND stage_to_close_rate < 20%"
+  diagnostic_q: "리드 → 데모 → 제안 → 클로즈 단계별 conversion이 어디서 막히나요?"
+  smart_actions:
+    - { owner: "Sales",   deadline_days: 14, action: "stage별 conversion 분석" }
+    - { owner: "PMM",     deadline_days: 21, action: "막힌 stage용 자료 1개 작성 (예: ROI 자료, 케이스 스터디)" }
+    - { owner: "Sales",   deadline_days: 30, action: "deal cycle 단축 — meeting cadence 격주→매주" }
+  verify:
+    metric: "deal cycle -25%, close rate +10%"
+    after_days: 60
+  cite: "Mark Roberge *The Sales Acceleration Formula*"
+
+- id: F6-3
+  domain: A6
+  title: "콘텐츠 cadence 부재 — 마케팅 자산이 쌓이지 않는다"
+  trigger:
+    primary: "content_published_per_month < 2"
+  diagnostic_q: "원장·교사가 우리 브랜드를 검색했을 때 첫 페이지에 보이는 콘텐츠가 몇 개 있나요?"
+  smart_actions:
+    - { owner: "Marketing", deadline_days: 14, action: "콘텐츠 캘린더 — 주 1회 발행 (블로그 또는 영상)" }
+    - { owner: "Marketing", deadline_days: 30, action: "SEO 키워드 30개 매핑 (누리과정·평가제·학부모 만족 등)" }
+    - { owner: "Marketing", deadline_days: 60, action: "원장 인터뷰 시리즈 8편 발행" }
+  verify:
+    metric: "월 organic traffic +50%, 콘텐츠 발행 ≥ 8/월"
+    after_days: 90
+  cite: "April Dunford *Sales Pitch*; Animalz B2B content playbook"
+
+# =========================================================
+# A7 — 신뢰·안전·규제
+# =========================================================
+- id: F7-1
+  domain: A7
+  title: "KISA 자기점검 미완료"
+  trigger:
+    primary: "A7.KISA.SELFCHECK.evidence.v <= 2"
+  diagnostic_q: "마지막 침해 사고 시뮬레이션이 언제였나요? 만약 지금 개인정보 유출이 발생한다면 24시간 내에 누구에게 어떻게 신고하나요?"
+  smart_actions:
+    - { owner: "CTO/DPO", deadline_days: 14, action: "KISA 자기점검 100문항 완수" }
+    - { owner: "CTO",     deadline_days: 30, action: "미흡 항목 패치 (특히 암호화·접근통제·로그)" }
+    - { owner: "DPO",     deadline_days: 90, action: "분기마다 재점검, 침해 사고 시뮬레이션 1회" }
+  verify:
+    metric: "점검 점수 >= 80, 시뮬레이션 통과"
+    after_days: 90
+  cite: "KISA ISMS-P 자기점검 기준; 개인정보보호법 22조의2 (영유아)"
+  external_handoff:
+    when: "evidence.v == 1 AND stage IN [series_a, series_b]"
+    domain: "regulatory_privacy"
+    target: "Meetflow 또는 KISA 인증 컨설팅 파트너"
+
+- id: F7-2
+  domain: A7
+  title: "누리과정 매핑 결손"
+  trigger:
+    primary: "A7.NURI.FIT.evidence.v <= 2"
+  diagnostic_q: "콘텐츠 100개 중 5개 영역(신체운동·건강 / 의사소통 / 사회관계 / 예술경험 / 자연탐구) 매핑이 안 된 건 몇 개인가요?"
+  smart_actions:
+    - { owner: "Curriculum Lead", deadline_days: 21, action: "전 콘텐츠 5영역 태깅" }
+    - { owner: "Curriculum Lead", deadline_days: 30, action: "평가제 지표 매핑 매트릭스 작성" }
+    - { owner: "Founder",         deadline_days: 60, action: "외부 자문 (유아교육 전문가) 검수 1회" }
+  verify:
+    metric: "매핑률 >= 80%, 외부 자문 통과"
+    after_days: 60
+  cite: "교육부 2019 개정 누리과정; 어린이집 평가제 평가지표 (2023)"
+
+- id: F7-3
+  domain: A7
+  title: "보호자 동의 흐름 문제"
+  trigger:
+    primary: "consent_storage_rate < 95% OR under_14_consent_doc_missing"
+  diagnostic_q: "지금 우리 DB에서 임의의 아동 1명을 골라, 보호자 동의 기록을 5분 안에 보여줄 수 있나요?"
+  smart_actions:
+    - { owner: "DPO", deadline_days: 7,  action: "동의서 audit (랜덤 100명 샘플)" }
+    - { owner: "Eng", deadline_days: 14, action: "동의서 보관 시스템 정비 (timestamp + immutable)" }
+    - { owner: "HR",  deadline_days: 30, action: "직원 대상 PII 교육 + 분기 재교육" }
+  verify:
+    metric: "99% 보관 + 외부 감사 통과"
+    after_days: 60
+  cite: "개인정보보호법; 방통위 아동 개인정보 가이드라인"
+
+# =========================================================
+# A8 — 학습·실행 속도
+# =========================================================
+- id: F8-1
+  domain: A8
+  title: "분기 실험 사이클 < 3 — 가설 검증 속도가 느리다"
+  trigger:
+    primary: "A8.VEL.CYCLE.evidence.v <= 2"
+  diagnostic_q: "지난 분기 우리 팀이 '확인했다고 생각했는데 틀렸던' 가설이 몇 개 있었나요?"
+  smart_actions:
+    - { owner: "PM",  deadline_days: 7,  action: "hypothesis 템플릿 도입 — 가설/지표/기간/판정 명시" }
+    - { owner: "EM",  deadline_days: 14, action: "weekly experiment review 도입" }
+    - { owner: "PM",  deadline_days: 30, action: "분기 6개 가설 backlog 작성 + 우선순위" }
+  verify:
+    metric: "분기 실험 사이클 >= 5"
+    after_days: 90
+  cite: "Ries *Lean Startup*; Shape Up §4 'Betting Table'"
+
+- id: F8-2
+  domain: A8
+  title: "의사결정 lead time 길다"
+  trigger:
+    primary: "decision_latency_days > 14"
+  diagnostic_q: "지난 30일 동안 '결정이 미뤄져서 일이 막힌' 사례가 몇 건 있었나요?"
+  smart_actions:
+    - { owner: "CEO", deadline_days: 7,  action: "Decision Rights matrix 작성 (Type 1 vs Type 2)" }
+    - { owner: "CEO", deadline_days: 14, action: "주간 decision log — 무엇을 누가 언제 결정했는지 기록" }
+    - { owner: "EM",  deadline_days: 30, action: "low-stakes 결정은 단일 owner에게 위임" }
+  verify:
+    metric: "decision_latency <= 5일"
+    after_days: 60
+  cite: "Bezos 'Type 1 vs Type 2 decisions'; Westrum"
+
+- id: F8-3
+  domain: A8
+  title: "Kill rate 낮다 — 안 되는 일을 끊지 못한다"
+  trigger:
+    primary: "kill_rate < 20% (분기 시작 plan 대비 종료 plan 변동률)"
+  diagnostic_q: "이번 분기 시작 시 계획했던 일 중 '끝까지 안 했어야 했던 것'이 무엇이었나요?"
+  smart_actions:
+    - { owner: "PM",  deadline_days: 7,  action: "분기 중간 retro — 진행 중인 모든 plan에 'kill 가능' 라벨링" }
+    - { owner: "CEO", deadline_days: 14, action: "kill 결정 1건 실행 (가장 안 되는 것)" }
+    - { owner: "EM",  deadline_days: 30, action: "분기 plan 작성 시 kill criteria 미리 명시" }
+  verify:
+    metric: "분기 kill rate >= 30%"
+    after_days: 90
+  cite: "Shape Up §6 'Hill chart'; First Round 'How to kill projects'"
+
+# =========================================================
+# A9 — AI 시대 고도화
+# =========================================================
+- id: F9-1
+  domain: A9
+  title: "AI Eval Loop 부재 — 출력 품질을 모른다"
+  trigger:
+    primary: "A9.EVAL.LOOP.evidence.v <= 2"
+  diagnostic_q: "지난 30일 동안 AI 응답 품질이 떨어졌을 때 우리가 그걸 알아차린 방법은 무엇이었나요?"
+  smart_actions:
+    - { owner: "AI Lead", deadline_days: 14, action: "Eval set 50문항 구축 (도메인 특화 + 한국어)" }
+    - { owner: "AI Lead", deadline_days: 21, action: "LLM-as-judge 자동 평가 파이프라인 구축" }
+    - { owner: "AI Lead", deadline_days: 30, action: "PR마다 자동 실행 + Slack 알림" }
+  verify:
+    metric: "Eval 통과율 95%+ 유지, 회귀 발견 자동화"
+    after_days: 60
+  cite: "Anthropic 'Building effective agents' (2024); Hamel Husain 'LLMs as judges'"
+
+- id: F9-2
+  domain: A9
+  title: "RAG Grounding 부재 — AI가 일반 답만 한다"
+  trigger:
+    primary: "A9.RAG.GROUNDING.evidence.v <= 2"
+  diagnostic_q: "AI가 '누리과정 5영역'이라는 단어를 정확히 사용하나요? 평가제 지표 변경 시 자동 반영되나요?"
+  smart_actions:
+    - { owner: "AI Lead", deadline_days: 14, action: "도메인 코퍼스 구축 — 누리과정·평가제·KESS 통계" }
+    - { owner: "AI Lead", deadline_days: 21, action: "pgvector + 임베딩 인덱스 (voyage-3-large 한국어)" }
+    - { owner: "AI Lead", deadline_days: 30, action: "응답에 citation 포함 의무화 (citation 없으면 차단)" }
+  verify:
+    metric: "도메인 인용 포함률 >= 70%, 환각 사례 < 5%"
+    after_days: 60
+  cite: "Lewis et al. *RAG* (NeurIPS 2020); Voyage AI multilingual benchmarks"
+
+- id: F9-3
+  domain: A9
+  title: "AI 비용·지연 폭증 — 사용자 경험 악화"
+  trigger:
+    primary: "p95_latency > 8s OR cost_per_call > 0.5 USD"
+  diagnostic_q: "사용자가 AI 응답을 기다리는 시간이 길어지면 이탈률이 어떻게 변하나요?"
+  smart_actions:
+    - { owner: "AI Lead", deadline_days: 14, action: "프롬프트 캐싱 도입 (Anthropic prompt caching)" }
+    - { owner: "AI Lead", deadline_days: 21, action: "단순 쿼리는 Haiku로 라우팅, 복잡한 분석만 Sonnet" }
+    - { owner: "AI Lead", deadline_days: 30, action: "비동기 + 스트리밍 UX" }
+  verify:
+    metric: "p95 latency <= 3s, cost_per_call <= 0.15 USD"
+    after_days: 60
+  cite: "Anthropic prompt caching docs (2024); Latitude 'AI inference cost playbook'"
+
+# =========================================================
+# A10 — 마케팅·영업 실행력
+# =========================================================
+- id: F10-1
+  domain: A10
+  title: "메시지 테스트 부재 — 가장 잘 먹는 한 문장을 모른다"
+  trigger:
+    primary: "A10.MSG.TEST.evidence.v <= 2"
+  diagnostic_q: "랜딩페이지 헤드라인을 ICP 5명에게 보여주면 무엇을 떠올린다고 답할까요?"
+  smart_actions:
+    - { owner: "PMM",       deadline_days: 14, action: "현재 헤드라인 + 대안 3개 5초 테스트 (Wynter 또는 직접 인터뷰)" }
+    - { owner: "Marketing", deadline_days: 21, action: "Winner로 LP 교체 + A/B" }
+    - { owner: "PMM",       deadline_days: 30, action: "월 1회 메시지 테스트 cadence 정착" }
+  verify:
+    metric: "LP CVR +20%, 메시지 comprehension >= 80%"
+    after_days: 60
+  cite: "April Dunford *Sales Pitch*; Wynter messaging playbook"
+
+- id: F10-2
+  domain: A10
+  title: "SDR 활동량 부족 — 파이프라인이 안 차 있다"
+  trigger:
+    primary: "weekly_sdr_activities < 80 (calls + emails)"
+  diagnostic_q: "이번 주 SDR이 새로 컨택한 원장 수가 몇 명인가요? 그게 quota의 몇 %인가요?"
+  smart_actions:
+    - { owner: "Sales Lead", deadline_days: 7,  action: "weekly activity quota 설정 (calls 50 + emails 100)" }
+    - { owner: "Sales",      deadline_days: 14, action: "outbound 시퀀스 6-touch 도입" }
+    - { owner: "Sales",      deadline_days: 30, action: "weekly pipeline review 도입" }
+  verify:
+    metric: "weekly meetings >= 5, pipeline coverage >= 3x"
+    after_days: 60
+  cite: "Roberge *Sales Acceleration Formula*"
+
+- id: F10-3
+  domain: A10
+  title: "콘텐츠 → 리드 전환 부재"
+  trigger:
+    primary: "content_to_lead_conversion < 1%"
+  diagnostic_q: "지난 분기 가장 트래픽 많이 받은 콘텐츠 3개 중 리드 만든 것은 몇 개인가요?"
+  smart_actions:
+    - { owner: "Marketing", deadline_days: 14, action: "콘텐츠 끝에 lead magnet (체크리스트·가이드) 도입" }
+    - { owner: "Marketing", deadline_days: 21, action: "이메일 시퀀스 — 리드 → nurture → meeting CTA" }
+    - { owner: "Marketing", deadline_days: 30, action: "월간 webinar 시작 (원장 대상)" }
+  verify:
+    metric: "content-to-lead >= 3%, content-to-meeting >= 0.5%"
+    after_days: 90
+  cite: "Animalz B2B content; HubSpot Inbound playbook"
+
+# =========================================================
+# A11 — 팀·리더십·문화
+# =========================================================
+- id: F11-1
+  domain: A11
+  title: "공동창업자 정렬 붕괴"
+  trigger:
+    primary: "A11.FOUNDERS.ALIGN.evidence.v <= 2"
+  diagnostic_q: "지난 30일 동안 너희 둘이 같은 결정에 대해 다른 발표를 한 적이 있나?"
+  smart_actions:
+    - { owner: "CEO", deadline_days: 7,  action: "Founders Workshop (Dharmesh 템플릿 사용)" }
+    - { owner: "CEO", deadline_days: 14, action: "Decision Rights matrix 작성" }
+    - { owner: "CEO", deadline_days: 30, action: "vesting/equity 재검토 미팅 (외부 변호사 동석)" }
+  verify:
+    metric: "60일 후 alignment >= 4.2/5"
+    after_days: 60
+  cite: "Wasserman *The Founder's Dilemmas* (2012); Dharmesh Shah Founders Agreement"
+  external_handoff:
+    when: "alignment < 3.0 AND vesting/equity 합의 안 됨"
+    domain: "specialized_legal"
+    target: "Meetflow 또는 스타트업 전문 법무 자문"
+
+- id: F11-2
+  domain: A11
+  title: "핵심 인재 이탈 위험"
+  trigger:
+    primary: "A11.RUN.STAY.evidence.v <= 2 OR 1on1 부재"
+  diagnostic_q: "그 사람이 지난 90일 동안 자신의 다음 12개월을 회사에서 보내고 싶다고 명시적으로 말한 적 있나요?"
+  smart_actions:
+    - { owner: "CEO", deadline_days: 7,  action: "핵심 인재 5명 stay interview" }
+    - { owner: "CEO", deadline_days: 14, action: "각자 IDP (Individual Development Plan) 작성" }
+    - { owner: "CEO", deadline_days: 30, action: "보상/scope/성장 plan 합의" }
+  verify:
+    metric: "90일 후 stay-intent >= 80%"
+    after_days: 90
+  cite: "Beverly Kaye *Love 'Em or Lose 'Em*; First Round Stay Interview Guide"
+
+- id: F11-3
+  domain: A11
+  title: "심리적 안전성 결손"
+  trigger:
+    primary: "A11.CULTURE.WEST.evidence.v <= 2 OR 회의에서 반대의견 발화 < 1/회"
+  diagnostic_q: "지난 회의에서 막내가 너의 의견을 정면으로 반박한 적이 있나?"
+  smart_actions:
+    - { owner: "EM",   deadline_days: 14, action: "Blameless Postmortem 도입 (incidents 1건 시범)" }
+    - { owner: "CEO",  deadline_days: 21, action: "Lencioni 5 dysfunctions 워크숍" }
+    - { owner: "EM",   deadline_days: 90, action: "분기마다 Westrum 재측정" }
+  verify:
+    metric: "분기 Westrum +15점"
+    after_days: 90
+  cite: "Edmondson *Fearless Organization* (2018); Lencioni *5 Dysfunctions*; DORA Westrum"
+
+# =========================================================
+# A12 — 자금·런웨이·IR
+# =========================================================
+- id: F12-1
+  domain: A12
+  title: "런웨이 < 9개월"
+  trigger:
+    primary: "A12.RUN.MONTHS.evidence.v <= 2"
+  diagnostic_q: "지금부터 9개월 안에 다음 라운드를 닫지 못한다면, 어떤 비용 라인을 먼저 끄나요?"
+  smart_actions:
+    - { owner: "CEO", deadline_days: 3,  action: "30/60/90% cost cut 시나리오 작성" }
+    - { owner: "CEO", deadline_days: 7,  action: "IR pipeline freeze + active fundraise 모드 전환" }
+    - { owner: "CEO", deadline_days: 14, action: "bridge round / venture debt 옵션 점검" }
+  verify:
+    metric: "30일 후 런웨이 >= 12개월 OR term sheet 1건"
+    after_days: 30
+  cite: "Bessemer 5 Cs of Cloud Finance; First Round 'Surviving Down Rounds'"
+  external_handoff:
+    when: "런웨이 < 6개월"
+    domain: "specialized_finance"
+    target: "Meetflow 또는 venture debt 전문 자문"
+
+- id: F12-2
+  domain: A12
+  title: "Burn Multiple > 3.0 — 비효율 성장"
+  trigger:
+    primary: "A12.BM.SACKS.evidence.v <= 2"
+  diagnostic_q: "지난 분기 Net New ARR을 만든 채널 중 marginal CAC payback이 24개월 이상인 건 무엇인가요?"
+  smart_actions:
+    - { owner: "CFO",     deadline_days: 7,  action: "채널별 CAC payback 분석" }
+    - { owner: "Growth",  deadline_days: 14, action: "BM>3 채널 즉시 pause" }
+    - { owner: "CEO",     deadline_days: 30, action: "efficient growth plan 재제출" }
+  verify:
+    metric: "다음 분기 BM <= 2.0"
+    after_days: 90
+  cite: "Sacks 'The Burn Multiple' (2020); OpenView Efficient Growth"
+
+- id: F12-3
+  domain: A12
+  title: "IR 파이프라인 부재"
+  trigger:
+    primary: "A12.IR.PIPELINE.evidence.v <= 2 AND A12.RUN.MONTHS.evidence.v <= 3"
+  diagnostic_q: "다음 라운드 lead 후보 5곳을 지금 이 자리에서 이름 댈 수 있나요?"
+  smart_actions:
+    - { owner: "CEO", deadline_days: 7,  action: "30 target investor list 작성" }
+    - { owner: "CEO", deadline_days: 14, action: "데이터룸 + IR deck v2 준비" }
+    - { owner: "CEO", deadline_days: 30, action: "12 first meetings 잡기" }
+  verify:
+    metric: "60일 후 second meeting >= 5"
+    after_days: 60
+  cite: "NfX 'Fundraise Bullets'; Sequoia Pitch Outline; YC 'How to fundraise'"
+
+# =========================================================
+# A13 — CS·NPS
+# =========================================================
+- id: F13-1
+  domain: A13
+  title: "NPS < 0 — 디트랙터가 더 많다"
+  trigger:
+    primary: "A13.NPS.SCORE.evidence.v <= 2"
+  diagnostic_q: "최근 NPS 디트랙터(0–6점)가 가장 자주 쓴 단어 3개는 무엇인가요?"
+  smart_actions:
+    - { owner: "CS",      deadline_days: 14, action: "디트랙터 10명 인터뷰 — 핵심 페인 포인트 3개 도출" }
+    - { owner: "Product", deadline_days: 30, action: "Top 1 페인 포인트 해결 (제품 변경)" }
+    - { owner: "CS",      deadline_days: 60, action: "디트랙터 follow-up — 점수 변동 확인" }
+  verify:
+    metric: "NPS >= 20"
+    after_days: 90
+  cite: "Reichheld 'The One Number' (HBR 2003); Bain NPS"
+
+- id: F13-2
+  domain: A13
+  title: "NRR < 90% — 기존 고객 매출이 줄어든다"
+  trigger:
+    primary: "A13.NRR.RATE.evidence.v <= 2"
+  diagnostic_q: "지난 분기 churn한 ARR과 expansion한 ARR을 보면, churn이 큰 이유는 무엇인가요?"
+  smart_actions:
+    - { owner: "CS",      deadline_days: 14, action: "churn cohort 분석 — 가장 많이 이탈한 세그먼트 식별" }
+    - { owner: "Product", deadline_days: 30, action: "expansion 기능 1개 출시 (upsell 자연스러운 경로)" }
+    - { owner: "CS",      deadline_days: 30, action: "health score 도입 + at-risk 고객 자동 알림" }
+  verify:
+    metric: "NRR >= 105%"
+    after_days: 90
+  cite: "Bessemer State of the Cloud 2025 (Top quartile NRR ≥ 115%)"
+
+- id: F13-3
+  domain: A13
+  title: "응답시간 SLA 위반 — 고객이 기다린다"
+  trigger:
+    primary: "median_response_time > 24h OR satisfaction_rate < 80%"
+  diagnostic_q: "고객이 도움을 요청한 뒤 평균 몇 시간 만에 첫 응답을 받나요?"
+  smart_actions:
+    - { owner: "CS",   deadline_days: 14, action: "ChannelTalk/Intercom SLA 설정 + 알림" }
+    - { owner: "CS",   deadline_days: 21, action: "Top 5 inquiry self-serve 가이드 작성" }
+    - { owner: "Product", deadline_days: 30, action: "in-product help · empty state 개선" }
+  verify:
+    metric: "median 응답 < 4h, CSAT >= 90%"
+    after_days: 60
+  cite: "Gainsight Customer Health Score; Intercom Conversational Support Funnel"
+
+# =========================================================
+# A14 — 경쟁·시장 인텔리전스
+# =========================================================
+- id: F14-1
+  domain: A14
+  title: "win-rate < 25% — 경쟁에서 진다"
+  trigger:
+    primary: "A14.WIN.RATE.evidence.v <= 2"
+  diagnostic_q: "지난 분기 lost deal 5개에서 우리가 진 가장 큰 이유 한 가지는 무엇인가요?"
+  smart_actions:
+    - { owner: "Sales",  deadline_days: 14, action: "lost deal 5명 인터뷰 — Why Crayon Win/Loss 템플릿" }
+    - { owner: "PMM",    deadline_days: 21, action: "battlecard 1개 작성 (가장 자주 마주치는 경쟁사)" }
+    - { owner: "Sales",  deadline_days: 30, action: "다음 30 deal에서 battlecard 사용, conversion 측정" }
+  verify:
+    metric: "win-rate >= 40%"
+    after_days: 90
+  cite: "Crayon 'State of Competitive Intelligence' 2024; Win/Loss Institute"
+
+- id: F14-2
+  domain: A14
+  title: "Moat 정의 안 됨 — 차별화 포지션이 없다"
+  trigger:
+    primary: "A14.MOAT.DEFINED.evidence.v <= 2"
+  diagnostic_q: "고객이 우리를 떠나 경쟁사로 가지 못하는 이유 3가지를 한 문장씩 답할 수 있나요?"
+  smart_actions:
+    - { owner: "Founder", deadline_days: 14, action: "7 Powers 워크숍 — 우리에게 해당하는 power 식별" }
+    - { owner: "Founder", deadline_days: 21, action: "moat 3가지 한 문장씩 명문화" }
+    - { owner: "PMM",     deadline_days: 30, action: "각 moat 검증 데이터 수집 (정량·정성)" }
+  verify:
+    metric: "moat 3개 명문화 + 2개 이상 데이터 검증"
+    after_days: 60
+  cite: "Hamilton Helmer *7 Powers* (2016); a16z 'What is a moat?'"
+
+- id: F14-3
+  domain: A14
+  title: "잠재 진입자 모니터링 부재 — 대형사 진입 알아차리지 못함"
+  trigger:
+    primary: "competitive_map.last_refresh > 90d"
+  diagnostic_q: "웅진/교원/아이스크림이 지난 6개월 동안 우리 카테고리에서 무슨 시그널을 보냈나요?"
+  smart_actions:
+    - { owner: "PMM",     deadline_days: 7,  action: "competitive watchlist 5곳 (대형사 + 직접경쟁사) 정의" }
+    - { owner: "PMM",     deadline_days: 14, action: "월 1회 watch report — 채용·보도자료·제품 변경 요약" }
+    - { owner: "Founder", deadline_days: 30, action: "대응 시나리오 3개 (대형사가 진입 시) 사전 작성" }
+  verify:
+    metric: "월 watch report 발행, 시나리오 문서화 완료"
+    after_days: 30
+  cite: "Porter Five Forces; Crayon competitive monitoring"
+
+# =====================================================================
+# Playbook 적용 가이드 (AI 코치용)
+# =====================================================================
+usage_for_ai_coaches: |
+  1) Trigger 매칭: 코치는 KPI/진단 점수를 retrieve해서 trigger 조건에 매칭되는
+     playbook을 찾는다. 복수 매칭 시 severity 높은 것 우선.
+
+  2) 시스템 프롬프트 주입: 매칭된 playbook 1-3개를 코치 시스템 프롬프트에
+     "예시 근거" 섹션으로 주입. 코치는 이를 보면서 사용자 회사의 실제
+     상황(KPI 값, 단계, 인원수)에 맞춰 SMART 단계를 변형 출력한다.
+
+  3) Hard rule: SMART 단계는 반드시 (owner / deadline / 측정 가능 행동)을
+     포함해야 함. 코치 출력에 빠진 경우 서버 validator가 차단.
+
+  4) external_handoff 필드가 있고 조건이 충족되면, 사용자에게 외부 AI
+     자문 옵션을 제시 (수동 confirm 후 호출).
+
+  5) verify 시점이 도래하면 follow-up cron이 metric을 자동 측정 → 충족
+     시 [resolved], 미충족 시 escalation 또는 새 playbook 적용.

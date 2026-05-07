@@ -1,0 +1,873 @@
+# =====================================================================
+# Kinder Stick OS — question_bank.yaml
+# 단일 진실원천 (Single Source of Truth) for 14-도메인 진단 프레임워크
+#
+# 구조: domains[] → groups[] → sub_items[]
+# 빌드 타임에 Next.js가 이 YAML을 import하여 진단 UI/점수 산식/AI 코치 입력으로 사용.
+#
+# 본 파일은 풀 구조 + 도메인당 3-5개 worked sub-item 예시(총 ~55개)를 담는다.
+# 나머지 ~155개 sub-item은 동일 스키마로 확장. 가장 먼저 채워야 하는 항목은
+# tier=critical이며, MVP(Phase 2)는 critical 항목만으로도 작동 가능.
+# =====================================================================
+
+version: "1.0.0"
+updated: "2026-05-07"
+locale: "ko-KR"
+
+# ---------------------------------------------------------------------
+# 단계별 베이지안 prior (CB Insights N=431 + 한국 EdTech 보정)
+# ---------------------------------------------------------------------
+priors:
+  pre_seed:   { failure_6m: 0.25, failure_12m: 0.45 }
+  seed:       { failure_6m: 0.18, failure_12m: 0.32 }
+  series_a:   { failure_6m: 0.10, failure_12m: 0.20 }
+  series_b:   { failure_6m: 0.05, failure_12m: 0.12 }
+
+# ---------------------------------------------------------------------
+# Critical 도메인이 빨강일 때 베이지안 odds에 곱하는 likelihood ratio
+# ---------------------------------------------------------------------
+likelihood_ratios:
+  A12: 4.2   # 런웨이 — 가장 강한 시그널
+  A2:  3.5   # PMF
+  A7:  3.0   # 한국 EdTech 규제 (KISA·누리·평가제 빨강 = 영업정지 리스크)
+  A11: 2.6   # 팀 붕괴
+  A5:  2.4   # Unit economics
+  A1:  2.0   # 시장 부재
+  A3:  1.8   # 결제 동기 없음
+  A4:  1.7   # Activation/Retention
+
+# ---------------------------------------------------------------------
+# Critical-Critical: 단독으로도 6개월 실패확률 minimum 강제
+# ---------------------------------------------------------------------
+critical_caps:
+  - { sub_item: A12.RUN.MONTHS,        condition: "evidence.v == 1",                                      min_p_6m: 0.50 }
+  - { sub_item: A12.RUN.MONTHS,        condition: "evidence.v == 2",                                      min_p_6m: 0.30 }
+  - { sub_item: A12.BM.SACKS,          condition: "evidence.v <= 2 AND linked.A12.RUN.MONTHS.v <= 3",     min_p_6m: 0.40 }
+  - { sub_item: A2.SE.40,              condition: "evidence.v <= 2 AND stage IN [seed, series_a]",        min_p_6m: 0.35 }
+  - { sub_item: A2.RET.M3,             condition: "evidence.v == 1",                                      min_p_6m: 0.35 }
+  - { sub_item: A11.FOUNDERS.ALIGN,    condition: "evidence.v <= 2",                                      min_p_6m: 0.35 }
+  - { sub_item: A11.RUN.STAY,          condition: "evidence.v <= 2",                                      min_p_6m: 0.25 }
+  - { sub_item: A7.KISA.SELFCHECK,     condition: "evidence.v == 1",                                      min_p_6m: 0.40 }
+  - { sub_item: A7.PII.INCIDENT,       condition: "evidence.v >= 2",                                      min_p_6m: 0.60 }
+  - { sub_item: A5.GROSS.MARGIN,       condition: "evidence.v <= 2 AND stage != pre_seed",                min_p_6m: 0.30 }
+  - { sub_item: A5.CAC.PAYBACK,        condition: "evidence.v == 1",                                      min_p_6m: 0.25 }
+  - { sub_item: A3.BUYER.WTP,          condition: "evidence.v == 1 AND stage IN [seed, series_a]",        min_p_6m: 0.45 }
+  - { sub_item: A4.ACT.D1,             condition: "evidence.v == 1",                                      min_p_6m: 0.25 }
+  - { sub_item: A1.JTBD.URGENCY,       condition: "evidence.v == 1",                                      min_p_6m: 0.30 }
+  - { sub_item: A14.WIN.RATE,          condition: "evidence.v == 1 AND has_active_competitive_deals",     min_p_6m: 0.25 }
+
+# =====================================================================
+# DOMAINS (14개)
+# =====================================================================
+domains:
+
+# ---------------------------------------------------------------------
+- code: A1
+  name_ko: "시장-문제 적합성"
+  name_en: "Problem-Market Fit"
+  tier: critical
+  weight: 9
+  owner_role: ["Founder", "PM"]
+  framework: "Christensen JTBD · Push of Situation · The Mom Test"
+  thresholds: { red: 40, yellow: 60, green: 75 }
+  groups:
+    - code: A1.JTBD
+      name: "Jobs-to-be-Done 정의"
+      sub_items:
+        - code: A1.JTBD.URGENCY
+          tier: critical
+          weight_within_group: 0.5
+          belief:
+            q: "원장 인터뷰에서 이 문제를 'urgent(급하다)'로 분류한 비율이 50% 이상이다."
+            anchors: ["전혀 아니다", "10–20%", "20–35%", "35–50%", "50% 이상"]
+            help: "Important과 Urgent는 다르다. Urgent만 지갑을 연다."
+          evidence:
+            q: "최근 6개월 인터뷰에서 'urgent' 분류된 응답자 비율"
+            type: choice
+            options:
+              - { v: 1, label: "측정 안 함 또는 < 10%" }
+              - { v: 2, label: "10–24%" }
+              - { v: 3, label: "25–39%" }
+              - { v: 4, label: "40–54%" }
+              - { v: 5, label: "≥ 55%" }
+            kpi_source: "internal:interview_log (CRM 또는 Notion DB의 분류 태그)"
+            refresh_period_days: 90
+          citation: "Christensen *Competing Against Luck* (2016); Fitzpatrick *The Mom Test* (2013)"
+          failure_trigger: "evidence.v <= 2"
+          cadence: quarterly
+          data_quality_required: 2
+        - code: A1.JTBD.LANG
+          tier: critical
+          weight_within_group: 0.3
+          belief:
+            q: "교사 인터뷰 10명 중 8명 이상이 '동일한' 고통을 동일한 언어로 말했다."
+            anchors: ["서로 다른 단어", "비슷한 주제·다른 단어", "절반 정도 일치", "70% 일치", "8/10 동일 표현"]
+          evidence:
+            q: "최근 인터뷰 노트에서 동일 표현이 반복된 빈도"
+            type: choice
+            options:
+              - { v: 1, label: "분석 안 함" }
+              - { v: 2, label: "1–2회 반복" }
+              - { v: 3, label: "3–5회" }
+              - { v: 4, label: "6–8회" }
+              - { v: 5, label: "9회 이상 (8/10 일치)" }
+          citation: "Mom Test §2 'Look for specific painful examples'"
+          failure_trigger: "evidence.v <= 2"
+          cadence: quarterly
+        - code: A1.JTBD.PUSH
+          tier: important
+          weight_within_group: 0.2
+          belief:
+            q: "사용자가 '이 문제를 풀기 위해 직전에 시도한 것'이 무엇인지 5명 이상에게서 들었다."
+            anchors: ["듣지 못함", "1–2명", "3–4명", "5–6명", "7명 이상"]
+          evidence:
+            q: "Push-Pull-Anxiety-Habit 분석을 한 인터뷰 수"
+            type: choice
+            options:
+              - { v: 1, label: "0건" }
+              - { v: 2, label: "1–2건" }
+              - { v: 3, label: "3–5건" }
+              - { v: 4, label: "6–10건" }
+              - { v: 5, label: "≥ 11건" }
+          citation: "Re:Wired Group 'Forces of Progress' (Spiek/Moesta)"
+          failure_trigger: "evidence.v <= 2"
+          cadence: quarterly
+    - code: A1.SEG
+      name: "타겟 세그먼트 명확성"
+      sub_items:
+        # (확장: A1.SEG.ICP, A1.SEG.SIZE, A1.SEG.WTP — 동일 스키마로 추가)
+
+# ---------------------------------------------------------------------
+- code: A2
+  name_ko: "제품-시장 적합성 (PMF)"
+  name_en: "Product-Market Fit"
+  tier: critical
+  weight: 13
+  owner_role: ["Founder", "PM"]
+  framework: "Sean Ellis 40% Rule · Balfour Four Fits · Vohra PMF Engine"
+  thresholds: { red: 40, yellow: 60, green: 75 }
+  groups:
+    - code: A2.SE
+      name: "Sean Ellis 40% Test"
+      sub_items:
+        - code: A2.SE.40
+          tier: critical
+          weight_within_group: 0.45
+          belief:
+            q: "지난 90일 안에 Sean Ellis 40% 테스트(n≥30)를 직접 돌리고 결과를 안다."
+            anchors: ["테스트가 뭔지 모른다", "들어봤지만 안 돌렸다", "비공식 n<30으로 1회", "n≥30 1회 실시", "분기마다 추적"]
+          evidence:
+            q: "최근 Sean Ellis 테스트의 'Very Disappointed' 비율"
+            type: choice
+            options:
+              - { v: 1, label: "< 15% 또는 미측정" }
+              - { v: 2, label: "15–24%" }
+              - { v: 3, label: "25–39%" }
+              - { v: 4, label: "40–54%" }
+              - { v: 5, label: "≥ 55%" }
+            kpi_source: "Typeform/Tally pmf_survey, monthly cohort"
+            refresh_period_days: 90
+          citation: "Ellis 2009 (Superhuman 22→58%); OpenView 2025 PMF playbook; Vohra 'How Superhuman Built an Engine to Find Product-Market Fit' (First Round 2018)"
+          failure_trigger: "evidence.v <= 2 AND stage IN [seed, series_a]"
+          cadence: quarterly
+          data_quality_required: 2
+    - code: A2.RET
+      name: "Cohort Retention"
+      sub_items:
+        - code: A2.RET.M3
+          tier: critical
+          weight_within_group: 0.4
+          belief:
+            q: "가입 3개월 후에도 활성 상태인 교사 비율이 우리 핵심 KPI 보드에 매주 표시된다."
+            anchors: ["측정 안 함", "분기 1회 본다", "월 1회", "주 1회", "실시간 대시보드"]
+          evidence:
+            q: "가장 최근 cohort의 M3 retention (가입 3개월 후 weekly active)"
+            type: choice
+            options:
+              - { v: 1, label: "< 15%" }
+              - { v: 2, label: "15–29%" }
+              - { v: 3, label: "30–44%" }
+              - { v: 4, label: "45–59%" }
+              - { v: 5, label: "≥ 60%" }
+            kpi_source: "Mixpanel/Amplitude: weekly active by signup_cohort, week=12"
+            refresh_period_days: 30
+          citation: "Balfour Four Fits; Lenny Rachitsky retention benchmarks (B2B SaaS top quartile M3 ≥ 45%)"
+          failure_trigger: "evidence.v <= 2 OR retention_curve.slope_w8_w12 < -2"
+          cadence: weekly
+          data_quality_required: 3
+    - code: A2.CORE
+      name: "Core Segment 식별"
+      sub_items:
+        - code: A2.CORE.ICP
+          tier: critical
+          weight_within_group: 0.5
+          belief:
+            q: "우리는 '어떤 기관, 어떤 역할, 어떤 상황'에서 PMF를 찾았다고 한 문장으로 답할 수 있다."
+            anchors: ["전혀", "추측 수준", "가설 있음", "데이터로 검증된 가설", "한 문장 명문화 + 분기 검증"]
+          evidence:
+            q: "ICP 정의 문서가 존재하고 90일 이내 갱신됐는가?"
+            type: choice
+            options:
+              - { v: 1, label: "없음" }
+              - { v: 2, label: "있지만 180일+ 미갱신" }
+              - { v: 3, label: "있고 90–180일 내 갱신" }
+              - { v: 4, label: "90일 이내, 인터뷰 기반" }
+              - { v: 5, label: "분기 갱신 + cohort 분석 인용" }
+          citation: "April Dunford *Obviously Awesome*; Balfour 'Market-Product Fit'"
+          failure_trigger: "evidence.v <= 2"
+          cadence: quarterly
+
+# ---------------------------------------------------------------------
+- code: A3
+  name_ko: "결정자 ROI (원장)"
+  name_en: "Buyer Economics"
+  tier: critical
+  weight: 9
+  owner_role: ["Founder", "Sales"]
+  framework: "B2B Buyer Economics · ROI Modeling · 평가제 대응"
+  thresholds: { red: 40, yellow: 60, green: 75 }
+  groups:
+    - code: A3.BUYER
+      name: "결제 동기"
+      sub_items:
+        - code: A3.BUYER.WTP
+          tier: critical
+          weight_within_group: 0.4
+          belief:
+            q: "원장이 '시간 절감/운영 효율/학부모 만족/평가제 대응' 중 어느 것에 돈을 내는지 한 가지 이상 한 문장으로 답할 수 있다."
+            anchors: ["전혀", "추측", "가설 있음", "최근 결제 5건 인터뷰로 확인", "ROI 계산서로 정량 확인"]
+          evidence:
+            q: "현재 결제 중인 원장 수"
+            type: choice
+            options:
+              - { v: 1, label: "0명" }
+              - { v: 2, label: "1–4명" }
+              - { v: 3, label: "5–19명" }
+              - { v: 4, label: "20–49명" }
+              - { v: 5, label: "≥ 50명" }
+            kpi_source: "Stripe/Toss: active subscriptions"
+            refresh_period_days: 7
+          citation: "Patrick Campbell (ProfitWell) 'How to Find Your Real Buyer'; 2019 개정 누리과정 평가제 지표"
+          failure_trigger: "evidence.v == 1 AND stage IN [seed, series_a]"
+          cadence: weekly
+          data_quality_required: 3
+        - code: A3.BUYER.ROI
+          tier: critical
+          weight_within_group: 0.35
+          belief:
+            q: "원장이 우리를 사는 ROI 산정식을 우리가 한 페이지로 보여줄 수 있다."
+          evidence:
+            q: "ROI 한 페이지 자료 최신 갱신일"
+            type: choice
+            options:
+              - { v: 1, label: "없음" }
+              - { v: 2, label: "있지만 180일+ 미갱신" }
+              - { v: 3, label: "90–180일" }
+              - { v: 4, label: "30–90일" }
+              - { v: 5, label: "30일 이내, 결제 5건 이상 검증" }
+          citation: "Bessemer 'Five Cs of Cloud Finance'"
+          failure_trigger: "evidence.v <= 2"
+          cadence: monthly
+
+# ---------------------------------------------------------------------
+- code: A4
+  name_ko: "사용자 활성화·유지"
+  name_en: "User Activation & Retention"
+  tier: critical
+  weight: 10
+  owner_role: ["Product", "Growth"]
+  framework: "Time-to-Value · Cohort Retention · Aha Moment"
+  thresholds: { red: 40, yellow: 60, green: 75 }
+  groups:
+    - code: A4.ACT
+      name: "Activation Funnel"
+      sub_items:
+        - code: A4.ACT.D1
+          tier: critical
+          weight_within_group: 0.5
+          belief:
+            q: "신규 가입자 중 D1(가입 다음날)에 핵심 액션을 한 비율을 매일 본다."
+          evidence:
+            q: "최근 30일 D1 activation rate"
+            type: choice
+            options:
+              - { v: 1, label: "< 20% 또는 측정 안 함" }
+              - { v: 2, label: "20–34%" }
+              - { v: 3, label: "35–49%" }
+              - { v: 4, label: "50–64%" }
+              - { v: 5, label: "≥ 65%" }
+            kpi_source: "Mixpanel/Amplitude: D1 activation funnel"
+            refresh_period_days: 1
+          citation: "Reforge Activation course; Andrew Chen 'leaky bucket'"
+          failure_trigger: "evidence.v == 1"
+          cadence: daily
+          data_quality_required: 3
+    - code: A4.HABIT
+      name: "Habit Loop"
+      sub_items:
+        - code: A4.HABIT.WAU_MAU
+          tier: important
+          weight_within_group: 0.4
+          belief:
+            q: "WAU/MAU 비율이 우리 제품의 사용 습관을 보여준다."
+          evidence:
+            q: "WAU/MAU"
+            type: choice
+            options:
+              - { v: 1, label: "< 20%" }
+              - { v: 2, label: "20–34%" }
+              - { v: 3, label: "35–49%" }
+              - { v: 4, label: "50–64%" }
+              - { v: 5, label: "≥ 65%" }
+            kpi_source: "Mixpanel/Amplitude"
+            refresh_period_days: 7
+          citation: "Sequoia 'WAU/MAU as engagement metric'"
+          failure_trigger: "evidence.v <= 2"
+          cadence: weekly
+
+# ---------------------------------------------------------------------
+- code: A5
+  name_ko: "단위경제·수익성"
+  name_en: "Unit Economics"
+  tier: critical
+  weight: 9
+  owner_role: ["Founder", "CFO"]
+  framework: "2025 SaaS Benchmarks · Rule of 40 · Magic Number"
+  thresholds: { red: 40, yellow: 60, green: 75 }
+  groups:
+    - code: A5.GROSS
+      name: "Gross Margin"
+      sub_items:
+        - code: A5.GROSS.MARGIN
+          tier: critical
+          weight_within_group: 0.4
+          belief:
+            q: "매출에서 직접 원가(서버·결제수수료·고객성공 인건비)를 뺀 gross margin을 매월 계산한다."
+          evidence:
+            q: "TTM gross margin"
+            type: choice
+            options:
+              - { v: 1, label: "< 30% 또는 미계산" }
+              - { v: 2, label: "30–49%" }
+              - { v: 3, label: "50–64%" }
+              - { v: 4, label: "65–74%" }
+              - { v: 5, label: "≥ 75%" }
+            kpi_source: "회계: TTM revenue - TTM COGS"
+            refresh_period_days: 30
+          citation: "Bessemer State of the Cloud 2025 (Top quartile SaaS GM ≥ 75%)"
+          failure_trigger: "evidence.v <= 2 AND stage != pre_seed"
+          cadence: monthly
+        - code: A5.CAC.PAYBACK
+          tier: critical
+          weight_within_group: 0.35
+          belief:
+            q: "CAC payback (개월) = CAC / (월 ARR × gross margin)을 분기마다 계산한다."
+          evidence:
+            q: "CAC payback months"
+            type: choice
+            options:
+              - { v: 1, label: "> 24 또는 미계산" }
+              - { v: 2, label: "18–24" }
+              - { v: 3, label: "12–18" }
+              - { v: 4, label: "6–12" }
+              - { v: 5, label: "< 6" }
+          citation: "Bessemer Cloud Index; OpenView 2025 SaaS Benchmarks"
+          failure_trigger: "evidence.v == 1"
+          cadence: monthly
+
+# ---------------------------------------------------------------------
+- code: A6
+  name_ko: "획득 채널 (GTM)"
+  name_en: "Acquisition & GTM"
+  tier: important
+  weight: 6
+  owner_role: ["Growth Lead"]
+  framework: "AARRR · Channel/Message Fit · Bullseye Framework"
+  thresholds: { red: 35, yellow: 55, green: 70 }
+  groups:
+    - code: A6.CHANNEL
+      name: "반복 가능한 채널"
+      sub_items:
+        - code: A6.CHANNEL.REPEAT
+          tier: critical
+          weight_within_group: 0.5
+          belief:
+            q: "동일한 방식으로 다음 달에도 신규 고객을 만들 수 있는 채널이 2개 이상 있다."
+          evidence:
+            q: "월 신규 고객의 50%+를 만들어내는 채널 수 (반복 가능한)"
+            type: choice
+            options:
+              - { v: 1, label: "0개 (매번 새로 발명)" }
+              - { v: 2, label: "1개" }
+              - { v: 3, label: "2개" }
+              - { v: 4, label: "3개" }
+              - { v: 5, label: "≥ 4개" }
+            kpi_source: "GA4 + CRM source attribution"
+            refresh_period_days: 7
+          citation: "Weinberg & Mares *Traction*; First Round 'How to Find Your Channel'"
+          failure_trigger: "evidence.v <= 2"
+          cadence: weekly
+
+# ---------------------------------------------------------------------
+- code: A7
+  name_ko: "신뢰·안전·규제"
+  name_en: "Trust, Safety & Compliance"
+  tier: critical
+  weight: 8
+  owner_role: ["CTO", "CPO", "법무"]
+  framework: "KISA ISMS-P · 개인정보보호법 22조의2 · 누리과정 2019 개정 · 어린이집 평가제"
+  thresholds: { red: 40, yellow: 65, green: 80 }
+  notes: "EdTech에서 한 번의 사고가 회사를 죽인다. 한국 영유아 데이터는 일반보다 강한 보호 의무."
+  groups:
+    - code: A7.KISA
+      name: "KISA / 개인정보 자기점검"
+      sub_items:
+        - code: A7.KISA.SELFCHECK
+          tier: critical
+          weight_within_group: 0.4
+          belief:
+            q: "KISA 정보보호 자기점검을 6개월 이내에 완료하고 미흡 항목을 패치했다."
+          evidence:
+            q: "KISA 자기점검 최근 결과 (만점 100)"
+            type: choice
+            options:
+              - { v: 1, label: "안 함" }
+              - { v: 2, label: "< 60" }
+              - { v: 3, label: "60–74" }
+              - { v: 4, label: "75–89" }
+              - { v: 5, label: "≥ 90" }
+            refresh_period_days: 180
+          citation: "KISA ISMS-P 자기점검 기준; 개인정보보호법 22조의2 (만 14세 미만 동의)"
+          failure_trigger: "evidence.v <= 2"
+          cadence: semi_annual
+        - code: A7.PII.INCIDENT
+          tier: critical
+          weight_within_group: 0.3
+          belief:
+            q: "최근 12개월 동안 개인정보 사고(유출·오남용·미동의 처리)가 없었다."
+          evidence:
+            q: "최근 12개월 개인정보 사고 건수"
+            type: choice
+            options:
+              - { v: 1, label: "0건" }   # v=1이 좋은 케이스로 의도 — 점수 산출 시 reverse
+              - { v: 2, label: "1건 (경미)" }
+              - { v: 3, label: "1건 (중요)" }
+              - { v: 4, label: "2건 이상" }
+              - { v: 5, label: "현재 진행 중인 사고/조사" }
+          citation: "방통위·KISA 개인정보 침해 사고 대응 가이드"
+          failure_trigger: "evidence.v >= 2"     # 1건만 있어도 빨강
+          cadence: monthly
+          reverse_scoring: true     # 1=best, 5=worst
+    - code: A7.NURI
+      name: "누리과정 적합성"
+      sub_items:
+        - code: A7.NURI.FIT
+          tier: important
+          weight_within_group: 0.5
+          belief:
+            q: "콘텐츠가 2019 개정 누리과정 5개 영역(신체운동·건강 / 의사소통 / 사회관계 / 예술경험 / 자연탐구)에 매핑돼 있다."
+          evidence:
+            q: "전체 콘텐츠 중 5영역 매핑 완료된 비율"
+            type: choice
+            options:
+              - { v: 1, label: "< 20%" }
+              - { v: 2, label: "20–39%" }
+              - { v: 3, label: "40–59%" }
+              - { v: 4, label: "60–79%" }
+              - { v: 5, label: "≥ 80%" }
+            refresh_period_days: 90
+          citation: "교육부 2019 개정 누리과정 고시; 어린이집 평가제 평가지표 (2023 개정)"
+          failure_trigger: "evidence.v <= 2"
+          cadence: quarterly
+
+# ---------------------------------------------------------------------
+- code: A8
+  name_ko: "학습·실행 속도"
+  name_en: "Team Learning Velocity"
+  tier: supporting
+  weight: 4
+  owner_role: ["CEO", "EM"]
+  framework: "Lean Startup Build-Measure-Learn · DORA · Shape Up"
+  thresholds: { red: 35, yellow: 55, green: 70 }
+  groups:
+    - code: A8.VEL
+      name: "Build-Measure-Learn 사이클"
+      sub_items:
+        - code: A8.VEL.CYCLE
+          tier: important
+          weight_within_group: 0.5
+          belief:
+            q: "직전 분기 동안 'hypothesis → experiment → decision' 사이클을 세 번 이상 완주했다."
+          evidence:
+            q: "직전 분기 완료한 가설 검증 사이클 수"
+            type: choice
+            options:
+              - { v: 1, label: "0" }
+              - { v: 2, label: "1–2" }
+              - { v: 3, label: "3–5" }
+              - { v: 4, label: "6–10" }
+              - { v: 5, label: "≥ 11" }
+            kpi_source: "Notion/Linear: hypothesis_doc count, status=decided"
+            refresh_period_days: 90
+          citation: "Ries *Lean Startup*; DORA 2024 deployment frequency"
+          failure_trigger: "evidence.v <= 2"
+          cadence: quarterly
+
+# ---------------------------------------------------------------------
+- code: A9
+  name_ko: "AI 시대 서비스 고도화"
+  name_en: "AI Capability & Product Evolution"
+  tier: important
+  weight: 7
+  owner_role: ["CTO", "AI Lead"]
+  framework: "AI Eval Loops · Prompt Ops · RAG · 환각 방어"
+  thresholds: { red: 35, yellow: 55, green: 70 }
+  groups:
+    - code: A9.EVAL
+      name: "AI Evaluation Pipeline"
+      sub_items:
+        - code: A9.EVAL.LOOP
+          tier: critical
+          weight_within_group: 0.5
+          belief:
+            q: "AI 출력 품질을 모니터링하는 자동 평가 루프(Eval set + 회귀 테스트)가 작동한다."
+          evidence:
+            q: "AI Eval 자동 실행 빈도"
+            type: choice
+            options:
+              - { v: 1, label: "없음" }
+              - { v: 2, label: "수동, 월 1회" }
+              - { v: 3, label: "수동, 주 1회" }
+              - { v: 4, label: "자동, 주 1회" }
+              - { v: 5, label: "자동, PR마다" }
+          citation: "Anthropic 'Building effective agents' (2024); Hamel Husain 'LLMs as judges'"
+          failure_trigger: "evidence.v <= 2"
+          cadence: monthly
+    - code: A9.RAG
+      name: "도메인 지식 기반"
+      sub_items:
+        - code: A9.RAG.GROUNDING
+          tier: important
+          weight_within_group: 0.5
+          belief:
+            q: "AI가 답변할 때 한국 유아교육 도메인 지식(누리과정·평가제)을 검색해 인용한다."
+          evidence:
+            q: "AI 응답 중 도메인 인용 포함 비율"
+            type: choice
+            options:
+              - { v: 1, label: "< 20% 또는 RAG 없음" }
+              - { v: 2, label: "20–39%" }
+              - { v: 3, label: "40–59%" }
+              - { v: 4, label: "60–79%" }
+              - { v: 5, label: "≥ 80%" }
+          citation: "Lewis et al. *Retrieval-Augmented Generation* (NeurIPS 2020)"
+          failure_trigger: "evidence.v <= 2"
+          cadence: monthly
+
+# ---------------------------------------------------------------------
+- code: A10
+  name_ko: "마케팅·영업 실행력"
+  name_en: "Marketing & Sales Execution"
+  tier: important
+  weight: 5
+  owner_role: ["Marketing", "Sales"]
+  framework: "B2B SaaS Marketing Engine · April Dunford Positioning · Wynter Message Testing"
+  thresholds: { red: 35, yellow: 55, green: 70 }
+  groups:
+    - code: A10.MSG
+      name: "메시지 테스트"
+      sub_items:
+        - code: A10.MSG.TEST
+          tier: important
+          weight_within_group: 0.5
+          belief:
+            q: "랜딩페이지·이메일·세일즈 데크의 헤드라인을 ICP에게 직접 테스트해서 가장 잘 먹는 한 문장을 안다."
+          evidence:
+            q: "최근 90일 메시지 테스트 횟수 (Wynter / Five Second Test / 인터뷰)"
+            type: choice
+            options:
+              - { v: 1, label: "0회" }
+              - { v: 2, label: "1–2회" }
+              - { v: 3, label: "3–5회" }
+              - { v: 4, label: "6–10회" }
+              - { v: 5, label: "≥ 11회" }
+          citation: "April Dunford *Sales Pitch*; Peep Laja Wynter messaging tests"
+          failure_trigger: "evidence.v <= 2"
+          cadence: monthly
+
+# ---------------------------------------------------------------------
+- code: A11
+  name_ko: "팀·리더십·문화"
+  name_en: "Team / Leadership / Culture"
+  tier: critical
+  weight: 9
+  owner_role: ["CEO", "COO"]
+  framework: "Lencioni 5 Dysfunctions · Westrum Culture · Edmondson Psychological Safety · Project Aristotle"
+  thresholds: { red: 40, yellow: 65, green: 80 }
+  notes: "CB Insights 23% 실패 = 'not the right team'. 한국 EdTech는 공동창업자 결별이 시리즈 A 데드의 흔한 원인."
+  groups:
+    - code: A11.FOUNDERS
+      name: "공동창업자 정렬"
+      sub_items:
+        - code: A11.FOUNDERS.ALIGN
+          tier: critical
+          weight_within_group: 0.4
+          belief:
+            q: "공동창업자 간 비전·역할·equity·exit 시점에 대한 정렬도가 4점(5점 만점) 이상이다."
+          evidence:
+            q: "최근 분기 공동창업자 정렬 자가평가 (5점 평균)"
+            type: choice
+            options:
+              - { v: 1, label: "< 2.5 또는 측정 안 함" }
+              - { v: 2, label: "2.5–3.0" }
+              - { v: 3, label: "3.0–3.7" }
+              - { v: 4, label: "3.7–4.3" }
+              - { v: 5, label: "≥ 4.3" }
+          citation: "Wasserman *The Founder's Dilemmas* (2012); Dharmesh Shah Founders Agreement"
+          failure_trigger: "evidence.v <= 2"
+          cadence: quarterly
+    - code: A11.RUN
+      name: "핵심 인재 유지"
+      sub_items:
+        - code: A11.RUN.STAY
+          tier: critical
+          weight_within_group: 0.3
+          belief:
+            q: "1on1에서 핵심 인재 5명에게 '다음 12개월 우리 팀에서 일할 의향'을 묻고 그 답을 안다."
+          evidence:
+            q: "핵심 인재 stay-intent 평균 (% who say YES with confidence)"
+            type: choice
+            options:
+              - { v: 1, label: "< 50% 또는 안 물음" }
+              - { v: 2, label: "50–64%" }
+              - { v: 3, label: "65–74%" }
+              - { v: 4, label: "75–84%" }
+              - { v: 5, label: "≥ 85%" }
+          citation: "Beverly Kaye *Love 'Em or Lose 'Em* (Stay Interview); First Round Stay Interview Guide"
+          failure_trigger: "evidence.v <= 2"
+          cadence: quarterly
+    - code: A11.CULTURE
+      name: "문화 (Westrum)"
+      sub_items:
+        - code: A11.CULTURE.WEST
+          tier: critical
+          weight_within_group: 0.3
+          belief:
+            q: "팀에서 나쁜 소식을 빠르고 솔직하게 공유하고, 책임을 묻기보다 학습으로 연결한다."
+          evidence:
+            q: "분기 Westrum 5문항 평균 점수 (0–100)"
+            type: choice
+            options:
+              - { v: 1, label: "< 40 (Pathological)" }
+              - { v: 2, label: "40–55" }
+              - { v: 3, label: "55–70 (Bureaucratic)" }
+              - { v: 4, label: "70–85" }
+              - { v: 5, label: "≥ 85 (Generative)" }
+            refresh_period_days: 90
+          citation: "Westrum 'A typology of organisational cultures' (BMJ Quality 2004); DORA 2024 State of DevOps; Edmondson *Fearless Organization*"
+          failure_trigger: "evidence.v <= 2"
+          cadence: quarterly
+
+# ---------------------------------------------------------------------
+- code: A12
+  name_ko: "자금·런웨이·IR"
+  name_en: "Funding / Runway / IR"
+  tier: critical
+  weight: 7
+  owner_role: ["CEO", "CFO"]
+  framework: "Bessemer Five Cs of Cloud Finance · Sacks Burn Multiple · NfX Fundraise"
+  thresholds: { red: 45, yellow: 65, green: 80 }
+  groups:
+    - code: A12.RUN
+      name: "Runway"
+      sub_items:
+        - code: A12.RUN.MONTHS
+          tier: critical
+          weight_within_group: 0.5
+          belief:
+            q: "현재 cash / TTM avg net burn = 런웨이 개월 수를 매주 본다."
+          evidence:
+            q: "현재 런웨이 (개월)"
+            type: choice
+            options:
+              - { v: 1, label: "< 6" }
+              - { v: 2, label: "6–9" }
+              - { v: 3, label: "9–14" }
+              - { v: 4, label: "14–18" }
+              - { v: 5, label: "≥ 18" }
+            kpi_source: "회계: cash balance / 90d trailing net burn"
+            refresh_period_days: 7
+          citation: "Bessemer Five Cs of Cloud Finance; OpenView 2025 Runway Benchmarks"
+          failure_trigger: "evidence.v <= 2"
+          cadence: weekly
+          data_quality_required: 3
+    - code: A12.BM
+      name: "Burn Multiple"
+      sub_items:
+        - code: A12.BM.SACKS
+          tier: critical
+          weight_within_group: 0.3
+          belief:
+            q: "Burn Multiple = Net Burn / Net New ARR을 분기마다 계산한다."
+          evidence:
+            q: "지난 분기 Burn Multiple"
+            type: choice
+            options:
+              - { v: 1, label: "> 3.0 (Bad)" }
+              - { v: 2, label: "2.0–3.0 (Suspect)" }
+              - { v: 3, label: "1.5–2.0 (OK)" }
+              - { v: 4, label: "1.0–1.5 (Great)" }
+              - { v: 5, label: "< 1.0 (Amazing)" }
+          citation: "Sacks (Craft Ventures) 'The Burn Multiple' (2020)"
+          failure_trigger: "evidence.v <= 2 AND stage != pre_seed"
+          cadence: monthly
+    - code: A12.IR
+      name: "IR Pipeline"
+      sub_items:
+        - code: A12.IR.PIPELINE
+          tier: important
+          weight_within_group: 0.2
+          belief:
+            q: "다음 라운드 lead 후보 5곳을 지금 이름 댈 수 있다."
+          evidence:
+            q: "Active investor first-meetings (지난 90일)"
+            type: choice
+            options:
+              - { v: 1, label: "0–2" }
+              - { v: 2, label: "3–5" }
+              - { v: 3, label: "6–10" }
+              - { v: 4, label: "11–20" }
+              - { v: 5, label: "≥ 21 또는 term sheet 진행 중" }
+          citation: "NfX 'Fundraise Bullets'; Sequoia Pitch Outline"
+          failure_trigger: "evidence.v <= 2 AND linked.A12.RUN.MONTHS.v <= 3"
+          cadence: monthly
+
+# ---------------------------------------------------------------------
+- code: A13
+  name_ko: "CS·NPS·고객성공"
+  name_en: "Customer Success / NPS"
+  tier: important
+  weight: 2
+  owner_role: ["CS Lead"]
+  framework: "Bain NPS · Bessemer NRR · Gainsight Health Score"
+  thresholds: { red: 35, yellow: 55, green: 75 }
+  groups:
+    - code: A13.NPS
+      name: "Net Promoter Score"
+      sub_items:
+        - code: A13.NPS.SCORE
+          tier: important
+          weight_within_group: 0.4
+          belief:
+            q: "분기마다 NPS 설문을 돌리고 Promoter/Passive/Detractor 분포를 본다."
+          evidence:
+            q: "최근 분기 NPS"
+            type: choice
+            options:
+              - { v: 1, label: "< 0 또는 측정 안 함" }
+              - { v: 2, label: "0–19" }
+              - { v: 3, label: "20–39" }
+              - { v: 4, label: "40–59" }
+              - { v: 5, label: "≥ 60" }
+            refresh_period_days: 90
+          citation: "Reichheld 'The One Number You Need to Grow' (HBR 2003); Bain NPS"
+          failure_trigger: "evidence.v <= 2"
+          cadence: quarterly
+    - code: A13.NRR
+      name: "Net Revenue Retention"
+      sub_items:
+        - code: A13.NRR.RATE
+          tier: important
+          weight_within_group: 0.4
+          belief:
+            q: "기존 고객 매출의 확장-이탈 잔액 NRR을 매월 계산한다."
+          evidence:
+            q: "TTM NRR"
+            type: choice
+            options:
+              - { v: 1, label: "< 85%" }
+              - { v: 2, label: "85–94%" }
+              - { v: 3, label: "95–104%" }
+              - { v: 4, label: "105–114%" }
+              - { v: 5, label: "≥ 115%" }
+            refresh_period_days: 30
+          citation: "Bessemer State of the Cloud 2025 (Top quartile NRR ≥ 115%)"
+          failure_trigger: "evidence.v <= 2"
+          cadence: monthly
+
+# ---------------------------------------------------------------------
+- code: A14
+  name_ko: "경쟁·시장 인텔리전스"
+  name_en: "Competitive Intelligence"
+  tier: supporting
+  weight: 2
+  owner_role: ["Founder", "PMM"]
+  framework: "Porter Five Forces · Crayon Win/Loss · JTBD Competitive Set"
+  thresholds: { red: 35, yellow: 55, green: 70 }
+  notes: "한국 EdTech는 대형사(웅진·교원·아이스크림)가 후발 진입하면 1년 안에 장악할 위험."
+  groups:
+    - code: A14.WIN
+      name: "Win/Loss"
+      sub_items:
+        - code: A14.WIN.RATE
+          tier: critical
+          weight_within_group: 0.5
+          belief:
+            q: "경쟁 거래 win-rate를 분기마다 계산하고 win/loss 인터뷰를 한다."
+          evidence:
+            q: "지난 분기 win-rate (경쟁 노출 거래 중 우리 win 비율)"
+            type: choice
+            options:
+              - { v: 1, label: "< 20% 또는 측정 안 함" }
+              - { v: 2, label: "20–34%" }
+              - { v: 3, label: "35–49%" }
+              - { v: 4, label: "50–64%" }
+              - { v: 5, label: "≥ 65%" }
+          citation: "Crayon 'State of Competitive Intelligence' 2024; Win/Loss Institute"
+          failure_trigger: "evidence.v <= 2 AND has_active_competitive_deals"
+          cadence: quarterly
+    - code: A14.MOAT
+      name: "차별화 / Moat"
+      sub_items:
+        - code: A14.MOAT.DEFINED
+          tier: important
+          weight_within_group: 0.3
+          belief:
+            q: "우리 moat 3가지를 한 문장씩 명문화하고 12개월 내 갱신했다."
+          evidence:
+            q: "moat 명문화 + 검증 상태"
+            type: choice
+            options:
+              - { v: 1, label: "정의 안 됨" }
+              - { v: 2, label: "정의됐지만 검증 없음" }
+              - { v: 3, label: "정의 + 1개 검증" }
+              - { v: 4, label: "정의 + 2개 검증" }
+              - { v: 5, label: "3개 모두 데이터로 검증" }
+          citation: "Hamilton Helmer *7 Powers* (2016)"
+          failure_trigger: "evidence.v <= 2"
+          cadence: quarterly
+
+# =====================================================================
+# 확장 가이드
+# =====================================================================
+extension_guide: |
+  현재 파일은 도메인당 평균 3-5개 sub-item만 담고 있다. 풀 셋 (~210개)으로
+  확장할 때 각 도메인은 다음 sub-item을 추가해야 한다:
+
+  A1 (시장-문제): A1.JTBD.PUSH, A1.SEG.ICP, A1.SEG.SIZE, A1.SEG.WTP, A1.PROBLEM.RESTATE
+  A2 (PMF):       A2.SE.SEG (세그먼트별 SE40), A2.RET.M1, A2.RET.M6, A2.VALUE.ECHO, A2.NPS.ORG
+  A3 (Buyer):     A3.BUYER.CYCLE (결제 사이클), A3.BUYER.RENEW (갱신율), A3.PRICE.ELAS
+  A4 (Activation):A4.ACT.AHA (Aha moment 정의), A4.ACT.D7, A4.HABIT.LOOP, A4.RES.REACT (reactivation)
+  A5 (Unit Eco):  A5.LTV.RATIO, A5.NRR (← A13과 매핑), A5.RULE40, A5.MAGIC
+  A6 (GTM):       A6.CAC.CHANNEL, A6.PIPELINE.VEL, A6.CONTENT.CADENCE
+  A7 (규제):      A7.CONSENT.PARENT, A7.CONTENT.CENSOR (콘텐츠 심의), A7.EVAL.FIT (평가제 매핑)
+  A8 (Velocity):  A8.LEAD.TIME, A8.DECISION.LATENCY, A8.KILL.RATE
+  A9 (AI):        A9.PROMPT.OPS, A9.HALL.GUARD, A9.LATENCY, A9.COST.PER.CALL
+  A10 (M&S):      A10.PIPELINE.VEL, A10.CONTENT.CADENCE, A10.SDR.QUOTA
+  A11 (Team):     A11.HIRING.PLAN, A11.CONFLICT.PROD, A11.TRUST.PSY
+  A12 (Funding):  A12.PLAN.FORECAST (13주 cashflow 정확도), A12.MILESTONE.PROG
+  A13 (CS):       A13.HEALTH.SCORE, A13.SLA.RESP, A13.CSAT, A13.CHURN.PRED
+  A14 (Compete):  A14.MAP.REFRESH, A14.WATCH.NEW (잠재 진입자), A14.PRICE.MATCH
+
+  각 sub-item은 code/tier/weight_within_group/belief/evidence/citation/failure_trigger/cadence를
+  반드시 채울 것. weight_within_group의 합이 1.0이 되도록 조정.
