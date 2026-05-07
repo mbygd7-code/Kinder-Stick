@@ -288,30 +288,39 @@ as $$
   select org_id from org_members where user_id = auth.uid()
 $$;
 
+-- 정책은 idempotent하게 — 재실행 시에도 안전하도록 DROP IF EXISTS 후 CREATE
 -- ORG_MEMBERS: 본인 + 자기 org의 다른 멤버 보기
+drop policy if exists "members can view their org" on org_members;
 create policy "members can view their org" on org_members
   for select using (org_id in (select current_user_org_ids()));
 
 -- 일반 org-scoped 정책 — sub_item_responses 등에 동일 패턴 적용
+drop policy if exists "org members read sub_item_responses" on sub_item_responses;
 create policy "org members read sub_item_responses" on sub_item_responses
   for select using (org_id in (select current_user_org_ids()));
+drop policy if exists "org members insert sub_item_responses" on sub_item_responses;
 create policy "org members insert sub_item_responses" on sub_item_responses
   for insert with check (org_id in (select current_user_org_ids()));
 
+drop policy if exists "org members read kpi" on kpi_snapshots;
 create policy "org members read kpi" on kpi_snapshots
   for select using (org_id in (select current_user_org_ids()));
 -- KPI 쓰기는 service_role만 (Edge Function이 ingest)
 
+drop policy if exists "org members read evidence" on evidence_files;
 create policy "org members read evidence" on evidence_files
   for select using (org_id in (select current_user_org_ids()));
+drop policy if exists "org members insert evidence" on evidence_files;
 create policy "org members insert evidence" on evidence_files
   for insert with check (
     org_id in (select current_user_org_ids())
     and uploader_id = auth.uid()
   );
 
+drop policy if exists "org members read agent_sessions" on agent_sessions;
 create policy "org members read agent_sessions" on agent_sessions
   for select using (org_id in (select current_user_org_ids()));
+drop policy if exists "org admins manage agent_sessions" on agent_sessions;
 create policy "org admins manage agent_sessions" on agent_sessions
   for all using (
     org_id in (
@@ -320,13 +329,16 @@ create policy "org admins manage agent_sessions" on agent_sessions
     )
   );
 
+drop policy if exists "org members read agent_messages" on agent_messages;
 create policy "org members read agent_messages" on agent_messages
   for select using (
     session_id in (select id from agent_sessions where org_id in (select current_user_org_ids()))
   );
 
+drop policy if exists "org members read coaching_actions" on coaching_actions;
 create policy "org members read coaching_actions" on coaching_actions
   for select using (org_id in (select current_user_org_ids()));
+drop policy if exists "owners admins or owner_self update coaching_actions" on coaching_actions;
 create policy "owners admins or owner_self update coaching_actions" on coaching_actions
   for update using (
     owner_id = auth.uid()
@@ -335,13 +347,16 @@ create policy "owners admins or owner_self update coaching_actions" on coaching_
     )
   );
 
+drop policy if exists "org members read digests" on weekly_digests;
 create policy "org members read digests" on weekly_digests
   for select using (org_id in (select current_user_org_ids()));
 
+drop policy if exists "org members read signals" on signal_events;
 create policy "org members read signals" on signal_events
   for select using (org_id in (select current_user_org_ids()));
 
 -- 외부 AI 호출 — 결과만 read, 호출/콜백은 service_role
+drop policy if exists "org members read external_ai" on external_ai_calls;
 create policy "org members read external_ai" on external_ai_calls
   for select using (org_id in (select current_user_org_ids()));
 
