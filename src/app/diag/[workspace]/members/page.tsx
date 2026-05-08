@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { resolveOrgWithBackfill } from "@/lib/org";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import { MembersClient } from "./_members-client";
 
@@ -23,15 +24,18 @@ export default async function MembersPage({ params }: Props) {
   if (!WS_PATTERN.test(workspace)) notFound();
 
   const sb = supabaseAdmin();
-  const { data: org } = await sb
-    .from("organizations")
-    .select("id, name, stage, settings")
-    .eq("name", workspace)
-    .maybeSingle();
+  const orgBase = await resolveOrgWithBackfill(sb, workspace);
 
-  if (!org) {
+  if (!orgBase) {
     return <UnknownWorkspaceView workspace={workspace} />;
   }
+  // Members page needs settings (pending_invites). Fetch separately.
+  const { data: orgFull } = await sb
+    .from("organizations")
+    .select("id, name, stage, settings")
+    .eq("id", orgBase.id)
+    .maybeSingle();
+  const org = orgFull ?? { ...orgBase, settings: null };
 
   const currentUser = await getCurrentUser();
   if (!currentUser) {

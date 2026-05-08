@@ -27,7 +27,6 @@ priors:
 # Critical 도메인이 빨강일 때 베이지안 odds에 곱하는 likelihood ratio
 # ---------------------------------------------------------------------
 likelihood_ratios:
-  A12: 4.2   # 런웨이 — 가장 강한 시그널
   A2:  3.5   # PMF
   A7:  3.0   # 한국 EdTech 규제 (KISA·누리·평가제 빨강 = 영업정지 리스크)
   A11: 2.6   # 팀 붕괴
@@ -40,9 +39,6 @@ likelihood_ratios:
 # Critical-Critical: 단독으로도 6개월 실패확률 minimum 강제
 # ---------------------------------------------------------------------
 critical_caps:
-  - { sub_item: A12.RUN.MONTHS,        condition: "evidence.v == 1",                                      min_p_6m: 0.50 }
-  - { sub_item: A12.RUN.MONTHS,        condition: "evidence.v == 2",                                      min_p_6m: 0.30 }
-  - { sub_item: A12.BM.SACKS,          condition: "evidence.v <= 2 AND linked.A12.RUN.MONTHS.v <= 3",     min_p_6m: 0.40 }
   - { sub_item: A2.SE.40,              condition: "evidence.v <= 2 AND stage IN [seed, series_a]",        min_p_6m: 0.35 }
   - { sub_item: A2.RET.M3,             condition: "evidence.v == 1",                                      min_p_6m: 0.35 }
   - { sub_item: A11.FOUNDERS.ALIGN,    condition: "evidence.v <= 2",                                      min_p_6m: 0.35 }
@@ -667,80 +663,6 @@ domains:
           citation: "Westrum 'A typology of organisational cultures' (BMJ Quality 2004); DORA 2024 State of DevOps; Edmondson *Fearless Organization*"
           failure_trigger: "evidence.v <= 2"
           cadence: quarterly
-
-# ---------------------------------------------------------------------
-- code: A12
-  name_ko: "자금·런웨이·IR"
-  name_en: "Funding / Runway / IR"
-  tier: critical
-  weight: 7
-  owner_role: ["CEO", "CFO"]
-  framework: "Bessemer Five Cs of Cloud Finance · Sacks Burn Multiple · NfX Fundraise"
-  thresholds: { red: 45, yellow: 65, green: 80 }
-  groups:
-    - code: A12.RUN
-      name: "Runway"
-      sub_items:
-        - code: A12.RUN.MONTHS
-          tier: critical
-          weight_within_group: 0.5
-          belief:
-            q: "현재 cash / TTM avg net burn = 런웨이 개월 수를 매주 본다."
-          evidence:
-            q: "현재 런웨이 (개월)"
-            type: choice
-            options:
-              - { v: 1, label: "< 6" }
-              - { v: 2, label: "6–9" }
-              - { v: 3, label: "9–14" }
-              - { v: 4, label: "14–18" }
-              - { v: 5, label: "≥ 18" }
-            kpi_source: "회계: cash balance / 90d trailing net burn"
-            refresh_period_days: 7
-          citation: "Bessemer Five Cs of Cloud Finance; OpenView 2025 Runway Benchmarks"
-          failure_trigger: "evidence.v <= 2"
-          cadence: weekly
-          data_quality_required: 3
-    - code: A12.BM
-      name: "Burn Multiple"
-      sub_items:
-        - code: A12.BM.SACKS
-          tier: critical
-          weight_within_group: 0.3
-          belief:
-            q: "Burn Multiple = Net Burn / Net New ARR을 분기마다 계산한다."
-          evidence:
-            q: "지난 분기 Burn Multiple"
-            type: choice
-            options:
-              - { v: 1, label: "> 3.0 (Bad)" }
-              - { v: 2, label: "2.0–3.0 (Suspect)" }
-              - { v: 3, label: "1.5–2.0 (OK)" }
-              - { v: 4, label: "1.0–1.5 (Great)" }
-              - { v: 5, label: "< 1.0 (Amazing)" }
-          citation: "Sacks (Craft Ventures) 'The Burn Multiple' (2020)"
-          failure_trigger: "evidence.v <= 2 AND stage != pre_seed"
-          cadence: monthly
-    - code: A12.IR
-      name: "IR Pipeline"
-      sub_items:
-        - code: A12.IR.PIPELINE
-          tier: important
-          weight_within_group: 0.2
-          belief:
-            q: "다음 라운드 lead 후보 5곳을 지금 이름 댈 수 있다."
-          evidence:
-            q: "Active investor first-meetings (지난 90일)"
-            type: choice
-            options:
-              - { v: 1, label: "0–2" }
-              - { v: 2, label: "3–5" }
-              - { v: 3, label: "6–10" }
-              - { v: 4, label: "11–20" }
-              - { v: 5, label: "≥ 21 또는 term sheet 진행 중" }
-          citation: "NfX 'Fundraise Bullets'; Sequoia Pitch Outline"
-          failure_trigger: "evidence.v <= 2 AND linked.A12.RUN.MONTHS.v <= 3"
-          cadence: monthly
 
 # ---------------------------------------------------------------------
 - code: A13

@@ -556,58 +556,6 @@ playbooks:
   cite: "Edmondson *Fearless Organization* (2018); Lencioni *5 Dysfunctions*; DORA Westrum"
 
 # =========================================================
-# A12 — 자금·런웨이·IR
-# =========================================================
-- id: F12-1
-  domain: A12
-  title: "런웨이 < 9개월"
-  trigger:
-    primary: "A12.RUN.MONTHS.evidence.v <= 2"
-  diagnostic_q: "지금부터 9개월 안에 다음 라운드를 닫지 못한다면, 어떤 비용 라인을 먼저 끄나요?"
-  smart_actions:
-    - { owner: "CEO", deadline_days: 3,  action: "30/60/90% cost cut 시나리오 작성" }
-    - { owner: "CEO", deadline_days: 7,  action: "IR pipeline freeze + active fundraise 모드 전환" }
-    - { owner: "CEO", deadline_days: 14, action: "bridge round / venture debt 옵션 점검" }
-  verify:
-    metric: "30일 후 런웨이 >= 12개월 OR term sheet 1건"
-    after_days: 30
-  cite: "Bessemer 5 Cs of Cloud Finance; First Round 'Surviving Down Rounds'"
-  external_handoff:
-    when: "런웨이 < 6개월"
-    domain: "specialized_finance"
-    target: "Meetflow 또는 venture debt 전문 자문"
-
-- id: F12-2
-  domain: A12
-  title: "Burn Multiple > 3.0 — 비효율 성장"
-  trigger:
-    primary: "A12.BM.SACKS.evidence.v <= 2"
-  diagnostic_q: "지난 분기 Net New ARR을 만든 채널 중 marginal CAC payback이 24개월 이상인 건 무엇인가요?"
-  smart_actions:
-    - { owner: "CFO",     deadline_days: 7,  action: "채널별 CAC payback 분석" }
-    - { owner: "Growth",  deadline_days: 14, action: "BM>3 채널 즉시 pause" }
-    - { owner: "CEO",     deadline_days: 30, action: "efficient growth plan 재제출" }
-  verify:
-    metric: "다음 분기 BM <= 2.0"
-    after_days: 90
-  cite: "Sacks 'The Burn Multiple' (2020); OpenView Efficient Growth"
-
-- id: F12-3
-  domain: A12
-  title: "IR 파이프라인 부재"
-  trigger:
-    primary: "A12.IR.PIPELINE.evidence.v <= 2 AND A12.RUN.MONTHS.evidence.v <= 3"
-  diagnostic_q: "다음 라운드 lead 후보 5곳을 지금 이 자리에서 이름 댈 수 있나요?"
-  smart_actions:
-    - { owner: "CEO", deadline_days: 7,  action: "30 target investor list 작성" }
-    - { owner: "CEO", deadline_days: 14, action: "데이터룸 + IR deck v2 준비" }
-    - { owner: "CEO", deadline_days: 30, action: "12 first meetings 잡기" }
-  verify:
-    metric: "60일 후 second meeting >= 5"
-    after_days: 60
-  cite: "NfX 'Fundraise Bullets'; Sequoia Pitch Outline; YC 'How to fundraise'"
-
-# =========================================================
 # A13 — CS·NPS
 # =========================================================
 - id: F13-1

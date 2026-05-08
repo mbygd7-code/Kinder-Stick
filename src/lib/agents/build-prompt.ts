@@ -160,7 +160,7 @@ export function buildSystemPrompt(args: BuildPromptArgs): string {
     .replace(/{{도메인 코드}}/g, domain.code)
     .replace(/{{회사명}}/g, org.workspace_id)
     .replace(/{{stage}}/g, org.stage)
-    .replace(/{{외부 핸드오프 가능 여부 — A7\/A12 등에만}}/g, externalHandoffNote)
+    .replace(/{{외부 핸드오프 가능 여부 — A7\/A11 등에만}}/g, externalHandoffNote)
     .replace(/{{외부 핸드오프 가능 여부.*?}}/g, externalHandoffNote)
     .replace(
       /{{retrieved_kpi}}/g,

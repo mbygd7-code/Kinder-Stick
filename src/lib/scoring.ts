@@ -85,7 +85,7 @@ export const DEFAULT_PRIORS: ScoringConfig["priors"] = {
 };
 
 export const DEFAULT_LIKELIHOOD_RATIOS: Record<string, number> = {
-  A12: 4.2, A2:  3.5, A7:  3.0, A11: 2.6,
+  A2:  3.5, A7:  3.0, A11: 2.6,
   A5:  2.4, A1:  2.0, A3:  1.8, A4:  1.7,
 };
 

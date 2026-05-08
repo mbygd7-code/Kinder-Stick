@@ -62,7 +62,6 @@ export async function ensureWorkspaceOrg(
         "A9",
         "A10",
         "A11",
-        "A12",
         "A13",
         "A14",
       ],
@@ -81,4 +80,60 @@ export async function ensureWorkspaceOrg(
     name: inserted.name,
     stage: (inserted.stage ?? stage) as Stage,
   };
+}
+
+/**
+ * 워크스페이스 페이지의 표준 org 조회 + backfill 헬퍼.
+ *
+ * 1. organizations 테이블에서 name=workspace로 조회
+ * 2. 없으면 diagnosis_responses에 응답이 있는지 확인
+ * 3. 응답이 있으면 가장 최근 stage로 organization row 자동 생성 (backfill)
+ * 4. 응답도 없으면 null 반환 (진짜 빈 워크스페이스)
+ *
+ * 이 함수는 모든 /diag/[workspace]/* 페이지에서 사용해야 한다 — 그렇지
+ * 않으면 워크스페이스마다 일부 페이지는 동작하고 일부는 "no workspace"로
+ * 빠지는 일관성 없는 UX가 발생한다.
+ */
+export async function resolveOrgWithBackfill(
+  sb: SupabaseClient,
+  workspaceId: string,
+): Promise<WorkspaceOrg | null> {
+  const { data: existing } = await sb
+    .from("organizations")
+    .select("id, name, stage")
+    .eq("name", workspaceId)
+    .maybeSingle();
+
+  if (existing) {
+    return {
+      id: existing.id,
+      name: existing.name,
+      stage: (existing.stage ?? "seed") as Stage,
+    };
+  }
+
+  // No org row — check if there's diagnosis data to back-fill from
+  const { count } = await sb
+    .from("diagnosis_responses")
+    .select("id", { count: "exact", head: true })
+    .eq("workspace_id", workspaceId);
+
+  if ((count ?? 0) === 0) {
+    return null; // truly empty workspace
+  }
+
+  // Pull latest stage and backfill
+  const { data: row } = await sb
+    .from("diagnosis_responses")
+    .select("stage")
+    .eq("workspace_id", workspaceId)
+    .order("respondent_num", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const stage = ((row?.stage as Stage) ?? "seed") as Stage;
+  try {
+    return await ensureWorkspaceOrg(sb, workspaceId, stage);
+  } catch {
+    return null;
+  }
 }

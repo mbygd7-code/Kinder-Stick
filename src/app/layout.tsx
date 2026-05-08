@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { TopNav } from "@/components/nav/top-nav";
+import { getCurrentUser } from "@/lib/supabase/auth";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -7,11 +9,13 @@ export const metadata: Metadata = {
     "EdTech 조직의 14-도메인 진단, Bayesian 실패확률 산출, AI 도메인 코치를 한 화면에서.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const currentUser = await getCurrentUser();
+
   return (
     <html lang="ko" className="h-full antialiased">
       <head>
@@ -26,8 +30,16 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-full flex flex-col paper-bg grain">
-        <div className="relative z-10 flex flex-col flex-1">{children}</div>
+      <body className="grain">
+        <div
+          className="paper-bg min-h-dvh relative flex flex-col"
+          style={{ zIndex: 2 }}
+        >
+          <TopNav
+            userEmail={currentUser?.email ?? null}
+          />
+          <div className="flex-1 flex flex-col">{children}</div>
+        </div>
       </body>
     </html>
   );

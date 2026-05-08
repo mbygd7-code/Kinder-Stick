@@ -41,22 +41,6 @@ const PRESETS: Array<{
   severity: "red" | "amber" | "green";
 }> = [
   {
-    label: "런웨이 4개월 (위기)",
-    source: "stripe",
-    metric_key: "runway_months",
-    value: 4,
-    hint: "→ A12.RUN.MONTHS · v=1 RED",
-    severity: "red",
-  },
-  {
-    label: "런웨이 18개월 (안전)",
-    source: "stripe",
-    metric_key: "runway_months",
-    value: 18,
-    hint: "→ A12.RUN.MONTHS · v=5 GREEN",
-    severity: "green",
-  },
-  {
     label: "D1 activation 18%",
     source: "ga4",
     metric_key: "d1_activation_rate",
@@ -112,12 +96,14 @@ export function SignalsClient({
   snapshots,
   events,
   metricDefs,
+  showMockInjector = false,
 }: {
   workspace: string;
   orgFound: boolean;
   snapshots: KpiSnapshot[];
   events: SignalEvent[];
   metricDefs: MetricDefinition[];
+  showMockInjector?: boolean;
 }) {
   const router = useRouter();
   const [pending, startInject] = useTransition();
@@ -217,15 +203,19 @@ export function SignalsClient({
         ) : null}
       </section>
 
-      {/* INJECTOR */}
+      {/* INJECTOR — dev-only */}
+      {showMockInjector ? (
       <section className="max-w-6xl mx-auto px-6 sm:px-10 mt-6">
-        <div className="area-card">
-          <p className="kicker mb-2">Mock injector</p>
+        <div className="area-card !border-signal-amber bg-soft-amber/20">
+          <div className="flex items-baseline gap-2 mb-2">
+            <span className="tag tag-gold">DEV ONLY</span>
+            <p className="kicker">Mock injector</p>
+          </div>
           <h2 className="font-display text-2xl">샘플 KPI 주입</h2>
           <p className="mt-2 text-sm text-ink-soft">
-            8개 프리셋 — 빨강/초록 시나리오를 누르면 즉시 kpi_snapshots +
-            signal_events에 row 가 들어가고 도메인 코치가 활용할 컨텍스트가
-            됩니다.
+            개발·테스트 전용. 8개 프리셋 — 빨강/초록 시나리오를 누르면 즉시
+            kpi_snapshots + signal_events에 row가 들어가고 도메인 코치 컨텍스트로
+            활용됩니다. 운영 빌드에서는 자동으로 숨김 처리됩니다.
           </p>
           <div className="mt-5 grid grid-cols-2 md:grid-cols-4 gap-3">
             {PRESETS.map((p) => (
@@ -263,6 +253,7 @@ export function SignalsClient({
           ) : null}
         </div>
       </section>
+      ) : null}
 
       {/* PROACTIVE COACH TRIGGER */}
       <section className="max-w-6xl mx-auto px-6 sm:px-10 mt-6">

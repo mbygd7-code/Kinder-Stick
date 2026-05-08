@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { resolveOrgWithBackfill } from "@/lib/org";
 import { ActionsBoard, type ActionRow } from "./_actions-board";
 
 interface Props {
@@ -13,11 +14,7 @@ export default async function ActionsPage({ params }: Props) {
   if (!WS_PATTERN.test(workspace)) notFound();
 
   const sb = supabaseAdmin();
-  const { data: org } = await sb
-    .from("organizations")
-    .select("id, name")
-    .eq("name", workspace)
-    .maybeSingle();
+  const org = await resolveOrgWithBackfill(sb, workspace);
 
   let actions: ActionRow[] = [];
   if (org) {

@@ -147,56 +147,16 @@ export default async function ResultPage({ params, searchParams }: Props) {
         </section>
       ) : null}
 
-      {/* HEADLINE METRICS */}
-      <section className="max-w-6xl mx-auto px-6 sm:px-10 mt-6 grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Metric
-          label="Overall"
-          value={
-            aggregate.overall === null
-              ? "—"
-              : Math.round(aggregate.overall).toString()
-          }
-          sub="0–100"
-          tone={
-            aggregate.overall === null
-              ? undefined
-              : aggregate.overall >= 60
-                ? "green"
-                : aggregate.overall >= 40
-                  ? "amber"
-                  : "red"
-          }
-        />
-        <Metric
-          label="P(fail, 6m)"
-          value={`${Math.round(aggregate.fp["6m"].final * 100)}%`}
-          sub={`prior ${Math.round(aggregate.fp["6m"].prior * 100)}%`}
-          tone={
-            aggregate.fp["6m"].final < 0.25
-              ? "green"
-              : aggregate.fp["6m"].final < 0.45
-                ? "amber"
-                : "red"
-          }
-        />
-        <Metric
-          label="P(fail, 12m)"
-          value={`${Math.round(aggregate.fp["12m"].final * 100)}%`}
-          sub={`prior ${Math.round(aggregate.fp["12m"].prior * 100)}%`}
-          tone={
-            aggregate.fp["12m"].final < 0.35
-              ? "green"
-              : aggregate.fp["12m"].final < 0.55
-                ? "amber"
-                : "red"
-          }
-        />
-        <Metric
-          label="Respondents"
-          value={String(rows.length)}
-          sub={`stage · ${aggregate.stage}`}
-        />
-      </section>
+      {/* HEADLINE — 한눈에 보기 (직원도 이해 가능한 평이한 표현) */}
+      <SummaryPanel
+        overall={aggregate.overall}
+        fp6m={aggregate.fp["6m"].final}
+        fp12m={aggregate.fp["12m"].final}
+        prior6m={aggregate.fp["6m"].prior}
+        prior12m={aggregate.fp["12m"].prior}
+        respondents={rows.length}
+        stage={aggregate.stage}
+      />
 
       {/* RED CRITICAL DOMAINS BANNER */}
       {aggregate.fp["6m"].red_critical_domains.length > 0 ||
@@ -503,6 +463,257 @@ function aggregateRespondents(
 // ============================================================
 // Sub-components
 // ============================================================
+
+function SummaryPanel({
+  overall,
+  fp6m,
+  fp12m,
+  prior6m,
+  prior12m,
+  respondents,
+  stage,
+}: {
+  overall: number | null;
+  fp6m: number;
+  fp12m: number;
+  prior6m: number;
+  prior12m: number;
+  respondents: number;
+  stage: string;
+}) {
+  const overallNum = overall ?? 0;
+  const overallTone =
+    overall === null
+      ? "neutral"
+      : overall >= 70
+        ? "green"
+        : overall >= 40
+          ? "amber"
+          : "red";
+  const overallLabel =
+    overallTone === "green"
+      ? "양호"
+      : overallTone === "amber"
+        ? "주의"
+        : overallTone === "red"
+          ? "위험"
+          : "평가 보류";
+  const overallSentence =
+    overall === null
+      ? "응답이 부족해 점수를 산출하지 못했습니다."
+      : overall >= 70
+        ? "지금 흐름을 이어가도 좋습니다. 정기 점검은 계속 유지하세요."
+        : overall >= 40
+          ? "한두 영역이 흔들리고 있습니다. 빨간 영역부터 우선 점검."
+          : "여러 영역이 빨강입니다. 이번 주 안에 책임자 지정 + 액션 채택이 필요합니다.";
+
+  const tone6m =
+    fp6m < 0.25 ? "green" : fp6m < 0.45 ? "amber" : "red";
+  const tone12m =
+    fp12m < 0.35 ? "green" : fp12m < 0.55 ? "amber" : "red";
+
+  const reliabilitySentence =
+    respondents === 1
+      ? "한 사람의 시각만 반영됨 — 팀원이 추가로 응답하면 결과 신뢰도가 크게 올라갑니다."
+      : respondents < 4
+        ? `응답자 ${respondents}명 — 표본이 적어 신뢰구간이 넓습니다. 4명 이상이면 ‘이견 큼’ 라벨도 활성화됩니다.`
+        : respondents < 7
+          ? `응답자 ${respondents}명 — 적정 수준. 7명 이상이면 통계적 신뢰도가 더욱 안정됩니다.`
+          : `응답자 ${respondents}명 — 충분한 표본으로 결과가 안정적입니다.`;
+
+  const stageLabel =
+    {
+      "pre-seed": "Pre-seed",
+      seed: "Seed",
+      "series-a": "Series A",
+      "series-b+": "Series B 이상",
+    }[stage] ?? stage;
+
+  return (
+    <section className="max-w-6xl mx-auto px-6 sm:px-10 mt-6">
+      <div
+        className={`border-2 p-6 sm:p-8 ${
+          overallTone === "red"
+            ? "border-signal-red bg-soft-red/40"
+            : overallTone === "amber"
+              ? "border-signal-amber bg-soft-amber/40"
+              : overallTone === "green"
+                ? "border-signal-green bg-soft-green/40"
+                : "border-ink bg-paper-soft"
+        }`}
+      >
+        {/* ── Status badge + verdict sentence ── */}
+        <div className="flex items-baseline gap-3 mb-3 flex-wrap">
+          <span
+            className={`tag ${
+              overallTone === "red"
+                ? "tag-red"
+                : overallTone === "amber"
+                  ? "tag-gold"
+                  : overallTone === "green"
+                    ? "tag-green"
+                    : "tag-filled"
+            }`}
+          >
+            {overallTone === "red"
+              ? "● 위험"
+              : overallTone === "amber"
+                ? "● 주의"
+                : overallTone === "green"
+                  ? "● 양호"
+                  : overallLabel}
+          </span>
+          <p className="kicker">우리 회사 한눈에 보기</p>
+        </div>
+
+        <h2 className="font-display text-3xl sm:text-5xl leading-[1.05] tracking-tight break-keep">
+          종합 건강도{" "}
+          <span
+            className={
+              overallTone === "red"
+                ? "text-signal-red"
+                : overallTone === "amber"
+                  ? "text-signal-amber"
+                  : overallTone === "green"
+                    ? "text-signal-green"
+                    : "text-ink"
+            }
+          >
+            {overall === null ? "—" : Math.round(overallNum)}
+          </span>
+          <span className="text-ink-soft text-2xl sm:text-3xl">{" "}/ 100점</span>
+        </h2>
+        <p className="mt-2 text-base sm:text-lg leading-relaxed text-ink-soft max-w-3xl">
+          → {overallLabel} 단계. {overallSentence}
+        </p>
+
+        {/* ── Risk explanation in plain words ── */}
+        <div className="mt-6 pt-5 border-t border-ink-soft/30 grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <RiskCard
+            title="6개월 안에 어려움을 겪을 가능성"
+            now={fp6m}
+            base={prior6m}
+            tone={tone6m}
+            stageLabel={stageLabel}
+          />
+          <RiskCard
+            title="12개월 안에 어려움을 겪을 가능성"
+            now={fp12m}
+            base={prior12m}
+            tone={tone12m}
+            stageLabel={stageLabel}
+          />
+        </div>
+        <p className="mt-2 label-mono leading-relaxed">
+          ⓘ 비교 기준 — {stageLabel} 단계 회사 N=431 (CB Insights)의 6/12개월
+          실패율 평균. 우리 진단 결과를 합쳐 베이지안으로 보정한 값입니다.
+        </p>
+
+        {/* ── Reliability ── */}
+        <div className="mt-5 pt-4 border-t border-ink-soft/30">
+          <div className="flex items-baseline gap-3 flex-wrap">
+            <p className="kicker">결과 신뢰도</p>
+            <p className="text-sm">
+              <strong className="font-medium">응답자 {respondents}명</strong> ·
+              회사 단계 <strong className="font-medium">{stageLabel}</strong>
+            </p>
+          </div>
+          <p className="mt-1 text-sm text-ink-soft leading-relaxed">
+            {reliabilitySentence}
+          </p>
+        </div>
+
+        {/* ── Tech detail (collapsed) ── */}
+        <details className="mt-4 pt-3 border-t border-ink-soft/20">
+          <summary className="cursor-pointer label-mono inline-flex items-center gap-1.5">
+            <span className="font-mono">▶</span>
+            기술 세부 (Bayesian · prior · capped)
+          </summary>
+          <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-xs">
+            <div className="border border-ink-soft/30 p-2 bg-paper">
+              <p className="label-mono">Overall</p>
+              <p className="font-display text-lg leading-none mt-1">
+                {overall === null ? "—" : overall.toFixed(1)}
+              </p>
+              <p className="label-mono mt-1">0–100, weighted</p>
+            </div>
+            <div className="border border-ink-soft/30 p-2 bg-paper">
+              <p className="label-mono">P(fail, 6m)</p>
+              <p className="font-display text-lg leading-none mt-1">
+                {(fp6m * 100).toFixed(1)}%
+              </p>
+              <p className="label-mono mt-1">
+                prior {(prior6m * 100).toFixed(0)}%
+              </p>
+            </div>
+            <div className="border border-ink-soft/30 p-2 bg-paper">
+              <p className="label-mono">P(fail, 12m)</p>
+              <p className="font-display text-lg leading-none mt-1">
+                {(fp12m * 100).toFixed(1)}%
+              </p>
+              <p className="label-mono mt-1">
+                prior {(prior12m * 100).toFixed(0)}%
+              </p>
+            </div>
+            <div className="border border-ink-soft/30 p-2 bg-paper">
+              <p className="label-mono">Respondents · stage</p>
+              <p className="font-display text-lg leading-none mt-1">
+                {respondents}
+              </p>
+              <p className="label-mono mt-1">{stage}</p>
+            </div>
+          </div>
+        </details>
+      </div>
+    </section>
+  );
+}
+
+function RiskCard({
+  title,
+  now,
+  base,
+  tone,
+  stageLabel,
+}: {
+  title: string;
+  now: number;
+  base: number;
+  tone: "green" | "amber" | "red";
+  stageLabel: string;
+}) {
+  const nowPct = Math.round(now * 100);
+  const basePct = Math.round(base * 100);
+  const deltaPp = nowPct - basePct;
+  const numColor =
+    tone === "red"
+      ? "text-signal-red"
+      : tone === "amber"
+        ? "text-signal-amber"
+        : "text-signal-green";
+  const deltaPhrase =
+    deltaPp > 5
+      ? `평균보다 ${deltaPp}%p 높음 — 위험 신호`
+      : deltaPp < -5
+        ? `평균보다 ${Math.abs(deltaPp)}%p 낮음 — 안정적`
+        : "평균과 비슷한 수준";
+
+  return (
+    <div>
+      <p className="kicker mb-1">{title}</p>
+      <p className="font-display leading-none">
+        <span className={`text-5xl sm:text-6xl ${numColor}`}>
+          {nowPct}
+        </span>
+        <span className="text-2xl sm:text-3xl text-ink">%</span>
+      </p>
+      <p className="mt-2 text-sm text-ink-soft leading-relaxed">
+        {stageLabel} 단계 평균 회사는{" "}
+        <strong className="font-medium text-ink">{basePct}%</strong> — {deltaPhrase}.
+      </p>
+    </div>
+  );
+}
 
 function Metric({
   label,

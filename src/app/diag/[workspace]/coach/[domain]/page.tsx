@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { loadFramework } from "@/lib/framework/loader";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { resolveOrgWithBackfill } from "@/lib/org";
 import { CoachClient, type SessionBootstrap } from "./_coach";
 
 interface Props {
@@ -21,11 +22,7 @@ export default async function CoachPage({ params }: Props) {
 
   // Find latest active session for (workspace org, domain)
   const sb = supabaseAdmin();
-  const { data: org } = await sb
-    .from("organizations")
-    .select("id")
-    .eq("name", workspace)
-    .maybeSingle();
+  const org = await resolveOrgWithBackfill(sb, workspace);
 
   let bootstrap: SessionBootstrap | null = null;
 

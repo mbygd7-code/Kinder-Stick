@@ -75,7 +75,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         ok: false,
-        message: `domain ${session.domain_code} 에는 외부 전문가 매핑이 없습니다 (A5/A7/A11/A12 만 지원)`,
+        message: `domain ${session.domain_code} 에는 외부 전문가 매핑이 없습니다 (A5/A7/A11 만 지원)`,
       },
       { status: 400 },
     );

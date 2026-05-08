@@ -9,6 +9,7 @@
 
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { ensureWorkspaceOrg } from "@/lib/org";
 import { loadFramework } from "@/lib/framework/loader";
 import {
   computeSubItemScore,
@@ -113,7 +114,22 @@ export async function POST(req: Request) {
     );
   }
 
-  // 1. next respondent_num
+  // 1. ensure organization row exists (idempotent)
+  // 진단 제출과 동시에 org row를 생성해야 signals/actions/dashboard가 동작
+  let orgId: string | null = null;
+  try {
+    const org = await ensureWorkspaceOrg(
+      sb,
+      payload.workspace_id,
+      payload.context.stage,
+    );
+    orgId = org.id;
+  } catch (e) {
+    // best-effort — diagnosis 자체는 계속 저장
+    console.error("ensureWorkspaceOrg failed:", e);
+  }
+
+  // 2. next respondent_num
   const { data: nextNumData, error: rpcErr } = await sb.rpc(
     "next_respondent_num",
     { ws: payload.workspace_id },

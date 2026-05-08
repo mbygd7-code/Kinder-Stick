@@ -28,14 +28,6 @@ interface SeedResult {
 
 const METRIC_DEFINITIONS = [
   {
-    source: "stripe",
-    metric_key: "runway_months",
-    mapped_sub_item_code: "A12.RUN.MONTHS",
-    transform_fn: "months >= 18 → v=5; 14-17 → v=4; 9-13 → v=3; 6-8 → v=2; <6 → v=1",
-    threshold_rule: { red: "< 9", yellow: "9-14", green: ">= 18", unit: "months" },
-    cadence: "realtime",
-  },
-  {
     source: "ga4",
     metric_key: "d1_activation_rate",
     mapped_sub_item_code: "A4.ACT.D1",

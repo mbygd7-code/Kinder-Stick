@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { resolveOrgWithBackfill } from "@/lib/org";
 import { SignalsClient } from "./_signals";
 
 interface Props {
@@ -43,12 +44,7 @@ export default async function SignalsPage({ params }: Props) {
   if (!WS_PATTERN.test(workspace)) notFound();
 
   const sb = supabaseAdmin();
-
-  const { data: org } = await sb
-    .from("organizations")
-    .select("id, name, stage")
-    .eq("name", workspace)
-    .maybeSingle();
+  const org = await resolveOrgWithBackfill(sb, workspace);
 
   let snapshots: KpiSnapshot[] = [];
   let events: SignalEvent[] = [];
@@ -88,6 +84,7 @@ export default async function SignalsPage({ params }: Props) {
       snapshots={snapshots}
       events={events}
       metricDefs={(metricDefs ?? []) as MetricDefinition[]}
+      showMockInjector={process.env.NODE_ENV !== "production"}
     />
   );
 }

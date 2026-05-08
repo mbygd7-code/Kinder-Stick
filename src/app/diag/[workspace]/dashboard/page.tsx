@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { resolveOrgWithBackfill } from "@/lib/org";
 import { loadFramework } from "@/lib/framework/loader";
 import { fetchWorkspaceTimeline } from "@/lib/agents/timeline-context";
 import { getCurrentUser } from "@/lib/supabase/auth";
@@ -58,12 +59,8 @@ export default async function DashboardPage({ params }: Props) {
 
   const sb = supabaseAdmin();
 
-  // Resolve org
-  const { data: org } = await sb
-    .from("organizations")
-    .select("id, name, stage, plan, created_at")
-    .eq("name", workspace)
-    .maybeSingle();
+  // Resolve org (with auto-backfill if diagnosis_responses exist but no org row)
+  const org = await resolveOrgWithBackfill(sb, workspace);
 
   if (!org) {
     return <NoWorkspaceView workspace={workspace} />;
@@ -141,12 +138,26 @@ export default async function DashboardPage({ params }: Props) {
   for (const a of allActions)
     actionsByStatus[a.status] = (actionsByStatus[a.status] ?? 0) + 1;
   const now = Date.now();
+  const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
   const overdue = allActions.filter(
     (a) =>
       (a.status === "accepted" || a.status === "in_progress") &&
       a.deadline &&
       new Date(a.deadline).getTime() < now,
   );
+  // Active actions due within 7 days (or already overdue)
+  const dueSoonActions = allActions
+    .filter(
+      (a) =>
+        (a.status === "accepted" || a.status === "in_progress") &&
+        a.deadline &&
+        new Date(a.deadline).getTime() < now + SEVEN_DAYS,
+    )
+    .sort((a, b) => {
+      const da = a.deadline ? new Date(a.deadline).getTime() : Infinity;
+      const db = b.deadline ? new Date(b.deadline).getTime() : Infinity;
+      return da - db;
+    });
 
   // Quarterly check
   const daysSinceLatest = latestDiag
@@ -320,6 +331,125 @@ export default async function DashboardPage({ params }: Props) {
           }
         />
       </section>
+
+      {/* ============== 이번 주 할 일 (THIS WEEK) ============== */}
+      {(dueSoonActions.length > 0 ||
+        proactiveFindings.filter((f) => f.severity >= 4).length > 0) ? (
+        <>
+          <div className="max-w-6xl mx-auto px-6 sm:px-10 mt-12">
+            <div className="divider-ornament">
+              <span className="font-mono text-xs uppercase tracking-widest">
+                § 이번 주 우리 팀이 할 일
+              </span>
+            </div>
+          </div>
+          <section className="max-w-6xl mx-auto px-6 sm:px-10 mt-6">
+            <div className="border-2 border-ink bg-paper-soft p-6 sm:p-8">
+              <div className="flex items-baseline justify-between flex-wrap gap-3 mb-1">
+                <p className="kicker">바로 시작하면 되는 것</p>
+                <span className="label-mono">
+                  지연 {overdue.length} · 7일 내 마감{" "}
+                  {dueSoonActions.length - overdue.length} · 긴급 코칭{" "}
+                  {proactiveFindings.filter((f) => f.severity >= 4).length}
+                </span>
+              </div>
+              <h2 className="font-display text-3xl sm:text-4xl leading-tight tracking-tight">
+                추측 말고{" "}
+                <span className="italic font-light">실행</span>
+                할 것 3가지
+              </h2>
+              <p className="mt-3 text-sm text-ink-soft max-w-2xl">
+                점수가 아니라 액션이 변화의 단위입니다. 아래 항목을 하나씩
+                마감하면, 다음 주 같은 자리에 더 적은 항목이 남습니다.
+              </p>
+
+              <ol className="mt-6 space-y-3">
+                {/* Build top-3 list: overdue first, then due-soon, then critical findings */}
+                {buildThisWeekList(
+                  dueSoonActions,
+                  proactiveFindings,
+                  framework,
+                  workspace,
+                  now,
+                ).map((item, i) => (
+                  <li key={item.key}>
+                    <a
+                      href={item.href}
+                      className={`flex items-start gap-4 border-l-4 bg-paper p-4 hover:bg-paper-deep/40 transition-colors ${
+                        item.tone === "red"
+                          ? "border-signal-red"
+                          : item.tone === "amber"
+                            ? "border-signal-amber"
+                            : "border-ink"
+                      }`}
+                    >
+                      <span className="font-display text-2xl text-accent leading-none shrink-0 w-8">
+                        {i + 1}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline gap-2 flex-wrap">
+                          <span
+                            className={`tag ${
+                              item.tone === "red"
+                                ? "tag-red"
+                                : item.tone === "amber"
+                                  ? "tag-gold"
+                                  : "tag-filled"
+                            }`}
+                          >
+                            {item.kind}
+                          </span>
+                          <span className="label-mono">{item.meta}</span>
+                        </div>
+                        <p className="mt-1.5 font-display text-lg leading-snug">
+                          {item.title}
+                        </p>
+                        {item.subtitle ? (
+                          <p className="mt-1 text-sm text-ink-soft">
+                            {item.subtitle}
+                          </p>
+                        ) : null}
+                      </div>
+                      <span className="font-mono text-base text-ink-soft shrink-0 self-center">
+                        →
+                      </span>
+                    </a>
+                  </li>
+                ))}
+              </ol>
+
+              <div className="mt-5 pt-4 border-t border-ink-soft/30 flex flex-wrap gap-3 label-mono">
+                <a
+                  href={`/diag/${workspace}/actions`}
+                  className="hover:text-ink"
+                >
+                  → 액션 전체 보기
+                </a>
+                <span className="opacity-40">·</span>
+                <a
+                  href={`/diag/${workspace}/signals`}
+                  className="hover:text-ink"
+                >
+                  → 시그널 전체 보기
+                </a>
+              </div>
+            </div>
+          </section>
+        </>
+      ) : latestDiag ? (
+        <section className="max-w-6xl mx-auto px-6 sm:px-10 mt-12">
+          <div className="border-2 border-ink-soft/40 bg-paper-soft p-6 sm:p-8 text-center">
+            <p className="kicker mb-2">이번 주 할 일</p>
+            <p className="font-display text-2xl leading-tight">
+              긴급 액션 없음 — 평소 운영을 이어가세요.
+            </p>
+            <p className="mt-2 text-sm text-ink-soft">
+              새 시그널이 도착하면 이 자리에 ‘이번 주 할 일’이 자동으로
+              나타납니다.
+            </p>
+          </div>
+        </section>
+      ) : null}
 
       {/* PROACTIVE FINDINGS */}
       {proactiveFindings.length > 0 ? (
@@ -639,6 +769,69 @@ function computeSystemStatus({
     return { tone: "amber", label: "Caution — 점검 필요" };
   }
   return { tone: "green", label: "On track" };
+}
+
+interface ThisWeekItem {
+  key: string;
+  href: string;
+  kind: string;
+  title: string;
+  subtitle?: string;
+  meta: string;
+  tone: "red" | "amber" | "neutral";
+  priority: number; // lower = more urgent
+}
+
+function buildThisWeekList(
+  dueSoonActions: ActionRowMin[],
+  proactiveFindings: ProactiveSessionRow[],
+  framework: ReturnType<typeof loadFramework>,
+  workspace: string,
+  now: number,
+): ThisWeekItem[] {
+  const items: ThisWeekItem[] = [];
+
+  for (const a of dueSoonActions) {
+    const ms = a.deadline ? new Date(a.deadline).getTime() - now : 0;
+    const days = Math.round(ms / (24 * 60 * 60 * 1000));
+    const overdue = ms < 0;
+    items.push({
+      key: `action:${a.id}`,
+      href: `/diag/${workspace}/actions`,
+      kind: "ACTION",
+      title: a.title,
+      subtitle: a.owner_role
+        ? `담당: ${a.owner_role}`
+        : "담당자 미지정 — 클릭해서 지정",
+      meta: overdue
+        ? `${Math.abs(days)}일 지연`
+        : days === 0
+          ? "오늘 마감"
+          : `D-${days}`,
+      tone: overdue ? "red" : days <= 2 ? "red" : "amber",
+      priority: overdue ? -1000 + days : days,
+    });
+  }
+
+  // High-severity proactive findings (severity >= 4)
+  for (const f of proactiveFindings.filter((f) => f.severity >= 4)) {
+    const dom = framework.domains.find((d) => d.code === f.domain_code);
+    items.push({
+      key: `finding:${f.id}`,
+      href: `/diag/${workspace}/coach/${f.domain_code}`,
+      kind: "긴급 코칭",
+      title: f.summary ?? `${dom?.name_ko ?? f.domain_code} 영역에 시급한 문제`,
+      subtitle: dom
+        ? `${f.domain_code} · ${dom.name_ko} — 코치와 진단·SMART 액션 채택`
+        : "코치 화면에서 SMART 액션 채택",
+      meta: `severity ${f.severity}`,
+      tone: "red",
+      priority: -500 - f.severity,
+    });
+  }
+
+  items.sort((a, b) => a.priority - b.priority);
+  return items.slice(0, 3);
 }
 
 function Metric({

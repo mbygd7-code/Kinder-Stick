@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { resolveOrgWithBackfill } from "@/lib/org";
 import { integrationsStatus } from "@/lib/integrations/dispatch";
 
 interface Props {
@@ -25,11 +26,7 @@ export default async function IntegrationsPage({ params }: Props) {
   if (!WS_PATTERN.test(workspace)) notFound();
 
   const sb = supabaseAdmin();
-  const { data: org } = await sb
-    .from("organizations")
-    .select("id")
-    .eq("name", workspace)
-    .maybeSingle();
+  const org = await resolveOrgWithBackfill(sb, workspace);
 
   const status = integrationsStatus();
 

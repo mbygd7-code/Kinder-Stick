@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { resolveOrgWithBackfill } from "@/lib/org";
 import { loadFramework } from "@/lib/framework/loader";
 
 interface Props {
@@ -45,11 +46,7 @@ export default async function AuditPage({ params }: Props) {
   if (!WS_PATTERN.test(workspace)) notFound();
 
   const sb = supabaseAdmin();
-  const { data: org } = await sb
-    .from("organizations")
-    .select("id, name, stage, created_at")
-    .eq("name", workspace)
-    .maybeSingle();
+  const org = await resolveOrgWithBackfill(sb, workspace);
 
   if (!org) {
     return <NoWorkspaceView workspace={workspace} />;

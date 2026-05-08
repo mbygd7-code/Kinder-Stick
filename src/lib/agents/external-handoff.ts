@@ -297,8 +297,6 @@ export function pickExpertDomain(
       return "regulatory_privacy";
     case "A11":
       return "specialized_legal"; // co-founder issues
-    case "A12":
-      return "specialized_finance"; // bridge/venture debt
     case "A5":
       return "tax_accounting"; // unit econ / R&D credit
     default:

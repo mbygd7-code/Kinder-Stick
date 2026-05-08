@@ -564,7 +564,7 @@ export function CoachClient({
 
       {/* ESCALATE TO EXTERNAL */}
       {sessionId &&
-      ["A5", "A7", "A11", "A12"].includes(domain.code) &&
+      ["A5", "A7", "A11"].includes(domain.code) &&
       latestAgent &&
       latestAgent.severity >= 3 ? (
         <section className="max-w-5xl mx-auto px-6 sm:px-10 mt-6">
@@ -579,8 +579,7 @@ export function CoachClient({
                     A5: "세무·회계 전문가 자문",
                     A7: "규제·개인정보 전문가 자문",
                     A11: "스타트업 법률 자문",
-                    A12: "자금조달·재무 전문가 자문",
-                  }[domain.code as "A5" | "A7" | "A11" | "A12"]}
+                  }[domain.code as "A5" | "A7" | "A11"]}
                 </h2>
                 <p className="mt-1 label-mono">
                   PII 자동 마스킹 + HMAC 서명. Meetflow 미설정 시 mock 전문가
