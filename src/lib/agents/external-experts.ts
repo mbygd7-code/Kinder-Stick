@@ -133,20 +133,65 @@ PII가 redacted 토큰(<EMAIL_1>, <NAME_2> 등)으로 들어와도 그것을 그
   );
   const parsed = parseJson(raw);
 
+  const citations: MockExpertOutput["citations"] = Array.isArray(
+    parsed?.citations,
+  )
+    ? parsed.citations.flatMap((c) => {
+        if (!c || typeof c !== "object") return [];
+        const o = c as Record<string, unknown>;
+        const kind = o.kind;
+        const source_id = o.source_id;
+        const summary = o.summary;
+        if (
+          (kind === "law" || kind === "guideline" || kind === "benchmark") &&
+          typeof source_id === "string" &&
+          typeof summary === "string"
+        ) {
+          return [{ kind, source_id, summary }];
+        }
+        return [];
+      })
+    : [];
+
+  const recommended_actions: MockExpertOutput["recommended_actions"] =
+    Array.isArray(parsed?.recommended_actions)
+      ? parsed.recommended_actions.flatMap((a) => {
+          if (!a || typeof a !== "object") return [];
+          const o = a as Record<string, unknown>;
+          const title = o.title;
+          const deadline_days = o.deadline_days;
+          const owner_hint = o.owner_hint;
+          const risk_if_skipped = o.risk_if_skipped;
+          if (
+            typeof title === "string" &&
+            typeof deadline_days === "number" &&
+            typeof owner_hint === "string" &&
+            typeof risk_if_skipped === "string"
+          ) {
+            return [{ title, deadline_days, owner_hint, risk_if_skipped }];
+          }
+          return [];
+        })
+      : [];
+
+  const follow_up_questions: string[] = Array.isArray(
+    parsed?.follow_up_questions,
+  )
+    ? parsed.follow_up_questions.filter(
+        (q): q is string => typeof q === "string",
+      )
+    : [];
+
   return {
     request_id: input.request_id,
     expert_finding: parsed?.expert_finding ?? "(parse failed)",
-    citations: Array.isArray(parsed?.citations) ? parsed.citations : [],
-    recommended_actions: Array.isArray(parsed?.recommended_actions)
-      ? parsed.recommended_actions
-      : [],
+    citations,
+    recommended_actions,
     confidence:
       typeof parsed?.confidence === "number"
         ? Math.max(0, Math.min(1, parsed.confidence))
         : 0.6,
-    follow_up_questions: Array.isArray(parsed?.follow_up_questions)
-      ? parsed.follow_up_questions
-      : [],
+    follow_up_questions,
     // mock pricing — varies by domain (legal/regulatory more expensive)
     cost_krw:
       input.domain === "specialized_legal"
