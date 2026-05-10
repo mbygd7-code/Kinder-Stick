@@ -39,9 +39,10 @@ async function checkAnthropic(): Promise<Check> {
       ],
     });
     const text = r.content
-      .filter((b): b is { type: "text"; text: string } => b.type === "text")
-      .map((b) => b.text)
-      .join("")
+      .reduce(
+        (acc, b) => acc + (b.type === "text" ? b.text : ""),
+        "",
+      )
       .trim();
     return {
       ok: true,

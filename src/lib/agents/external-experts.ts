@@ -127,10 +127,10 @@ PII가 redacted 토큰(<EMAIL_1>, <NAME_2> 등)으로 들어와도 그것을 그
     system,
     messages: [{ role: "user", content: userMessage }],
   });
-  const raw = resp.content
-    .filter((b): b is { type: "text"; text: string } => b.type === "text")
-    .map((b) => b.text)
-    .join("");
+  const raw = resp.content.reduce(
+    (acc, b) => acc + (b.type === "text" ? b.text : ""),
+    "",
+  );
   const parsed = parseJson(raw);
 
   return {

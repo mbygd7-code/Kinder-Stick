@@ -148,10 +148,10 @@ export async function triggerProactiveCoach(
       ],
       messages: [{ role: "user", content: userMessage }],
     });
-    agentRaw = resp.content
-      .filter((b): b is { type: "text"; text: string } => b.type === "text")
-      .map((b) => b.text)
-      .join("");
+    agentRaw = resp.content.reduce(
+      (acc, b) => acc + (b.type === "text" ? b.text : ""),
+      "",
+    );
     const u = resp.usage as unknown as {
       input_tokens: number;
       output_tokens: number;
