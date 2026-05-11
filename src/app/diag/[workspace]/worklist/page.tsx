@@ -39,6 +39,8 @@ import { FunnelRibbon } from "./_funnel-ribbon";
 import { TaskTitle, TaskEditButton } from "./_task-customizer";
 import { TaskDescriptionPopover } from "./_task-description";
 import { ImpactPanel } from "./_impact-panel";
+import { DataIngestPanel } from "./_data-ingest-panel";
+import { DataDrivenExtras } from "./_data-driven-extras";
 
 interface Props {
   params: Promise<{ workspace: string }>;
@@ -172,6 +174,11 @@ export default async function WorklistPage({ params }: Props) {
       {/* GOALS PANEL */}
       <section className="max-w-6xl mx-auto px-6 sm:px-10 mt-8">
         <GoalsPanel workspace={workspace} />
+      </section>
+
+      {/* DATA INGEST — 외부 분석 데이터로 워크리스트 변형 */}
+      <section className="max-w-6xl mx-auto px-6 sm:px-10 mt-5">
+        <DataIngestPanel workspace={workspace} />
       </section>
 
       {/* FUNNEL RIBBON — Customer Journey */}
@@ -391,6 +398,9 @@ export default async function WorklistPage({ params }: Props) {
           );
         })}
       </section>
+
+      {/* DATA-DRIVEN EXTRAS — derived 신규 업무 + override 배지 데코레이션 */}
+      <DataDrivenExtras workspace={workspace} />
 
       {/* FOOTER */}
       <footer className="max-w-6xl mx-auto px-6 sm:px-10 mt-16 border-t border-ink-soft pt-6 flex flex-wrap items-baseline justify-between gap-4">

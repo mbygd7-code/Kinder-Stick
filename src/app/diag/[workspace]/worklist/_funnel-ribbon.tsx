@@ -10,7 +10,9 @@ import {
   getFunnelStage,
   type FunnelStage,
   type Status,
+  type DerivedTask,
 } from "@/lib/worklist/catalog";
+import { loadDerived } from "@/lib/worklist/storage";
 
 interface Props {
   workspace: string;
@@ -68,7 +70,10 @@ export function FunnelRibbon({ workspace, counts }: Props) {
     expansion: 0,
     internal: 0,
   };
+  // Load derived tasks once per render (cheap — localStorage)
+  let derived: DerivedTask[] = [];
   if (mounted) {
+    derived = loadDerived(workspace);
     for (const t of TASKS) {
       const stage = getFunnelStage(t);
       try {
@@ -84,11 +89,31 @@ export function FunnelRibbon({ workspace, counts }: Props) {
         // ignore
       }
     }
+    // Also count done status for derived tasks
+    for (const d of derived) {
+      const stage = getFunnelStage(d);
+      try {
+        const raw = window.localStorage.getItem(
+          `worklist:${workspace}:${d.id}`,
+        );
+        if (!raw) continue;
+        const parsed = JSON.parse(raw) as { status: Status };
+        if (parsed.status === "done") doneCounts[stage] += 1;
+      } catch {
+        // ignore
+      }
+    }
   }
   // touch tick so it's a dep of computation
   void tick;
 
-  const total = Object.values(counts).reduce((s, n) => s + n, 0);
+  // Add derived tasks to per-stage totals (client-side augmentation)
+  const augmentedCounts: Record<FunnelStage, number> = { ...counts };
+  for (const d of derived) {
+    augmentedCounts[getFunnelStage(d)] += 1;
+  }
+
+  const total = Object.values(augmentedCounts).reduce((s, n) => s + n, 0);
   const totalDone = Object.values(doneCounts).reduce((s, n) => s + n, 0);
 
   return (
@@ -120,7 +145,7 @@ export function FunnelRibbon({ workspace, counts }: Props) {
         {FUNNEL_ORDER.map((s, i) => {
           const isCustomerFacing = s !== "internal";
           const isOn = active === s;
-          const stageTotal = counts[s] ?? 0;
+          const stageTotal = augmentedCounts[s] ?? 0;
           const stageDone = doneCounts[s] ?? 0;
           const pct =
             stageTotal > 0 ? Math.round((stageDone / stageTotal) * 100) : 0;
@@ -131,29 +156,17 @@ export function FunnelRibbon({ workspace, counts }: Props) {
               onClick={() => {
                 const next = isOn ? "all" : s;
                 setActive(next);
-                // Find the first team that has at least one task in this stage
-                // and scroll to its section header so the user sees the
-                // filtered list starting from a real (non-empty) team.
                 if (next !== "all") {
+                  // Find the first team that has at least one task in this stage
+                  // and scroll to its section header so the user sees the
+                  // filtered list starting from a real (non-empty) team.
                   const firstTeam = TEAM_ORDER.find((team) =>
                     TASKS.some(
                       (t) => t.team === team && getFunnelStage(t) === next,
                     ),
                   );
                   if (firstTeam) {
-                    // Defer one frame so the filter has applied (tasks hidden)
-                    // before we measure scroll position.
-                    requestAnimationFrame(() => {
-                      const target = document.querySelector<HTMLElement>(
-                        `[data-team-section="${firstTeam}"]`,
-                      );
-                      if (target) {
-                        target.scrollIntoView({
-                          behavior: "smooth",
-                          block: "start",
-                        });
-                      }
-                    });
+                    scrollTeamHeaderToTop(firstTeam);
                   }
                 }
               }}
@@ -232,4 +245,39 @@ export function FunnelRibbon({ workspace, counts }: Props) {
       </p>
     </section>
   );
+}
+
+/**
+ * Sticky nav 두 줄(header h-14 + sub-nav h-11)과 border 2px*2 + safety 16px.
+ * 정확한 값은 layout에서 측정해서 보정 — 측정 실패 시 fallback.
+ */
+const STICKY_NAV_FALLBACK_PX = 120;
+
+function measureStickyNavHeight(): number {
+  // TopNav는 root layout의 첫 `header[sticky]`. 동적으로 측정해서 폰트 로드·반응형
+  // 변동까지 흡수.
+  const header = document.querySelector<HTMLElement>("header.sticky");
+  if (!header) return STICKY_NAV_FALLBACK_PX;
+  return header.getBoundingClientRect().height;
+}
+
+/**
+ * 클릭한 funnel 카드에 매칭되는 첫 팀의 헤더가 sticky nav 바로 아래에 정확히
+ * 위치하도록 스크롤. FilterBar가 다른 팀들을 `display:none`으로 숨길 때까지
+ * 기다린 뒤 측정해야 정확하므로 `setTimeout`으로 한 사이클 늦춤.
+ */
+function scrollTeamHeaderToTop(team: string): void {
+  // FilterBar의 funnel 상태 useEffect가 동일 tick 안에서 끝나도록 50ms,
+  // 안전하게 150ms 후 측정/스크롤.
+  window.setTimeout(() => {
+    const target = document.querySelector<HTMLElement>(
+      `[data-team-section="${team}"]`,
+    );
+    if (!target) return;
+    const navH = measureStickyNavHeight();
+    const rect = target.getBoundingClientRect();
+    // 8px 여유 — 헤더 윗선과 nav 바닥 사이에 짧은 숨통.
+    const targetY = window.scrollY + rect.top - navH - 8;
+    window.scrollTo({ top: Math.max(0, targetY), behavior: "smooth" });
+  }, 150);
 }

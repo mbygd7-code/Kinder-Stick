@@ -2080,3 +2080,97 @@ export function getBoostPoints(t: Task): number {
       return 6;
   }
 }
+
+// ============================================================
+// Derived tasks + overrides (data-driven worklist transforms)
+// ============================================================
+
+/**
+ * DerivedTask: 외부 데이터(GA4·Admin·NPS 등)에서 AI가 만들어낸 신규 업무.
+ * Task와 같은 스키마를 따르되, 출처·생성 시각·신뢰도를 추가로 보관.
+ */
+export interface DerivedTask extends Task {
+  /** 출처 시그널 식별자 — signal_events.id 또는 클라이언트 ULID */
+  derived_from_signal: string;
+  /** ISO timestamp */
+  created_at: string;
+  /** 한 cadence + 14일 후 자동 보관 권장 */
+  auto_archive_at?: string;
+  /** 0–1 — 0.6 미만이면 노란 경고 */
+  confidence: number;
+  /** 분석에서 들어온 원본 인사이트 한 줄 */
+  source_insight: string;
+}
+
+/**
+ * TaskOverride: 기존 catalog task의 cadence·tier·우선순위를 데이터 기반으로 격상.
+ */
+export interface TaskOverride {
+  /** 기존 Task.id */
+  task_id: string;
+  /** 우선 적용될 새 cadence (catalog Cadence enum) */
+  cadence_override?: Cadence;
+  /** 우선 적용될 새 tier (must/conditional 격상 가능) */
+  tier_boost?: Tier;
+  /** 한 줄 — 왜 격상되었는지 (예: "신규 -39.4% 영향") */
+  urgency_note?: string;
+  /** 출처 시그널 식별자 */
+  source_signal_id: string;
+  /** ISO timestamp */
+  created_at: string;
+  /** 0–1 */
+  confidence: number;
+}
+
+/**
+ * MergedTask — 화면 렌더링용. base/derived 구분, override 적용 여부 표시.
+ */
+export type MergedTask = Task & {
+  _kind: "base" | "derived";
+  _override?: TaskOverride;
+  _derived_meta?: { signal: string; insight: string; confidence: number };
+};
+
+/**
+ * mergeTasks — 정적 catalog + 데이터 주도 derived + override 를 합쳐 화면용 배열로.
+ *
+ * - override 적용 task는 cadence/tier가 override 값으로 치환되고, _override 메타가 붙음.
+ * - derived task는 _kind='derived' 로 표기되어 UI에서 🔥 배지로 노출.
+ * - confidence 정보는 _override.confidence / _derived_meta.confidence 로 노출.
+ */
+export function mergeTasks(
+  base: readonly Task[],
+  derived: readonly DerivedTask[],
+  overrides: readonly TaskOverride[],
+): MergedTask[] {
+  const overrideMap = new Map<string, TaskOverride>();
+  for (const o of overrides) overrideMap.set(o.task_id, o);
+
+  const out: MergedTask[] = [];
+  for (const t of base) {
+    const ov = overrideMap.get(t.id);
+    if (ov) {
+      out.push({
+        ...t,
+        cadence: ov.cadence_override ?? t.cadence,
+        tier: ov.tier_boost ?? t.tier,
+        _kind: "base",
+        _override: ov,
+      });
+    } else {
+      out.push({ ...t, _kind: "base" });
+    }
+  }
+  for (const d of derived) {
+    out.push({
+      ...d,
+      _kind: "derived",
+      _derived_meta: {
+        signal: d.derived_from_signal,
+        insight: d.source_insight,
+        confidence: d.confidence,
+      },
+    });
+  }
+  return out;
+}
