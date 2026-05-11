@@ -6,6 +6,7 @@ import {
   FUNNEL_DESC,
   FUNNEL_ORDER,
   TASKS,
+  TEAM_ORDER,
   getFunnelStage,
   type FunnelStage,
   type Status,
@@ -130,15 +131,28 @@ export function FunnelRibbon({ workspace, counts }: Props) {
               onClick={() => {
                 const next = isOn ? "all" : s;
                 setActive(next);
-                // Scroll to No.02 planning team section when a stage is selected
+                // Find the first team that has at least one task in this stage
+                // and scroll to its section header so the user sees the
+                // filtered list starting from a real (non-empty) team.
                 if (next !== "all") {
-                  const target = document.querySelector<HTMLElement>(
-                    '[data-team-section="planning"]',
+                  const firstTeam = TEAM_ORDER.find((team) =>
+                    TASKS.some(
+                      (t) => t.team === team && getFunnelStage(t) === next,
+                    ),
                   );
-                  if (target) {
-                    target.scrollIntoView({
-                      behavior: "smooth",
-                      block: "start",
+                  if (firstTeam) {
+                    // Defer one frame so the filter has applied (tasks hidden)
+                    // before we measure scroll position.
+                    requestAnimationFrame(() => {
+                      const target = document.querySelector<HTMLElement>(
+                        `[data-team-section="${firstTeam}"]`,
+                      );
+                      if (target) {
+                        target.scrollIntoView({
+                          behavior: "smooth",
+                          block: "start",
+                        });
+                      }
                     });
                   }
                 }
