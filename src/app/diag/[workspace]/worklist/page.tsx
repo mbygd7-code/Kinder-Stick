@@ -219,7 +219,7 @@ export default async function WorklistPage({ params }: Props) {
             <section
               key={team}
               data-team-section={team}
-              className="border-t-2 border-ink pt-6"
+              className="border-t-2 border-ink pt-6 scroll-mt-20"
             >
               <header className="flex items-baseline justify-between gap-4 flex-wrap mb-6">
                 <div>

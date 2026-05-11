@@ -130,9 +130,11 @@ export function FunnelRibbon({ workspace, counts }: Props) {
               onClick={() => {
                 const next = isOn ? "all" : s;
                 setActive(next);
-                // Scroll to the team execution sections when a stage is selected
+                // Scroll to No.02 planning team section when a stage is selected
                 if (next !== "all") {
-                  const target = document.getElementById("team-sections");
+                  const target = document.querySelector<HTMLElement>(
+                    '[data-team-section="planning"]',
+                  );
                   if (target) {
                     target.scrollIntoView({
                       behavior: "smooth",
