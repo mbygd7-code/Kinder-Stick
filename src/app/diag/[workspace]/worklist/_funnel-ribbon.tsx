@@ -127,7 +127,20 @@ export function FunnelRibbon({ workspace, counts }: Props) {
             <button
               key={s}
               type="button"
-              onClick={() => setActive(isOn ? "all" : s)}
+              onClick={() => {
+                const next = isOn ? "all" : s;
+                setActive(next);
+                // Scroll to the team execution sections when a stage is selected
+                if (next !== "all") {
+                  const target = document.getElementById("team-sections");
+                  if (target) {
+                    target.scrollIntoView({
+                      behavior: "smooth",
+                      block: "start",
+                    });
+                  }
+                }
+              }}
               className={`relative text-left px-3 pt-2.5 pb-3 border-2 transition-all ${
                 isOn
                   ? "border-ink bg-ink text-paper"

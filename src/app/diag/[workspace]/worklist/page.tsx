@@ -203,7 +203,10 @@ export default async function WorklistPage({ params }: Props) {
       </section>
 
       {/* TEAM SECTIONS */}
-      <section className="max-w-6xl mx-auto px-6 sm:px-10 mt-12 space-y-12">
+      <section
+        id="team-sections"
+        className="max-w-6xl mx-auto px-6 sm:px-10 mt-12 space-y-12 scroll-mt-20"
+      >
         {TEAM_ORDER.map((team, ti) => {
           const phaseMap = grouped[team];
           const totalForTeam = PHASE_ORDER.reduce(
