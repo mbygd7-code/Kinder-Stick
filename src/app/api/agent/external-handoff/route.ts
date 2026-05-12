@@ -21,7 +21,6 @@ export const dynamic = "force-dynamic";
 const VALID_DOMAINS: ExpertDomain[] = [
   "regulatory_privacy",
   "specialized_legal",
-  "specialized_finance",
   "tax_accounting",
 ];
 
@@ -129,6 +128,6 @@ export async function GET() {
   return NextResponse.json({
     ok: true,
     message:
-      "POST { session_id, question?, expert_domain?, budget_krw? }. expert_domain ∈ regulatory_privacy / specialized_legal / specialized_finance / tax_accounting.",
+      "POST { session_id, question?, expert_domain?, budget_krw? }. expert_domain ∈ regulatory_privacy / specialized_legal / tax_accounting.",
   });
 }

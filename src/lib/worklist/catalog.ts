@@ -95,6 +95,11 @@ export interface Task {
   boost_domains?: string[];
   /** 1개 업무 완료 시 boost_domains 각 도메인에 더해질 점수. 기본 8. */
   boost_points?: number;
+  /**
+   * 이 task 가 가장 우선시 되어야 하는 제품 출시 단계.
+   * 없으면 모든 stage 에서 동일 가중치. 우선순위 점수 산정에 사용.
+   */
+  stage_relevance?: import("@/lib/scoring").Stage[];
 }
 
 // ============================================================
@@ -213,18 +218,6 @@ export const TASKS: Task[] = [
     auto: { kind: "manual_only" },
   },
   {
-    id: "dir.f.cofounder_agreement",
-    team: "director",
-    phase: "foundation",
-    title: "공동창업자 지분 vesting + 의사결정 권한 매트릭스",
-    why: "공동창업자 사이의 ‘누가·어떤 지분을·언제·어떻게 받는지’와 ‘어떤 결정을 누가 내리는지’가 미합의면 분쟁이 회사 가치를 영구 훼손합니다.",
-    description:
-      "ⓘ 용어 풀이\nVesting = 지분이 시간이 지나면서 단계적으로 ‘내 것이 되는’ 일정. 표준: 4년 vesting + 1년 cliff (1년 안에 떠나면 0%, 1년 후부터 매월 1/48 vesting).\nDecision rights matrix = ‘제품 결정 / 채용 / 자금 / 외부 커뮤니케이션’ 같은 의사결정 카테고리별로 ‘누가 단독 결정 / 누가 합의 필요 / 누구에게 통보’를 표로 정리한 문서.\n\n⚙ 어떻게 하는가\n변호사 도움 받아 founder agreement 초안 작성 → vesting 일정 + cliff + 이탈 시 환수 조건 + IP 양도 명시. 의사결정 매트릭스는 5–8 카테고리 × 3 결정 유형(단독/합의/통보)로 1장에 정리. 매년 변동 사항 review.\n\n✔ 완료 기준\n공동창업자 모두 서명한 founder agreement + decision rights matrix가 회사 docs에 보관되고, 신규 핵심 채용 시에도 같은 패턴으로 일정 적용.",
-    cadence: "once",
-    tier: "must",
-    auto: { kind: "manual_only" },
-  },
-  {
     id: "dir.f.annual_targets",
     team: "director",
     phase: "foundation",
@@ -266,17 +259,6 @@ export const TASKS: Task[] = [
     cadence: "weekly",
     tier: "recurring",
     auto: { kind: "no_overdue_actions" },
-  },
-  {
-    id: "dir.l.cofounder_alignment",
-    team: "director",
-    phase: "launch",
-    title: "공동창업자 정렬 점검 (월 1회)",
-    why: "공동창업자 의견 분기 시 6개월 안에 회사 가치 영구 훼손 — 가장 강한 시그널.",
-    cadence: "monthly",
-    tier: "recurring",
-    domain: "A11",
-    auto: { kind: "coach_session_for", code: "A11" },
   },
   {
     id: "dir.l.go_to_market_thesis",
@@ -328,11 +310,11 @@ export const TASKS: Task[] = [
 
   // ── Ops ────────────────────────────────────────────────────
   {
-    id: "dir.o.board_update",
+    id: "dir.o.monthly_report",
     team: "director",
     phase: "ops",
-    title: "Board update 월간 발송",
-    why: "투자자에게 매월 기록 = 다음 라운드 신뢰의 90%를 사전에 적립.",
+    title: "월간 운영 리포트 발송 (팀·이해관계자)",
+    why: "월간 진행 상황·교사 사용 추이·운영 이슈를 한 문서로 정리 — 의사결정 누락과 정보 비대칭을 방지합니다.",
     cadence: "monthly",
     tier: "recurring",
     auto: { kind: "manual_only" },
@@ -422,10 +404,10 @@ export const TASKS: Task[] = [
     id: "plan.f.buyer_segment_split",
     team: "planning",
     phase: "foundation",
-    title: "결제 주체 3 세그먼트 분리 정의 (교사 개인·원장·학부모)",
-    why: "‘교사 본인 카드로 결제하는 개인 구매자’와 ‘기관 예산으로 일괄 구매하는 원장’은 의사결정 기준·예산·구매 사이클이 완전히 다릅니다. 한 페르소나로 묶으면 어느 한쪽도 못 잡습니다.",
+    title: "교사 결정자 구매 흐름 2가지 정의 (개인 결제 · 기관 결제)",
+    why: "교사가 결정자라는 점은 같아도, ‘교사 본인 카드로 결제하는 개인 구매자’와 ‘기관 예산으로 일괄 구매(원장이 결제 승인)되는 교사’는 구매 사이클과 검증 기준이 다릅니다. 두 흐름을 분리해야 메시지와 가격이 맞춰집니다.",
     description:
-      "3 세그먼트별로 1장 페르소나 도큐먼트: ① 교사 개인 (월 1–3만원 자비 결제, 본인 성장·학급 운영 효율 동기, 빠른 의사결정) ② 원장/기관 결정자 (분기·연간 예산, 평가제·누리과정 부합 검증, 1–2개월 의사결정) ③ 학부모 (자녀 발달 도움 동기, 학부모 카페 입소문이 결정). 각 페르소나의 ‘구매 trigger / 검증 질문 / 거부 이유 / 입소문 채널’ 4 필드 채우면 완료.",
+      "두 구매 흐름의 1장 페르소나 도큐먼트: ① 교사 개인 결제 (월 1–3만원 자비, 본인 성장·학급 운영 효율 동기, 빠른 의사결정) ② 교사 + 기관 결제 (교사가 도입을 결정·요청 → 원장 결제 승인, 분기·연간 예산, 평가제·누리과정 부합 검증, 1–2개월 의사결정). 각 흐름의 ‘구매 trigger / 검증 질문 / 거부 이유 / 추천 채널’ 4 필드 채우면 완료.",
     cadence: "once",
     tier: "must",
     domain: "A3",
@@ -459,6 +441,7 @@ export const TASKS: Task[] = [
     tier: "must",
     domain: "A2",
     auto: { kind: "evidence_recorded_for", code: "A2" },
+    stage_relevance: ["open_beta", "ga_early"],
   },
   {
     id: "plan.l.aha_define",
@@ -594,9 +577,9 @@ export const TASKS: Task[] = [
     team: "planning",
     phase: "ops",
     title: "시장 사이즈(TAM·SAM·SOM) 반기 갱신",
-    why: "한국 EdTech 시장은 출생률·공보육화 정책으로 매년 변동이 큽니다. TAM 재산정 없이 라운드 들어가면 투자자가 가치 평가에서 깎습니다.",
+    why: "한국 영유아 교사 시장은 출생률·공보육화 정책으로 매년 변동이 큽니다. 시장 사이즈를 정기적으로 재산정하지 않으면 전략·우선순위가 옛 가정에 갇힙니다.",
     description:
-      "ⓘ 용어 풀이\nTAM = Total Addressable Market = 우리 카테고리의 ‘이론적 최대 시장 크기’ (전 세계 모든 가능 고객).\nSAM = Serviceable Addressable Market = 우리가 닿을 수 있는 시장 (지역·언어 한정).\nSOM = Serviceable Obtainable Market = 향후 3–5년 안에 실제로 잡을 수 있는 시장 점유.\n\n⚙ 어떻게 하는가\nTAM = (전국 유아교육기관 수 × 기관당 평균 ARPU) + (전국 유아교사 수 × B2C ARPU). 통계청·교육부 자료 인용. SAM = 한국 + 타겟 연령대 한정. SOM = 현실적 점유율(1–3년 1–5%) 가정. 매 6개월 통계청 출생률·교사 수 갱신.\n\n✔ 완료 기준\nTAM·SAM·SOM 1장 슬라이드 + 가정·출처 명시 + IR 자료에 반영.",
+      "ⓘ 용어 풀이\nTAM = Total Addressable Market = 우리 카테고리의 ‘이론적 최대 시장 크기’ (전 세계 모든 가능 고객).\nSAM = Serviceable Addressable Market = 우리가 닿을 수 있는 시장 (지역·언어 한정).\nSOM = Serviceable Obtainable Market = 향후 3–5년 안에 실제로 잡을 수 있는 시장 점유.\n\n⚙ 어떻게 하는가\nTAM = (전국 유아교육기관 수 × 기관당 평균 매출) + (전국 유아교사 수 × 교사 B2C 매출). 통계청·교육부 자료 인용. SAM = 한국 + 타겟 연령대 한정. SOM = 현실적 점유율(1–3년 1–5%) 가정. 매 6개월 통계청 출생률·교사 수 갱신.\n\n✔ 완료 기준\nTAM·SAM·SOM 1장 슬라이드 + 가정·출처 명시 + 내부 전략 문서에 반영.",
     cadence: "semi_annual",
     tier: "recurring",
     auto: { kind: "manual_only" },
@@ -774,11 +757,11 @@ export const TASKS: Task[] = [
     auto: { kind: "manual_only" },
   },
   {
-    id: "design.g.parent_page",
+    id: "design.g.teacher_share_page",
     team: "design",
     phase: "growth",
-    title: "학부모용 정보 페이지 별도 운영",
-    why: "한국 EdTech: 기관 결정자(원장)·교사 개인·학부모는 각자 보고 싶은 정보가 다릅니다. 페이지 분리 없이 한 곳에서 다 보여주면 어느 한쪽도 만족 못 합니다.",
+    title: "교사가 학부모에게 공유할 수 있는 정보 페이지",
+    why: "교사가 자녀 발달·일과·관찰 기록을 학부모에게 공유할 때 통제권은 교사에게 있어야 합니다. 무엇을·얼마나·어떻게 공개할지 교사가 한 화면에서 직접 선택할 수 있어야 사용 부담이 줄어듭니다.",
     cadence: "quarterly",
     tier: "recurring",
     auto: { kind: "manual_only" },
@@ -1141,12 +1124,13 @@ export const TASKS: Task[] = [
     id: "ops.l.first30_call",
     team: "operations",
     phase: "launch",
-    title: "기관(원장) 첫 30일 onboarding 콜 (HVA 고객)",
-    why: "기관 가입 30일이 갱신 결정의 80% — 무콜 고객은 churn 3배. 원장은 1:1 콜에서 첫 효과를 확인받아야 다음 분기 갱신.",
+    title: "신규 교사 첫 30일 온보딩 콜 (high-value 사용자)",
+    why: "교사 가입 30일이 계속 사용 결정의 80% — 무콜 사용자는 이탈 3배. 1:1 콜에서 교사가 첫 효과(예: 알림장 작성 시간 50% 단축)를 명시적으로 확인받아야 다음 학기에도 계속 씁니다.",
     cadence: "weekly",
     tier: "recurring",
     auto: { kind: "manual_only" },
-    escalation_hint: "월 목표 200명+ 시 신규 전원 콜 → HVA 우선으로 자동화",
+    escalation_hint: "월 신규 교사 200명+ 시 high-value 사용자 우선으로 자동화",
+    stage_relevance: ["open_beta", "ga_early", "ga_growth"],
   },
   {
     id: "ops.l.teacher_b2c_onboarding",
@@ -1199,11 +1183,11 @@ export const TASKS: Task[] = [
     auto: { kind: "evidence_recorded_for", code: "A13" },
   },
   {
-    id: "ops.g.parent_survey",
+    id: "ops.g.teacher_satisfaction",
     team: "operations",
     phase: "growth",
-    title: "교사·원장·학부모 만족도 분리 설문 (분기)",
-    why: "한 점수로 묶어 보면 ‘평균은 좋음’으로 위장됩니다. 교사 개인(서비스 사용자)·원장(기관 결정자)·학부모(영향자) 3주체별로 따로 측정해야 어느 그룹이 떠나려 하는지 잡힙니다.",
+    title: "교사 만족도 분기 설문 (NPS · 시간 절약 · 계속 사용 의사)",
+    why: "교사 결정자 만족도가 본 서비스의 핵심 지표입니다. NPS · 주당 시간 절약 · 다음 학기 계속 사용 의사 3개를 분기마다 분리 측정해야 어느 신호가 약해지는지 잡힙니다. (선택 보조: 원장·학부모 의견은 별도 단발 인터뷰로 수집)",
     cadence: "quarterly",
     tier: "recurring",
     domain: "A3",
@@ -1329,8 +1313,8 @@ export const TASKS: Task[] = [
     id: "mkt.f.persona",
     team: "marketing",
     phase: "foundation",
-    title: "교사·원장·학부모 페르소나 1차 작성 (3 세그먼트 분리)",
-    why: "페르소나 없이는 메시지가 ‘모두를 위한’ → 결국 ‘아무도 안 듣는’. 교사 개인 결제자·기관 결정자(원장)·학부모 — 의사결정 기준이 다른 3 페르소나를 분리해야 채널·메시지가 정확히 맞춰집니다.",
+    title: "교사 결정자 페르소나 정의 (1차)",
+    why: "페르소나 없이는 메시지가 ‘모두를 위한’ → 결국 ‘아무도 안 듣는’. 본 서비스의 결정자는 교사 본인 — 직무·기관 유형·핵심 페인·구매 동기를 한 줄로 정의해야 채널·메시지가 정확히 맞춰집니다. (참고: 기관 결제 흐름에서는 원장이 결제 승인을 처리하지만, 사용·계속 사용 의사결정은 교사에게 있습니다.)",
     cadence: "once",
     tier: "must",
     auto: { kind: "manual_only" },
@@ -1361,7 +1345,7 @@ export const TASKS: Task[] = [
     tier: "must",
     domain: "A3",
     auto: { kind: "manual_only" },
-    boost_domains: ["A3", "A5"],
+    boost_domains: ["A3", "A6"],
     escalation_hint: "월 유료 가입자 100명+ 시 가격 A/B 분기 1회",
   },
   {
@@ -1419,8 +1403,8 @@ export const TASKS: Task[] = [
     id: "mkt.l.community_listen",
     team: "marketing",
     phase: "launch",
-    title: "교사·원장·학부모 커뮤니티 신호 청취 (주간)",
-    why: "한국 EdTech: 입소문이 결정. 교사 카페(예: 인디스쿨, 키더 매트), 원장 모임, 맘카페 — 3 채널의 시그널을 매주 읽어야 광고보다 강한 진짜 평판이 보입니다.",
+    title: "교사 커뮤니티 신호 청취 (주간)",
+    why: "한국 영유아 EdTech 입소문은 교사 커뮤니티에서 결정됩니다. 교사 카페(예: 인디스쿨, 키더 매트, 보육교사 카페) 의 신호를 매주 읽어야 광고보다 강한 진짜 평판이 보입니다.",
     cadence: "weekly",
     tier: "recurring",
     auto: { kind: "manual_only" },
@@ -1443,7 +1427,7 @@ export const TASKS: Task[] = [
     team: "marketing",
     phase: "growth",
     title: "광고비 회수 기간(CAC payback) 월간 점검",
-    why: "고객 한 명을 데려오는 데 든 광고비를, 그 고객의 매출로 회수하는 데 몇 개월 걸리는지가 ‘회사가 돈을 잘 쓰는지’의 기본 지표입니다. 24개월 넘으면 투자자 가치 평가에서 큰 감점.",
+    why: "교사 한 명을 데려오는 데 든 광고비를, 그 교사의 매출로 회수하는 데 몇 개월 걸리는지가 ‘마케팅이 효율적인가’의 기본 지표입니다. 24개월 넘으면 자생력에 큰 부담.",
     description:
       "공식: CAC payback (개월) = (월 광고비 ÷ 그 달 신규 유료 고객 수) ÷ (유료 고객 1인의 월 평균 매출 × Gross Margin). 채널별로도 분리해서 봐야 평균 뒤에 숨은 ‘새는 채널’이 보입니다. ‘완료’ 기준: 매월 1일 전체 + 채널별 CAC payback 자동 산출되는 시트/대시보드 + 24개월 초과 시 마케팅팀 알림.",
     cadence: "monthly",
@@ -1557,8 +1541,8 @@ export const TASKS: Task[] = [
     id: "mkt.o.persona_refresh",
     team: "marketing",
     phase: "ops",
-    title: "교사·원장·학부모 페르소나 갱신 (반기)",
-    why: "한국 출생률·공보육화로 페르소나 변동 빠름 — 6개월마다 update 안 하면 stale.",
+    title: "교사 페르소나 갱신 (반기)",
+    why: "한국 영유아 교사 시장은 출생률·정책 변화로 변동이 빠릅니다. 6개월마다 교사 페르소나(직무·기관 유형·핵심 페인)를 갱신하지 않으면 메시지가 stale 해집니다.",
     cadence: "semi_annual",
     tier: "recurring",
     auto: { kind: "manual_only" },
@@ -1567,8 +1551,8 @@ export const TASKS: Task[] = [
     id: "mkt.o.event_quarterly",
     team: "marketing",
     phase: "ops",
-    title: "컨퍼런스/이벤트 분기 1건 참여",
-    why: "교사 컨퍼런스(전국 교원 연수)·원장 모임·학부모 박람회 — 오프라인 접점 3축. 디지털만으로 EdTech 영업은 절반 효율.",
+    title: "교사 컨퍼런스·연수 분기 1건 참여",
+    why: "전국 교원 연수·교사 학습 공동체·보육 컨퍼런스 — 교사 결정자와 직접 만나는 오프라인 접점이 디지털 채널보다 신뢰 형성에 훨씬 강력합니다.",
     cadence: "quarterly",
     tier: "recurring",
     auto: { kind: "manual_only" },
@@ -1577,8 +1561,8 @@ export const TASKS: Task[] = [
     id: "mkt.o.referral_program",
     team: "marketing",
     phase: "ops",
-    title: "교사·원장·학부모 referral 프로그램 운영 (월간 점검)",
-    why: "EdTech: 신규 획득 CAC의 70% 채널이 referral. 교사가 동료 교사에게(가장 빈도 높음), 원장이 다른 원장에게, 학부모가 학부모에게 — 3 가지 추천 흐름을 각자 인센티브로 분리 운영해야 효율적.",
+    title: "교사 referral 프로그램 운영 (월간 점검)",
+    why: "본 서비스 신규 획득 CAC의 70%는 교사 동료 추천 채널입니다. 추천한 교사·추천받은 교사 모두에게 명시적 인센티브(예: 다음 학기 무료 또는 콘텐츠 적립)를 분리 설계해야 지속 가능합니다.",
     cadence: "monthly",
     tier: "recurring",
     auto: { kind: "manual_only" },
@@ -1828,12 +1812,10 @@ export const TASKS: Task[] = [
 export const FUNNEL_BY_TASK_ID: Record<string, FunnelStage> = {
   // Director
   "dir.f.mission": "internal",
-  "dir.f.cofounder_agreement": "internal",
   "dir.f.annual_targets": "internal",
   "dir.f.plc_business_model": "expansion",
   "dir.l.assign_owners": "internal",
   "dir.l.weekly_priority": "internal",
-  "dir.l.cofounder_alignment": "internal",
   "dir.l.go_to_market_thesis": "internal",
   "dir.g.monthly_revenue_review": "revenue",
   "dir.g.key_talent": "internal",

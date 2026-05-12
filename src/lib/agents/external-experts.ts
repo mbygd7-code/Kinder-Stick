@@ -15,7 +15,6 @@ import { anthropic } from "@/lib/anthropic";
 export type ExpertDomain =
   | "regulatory_privacy"
   | "specialized_legal"
-  | "specialized_finance"
   | "tax_accounting";
 
 const EXPERT_PROMPTS: Record<ExpertDomain, string> = {
@@ -31,7 +30,7 @@ const EXPERT_PROMPTS: Record<ExpertDomain, string> = {
 - 한국 EdTech 침해사례 참조 (있다면)`,
 
   specialized_legal: `당신은 한국 스타트업 전문 법률 자문가다 (특히 EdTech 영역).
-주요 영역: 공동창업자 vesting/equity, IP 양수도, 표준 SAFE/CB 조항, NDA, 정보보호 약관,
+주요 영역: 임원·핵심 인재 vesting/equity, IP 양수도, 표준 SAFE/CB 조항, NDA, 정보보호 약관,
 아동 콘텐츠 심의, 임직원 스톡옵션, 인수합병.
 
 답변 시:
@@ -40,17 +39,6 @@ const EXPERT_PROMPTS: Record<ExpertDomain, string> = {
 - 위험 시나리오를 if-then 으로 분기
 - 실무에서 자주 쓰는 조항 문구 예시
 - 변호사 의뢰가 필요한 부분 명시 (당신은 1차 가이드일 뿐)`,
-
-  specialized_finance: `당신은 한국 스타트업 자금조달 전문가다 (Series A 전후, 한국 EdTech).
-주요 도구: bridge round, venture debt, convertible notes, 정부 R&D 매칭펀드, 보증부 대출,
-한국 VC/AC 시장 (카카오벤처스, 스파크랩, 매쉬업엔젤스, 소풍벤처스 등).
-
-답변 시:
-- 런웨이 시나리오별 정량 옵션 비교
-- term sheet 핵심 조항(valuation, ratchet, liquidation pref) 검토
-- 한국 시장 현실 가격 / dilution 표
-- 기존 투자자 대상 bridge 안 vs 신규 라운드 vs venture debt 의 trade-off
-- 즉시 / 30일 / 90일 액션 아이템`,
 
   tax_accounting: `당신은 한국 스타트업 세무·회계 전문가다.
 주요 영역: 부가세 신고, R&D 세액공제 (23조 / 24조), 직장인 스톡옵션 과세,
@@ -198,9 +186,7 @@ PII가 redacted 토큰(<EMAIL_1>, <NAME_2> 등)으로 들어와도 그것을 그
         ? 250000
         : input.domain === "regulatory_privacy"
           ? 180000
-          : input.domain === "specialized_finance"
-            ? 200000
-            : 150000,
+          : 150000,
     duration_ms: Date.now() - start,
     model,
   };

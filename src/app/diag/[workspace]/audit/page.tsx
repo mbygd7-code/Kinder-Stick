@@ -2,6 +2,10 @@ import { notFound } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { resolveOrgWithBackfill } from "@/lib/org";
 import { loadFramework } from "@/lib/framework/loader";
+import {
+  isStaleFinanceContent,
+  isRemovedDomain,
+} from "@/lib/stale-content-filter";
 
 interface Props {
   params: Promise<{ workspace: string }>;
@@ -63,6 +67,8 @@ export default async function AuditPage({ params }: Props) {
         "id, domain_code, state, trigger_kind, opened_at, resolved_at, severity, summary",
       )
       .eq("org_id", org.id)
+      // 자금 관련 제거된 도메인 (A5/A12) 의 stale row 는 분석 대상에서 제외
+      .not("domain_code", "in", "(A5,A12)")
       .order("opened_at", { ascending: false })
       .limit(500),
     sb
@@ -76,13 +82,23 @@ export default async function AuditPage({ params }: Props) {
       .from("signal_events")
       .select("id, kind, domain_code, severity, created_at")
       .eq("org_id", org.id)
+      .not("domain_code", "in", "(A5,A12)")
       .gte("created_at", ninetyDaysAgo)
       .order("created_at", { ascending: false }),
   ]);
 
-  const sessions = (sesRes.data ?? []) as SessionRow[];
-  const actions = (actRes.data ?? []) as ActionRow[];
-  const signals = (sigRes.data ?? []) as SignalRow[];
+  // 자금·IR stale 콘텐츠 제외 — title/summary 텍스트 검사
+  const sessions = ((sesRes.data ?? []) as SessionRow[]).filter(
+    (s) => !isStaleFinanceContent(s.summary),
+  );
+  const sessionIdSet = new Set(sessions.map((s) => s.id));
+  const actions = ((actRes.data ?? []) as ActionRow[]).filter(
+    (a) =>
+      sessionIdSet.has(a.session_id) && !isStaleFinanceContent(a.title),
+  );
+  const signals = ((sigRes.data ?? []) as SignalRow[]).filter(
+    (s) => !isRemovedDomain(s.domain_code),
+  );
 
   const framework = loadFramework();
 
@@ -254,10 +270,10 @@ export default async function AuditPage({ params }: Props) {
         <div className="max-w-6xl mx-auto px-6 sm:px-10 py-6 flex items-baseline justify-between gap-6 flex-wrap">
           <div className="flex items-baseline gap-3">
             <a
-              href={`/diag/${workspace}/dashboard`}
+              href={`/diag/${workspace}/home`}
               className="kicker hover:text-ink"
             >
-              ← Dashboard
+              ← 홈
             </a>
             <span className="hidden sm:inline label-mono">·</span>
             <span className="hidden sm:inline label-mono">
@@ -491,10 +507,10 @@ export default async function AuditPage({ params }: Props) {
 
       <footer className="max-w-6xl mx-auto px-6 sm:px-10 mt-16 border-t border-ink-soft pt-6 flex flex-wrap items-baseline justify-between gap-4">
         <a
-          href={`/diag/${workspace}/dashboard`}
+          href={`/diag/${workspace}/home`}
           className="label-mono hover:text-ink"
         >
-          ← back to dashboard
+          ← 홈으로
         </a>
         <p className="label-mono">{ISSUE_DATE} · audit v1</p>
       </footer>

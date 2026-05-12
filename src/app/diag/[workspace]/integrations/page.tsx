@@ -64,10 +64,10 @@ export default async function IntegrationsPage({ params }: Props) {
         <div className="max-w-6xl mx-auto px-6 sm:px-10 py-6 flex items-baseline justify-between gap-6 flex-wrap">
           <div className="flex items-baseline gap-3">
             <a
-              href={`/diag/${workspace}/dashboard`}
+              href={`/diag/${workspace}/home`}
               className="kicker hover:text-ink"
             >
-              ← Dashboard
+              ← 홈
             </a>
             <span className="hidden sm:inline label-mono">·</span>
             <span className="hidden sm:inline label-mono">
@@ -165,10 +165,10 @@ export default async function IntegrationsPage({ params }: Props) {
 
       <footer className="max-w-6xl mx-auto px-6 sm:px-10 mt-16 border-t border-ink-soft pt-6 flex flex-wrap items-baseline justify-between gap-4">
         <a
-          href={`/diag/${workspace}/dashboard`}
+          href={`/diag/${workspace}/home`}
           className="label-mono hover:text-ink"
         >
-          ← back to dashboard
+          ← 홈으로
         </a>
         <p className="label-mono">{ISSUE_DATE} · integrations v1</p>
       </footer>
@@ -246,7 +246,7 @@ function DispatchCell({
         rel="noopener noreferrer"
         className="tag tag-green"
       >
-        🔗 OK
+        OK →
       </a>
     );
   }

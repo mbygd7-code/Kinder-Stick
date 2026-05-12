@@ -140,7 +140,7 @@ export async function POST(req: Request) {
     .eq("id", session.org_id)
     .single();
   const workspace_id = orgRow?.name ?? "unknown";
-  const stage = (orgRow?.stage as Stage) ?? "seed";
+  const stage = (orgRow?.stage as Stage) ?? "open_beta";
 
   let systemBlocks: Array<{
     type: "text";

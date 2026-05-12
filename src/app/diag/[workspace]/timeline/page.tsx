@@ -113,10 +113,10 @@ export default async function TimelinePage({ params }: Props) {
         <div className="max-w-6xl mx-auto px-6 sm:px-10 py-6 flex items-baseline justify-between gap-6">
           <div className="flex items-baseline gap-3">
             <a
-              href={`/diag/${workspace}/dashboard`}
+              href={`/diag/${workspace}/home`}
               className="kicker hover:text-ink"
             >
-              ← Dashboard
+              ← 홈
             </a>
             <span className="hidden sm:inline label-mono">·</span>
             <span className="hidden sm:inline label-mono">
@@ -528,12 +528,18 @@ function aggregateRespondents(
   });
 
   const overall = computeOverallScore(domain_scores, domainDefs);
-  const stage = (rows[rows.length - 1]?.stage as Stage) ?? "seed";
+  const stage = (rows[rows.length - 1]?.stage as Stage) ?? "open_beta";
   const fp = computeFailureProbability(
     domain_scores,
     domainDefs,
     responses,
     stage,
+    undefined,
+    {
+      subDefs,
+      now,
+      respondentCount: rows.length,
+    },
   );
 
   const red_critical_codes = domain_scores

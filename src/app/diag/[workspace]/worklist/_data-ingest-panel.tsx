@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   TASKS,
   TEAM_LABEL,
@@ -11,7 +11,12 @@ import {
   type DerivedTask,
   type TaskOverride,
 } from "@/lib/worklist/catalog";
-import { parseFile, type FileParseResult } from "@/lib/worklist/file-parsers";
+import {
+  parseFile,
+  FILE_ACCEPT,
+  KIND_LABEL,
+  type FileParseResult,
+} from "@/lib/worklist/file-parsers";
 import {
   appendIngestResult,
   loadDerived,
@@ -83,6 +88,7 @@ export function DataIngestPanel({ workspace }: Props) {
   const [text, setText] = useState("");
   const [fileMeta, setFileMeta] = useState<FileParseResult | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [parsing, setParsing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<DeriveResult | null>(null);
@@ -92,6 +98,7 @@ export function DataIngestPanel({ workspace }: Props) {
   const [selectedDerived, setSelectedDerived] = useState<Set<string>>(
     new Set(),
   );
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // applied state (from localStorage) — for the "현재 적용된 변경" summary
   const [applied, setApplied] = useState<{
@@ -131,36 +138,54 @@ export function DataIngestPanel({ workspace }: Props) {
     );
   }, [result]);
 
+  /** 파일을 파싱하고, 성공 시 자동으로 분석까지 실행. */
   async function handleFile(file: File | null) {
     setFileError(null);
     setFileMeta(null);
+    setResult(null);
     if (!file) return;
     if (file.size > MAX_FILE_SIZE) {
-      setFileError("파일이 너무 큽니다 (최대 5MB).");
+      setFileError(
+        `파일이 너무 큽니다: ${(file.size / 1024 / 1024).toFixed(1)}MB (최대 5MB).`,
+      );
       return;
     }
-    const ext = file.name.split(".").pop()?.toLowerCase();
-    if (ext !== "csv" && ext !== "xlsx" && ext !== "xls") {
-      setFileError("CSV 또는 XLSX 파일만 지원됩니다.");
-      return;
-    }
+    setParsing(true);
     try {
       const meta = await parseFile(file);
       setFileMeta(meta);
       setText(meta.text);
+      setParsing(false);
+      // 파싱 끝나면 바로 AI 분석 시작 — 사용자가 분석 버튼을 다시 누를 필요 없음
+      await runAnalyze(meta.text);
     } catch (e) {
+      setParsing(false);
       setFileError(e instanceof Error ? e.message : "파일 파싱 실패");
     }
   }
 
-  async function handleAnalyze() {
+  /** "파일 첨부" 탭 버튼 클릭 시 — 모드 전환 + 파일 피커 즉시 열기. */
+  function handleOpenFilePicker() {
+    setMode("file");
+    setError(null);
+    setFileError(null);
+    // 같은 파일을 다시 선택해도 onChange가 트리거되도록 value 초기화
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+      fileInputRef.current.click();
+    }
+  }
+
+  /** 분석 실행 — 텍스트 인자 옵셔널 (자동 분석에서 state 갱신 전에 호출되는 경우 대비). */
+  async function runAnalyze(textToAnalyze?: string) {
+    const t = (textToAnalyze ?? text).trim();
     setError(null);
     setResult(null);
-    if (!text.trim()) {
+    if (!t) {
       setError("텍스트 또는 파일을 입력해주세요.");
       return;
     }
-    if (text.length > MAX_TEXT_LEN) {
+    if (t.length > MAX_TEXT_LEN) {
       setError(`텍스트가 너무 깁니다 (최대 ${MAX_TEXT_LEN.toLocaleString()}자).`);
       return;
     }
@@ -169,7 +194,7 @@ export function DataIngestPanel({ workspace }: Props) {
       const r = await fetch("/api/worklist/derive", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text, source, period, workspace }),
+        body: JSON.stringify({ text: t, source, period, workspace }),
       });
       const data = (await r.json()) as
         | DeriveResult
@@ -186,6 +211,11 @@ export function DataIngestPanel({ workspace }: Props) {
     } finally {
       setLoading(false);
     }
+  }
+
+  /** "분석" 버튼 클릭 핸들러 — runAnalyze 의 wrapper. */
+  async function handleAnalyze() {
+    await runAnalyze();
   }
 
   function handleApply() {
@@ -237,33 +267,132 @@ export function DataIngestPanel({ workspace }: Props) {
         ) : null}
       </div>
 
-      {/* Mode tabs */}
-      <div className="flex border-b-2 border-ink mb-4">
-        {(
-          [
-            ["text", "텍스트 붙여넣기"],
-            ["file", "파일 첨부 (CSV / XLSX)"],
-          ] as const
-        ).map(([k, label]) => (
+      {/* Hidden file input — 항상 마운트되어 있어서 어디서든 click()으로 열림 */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={FILE_ACCEPT}
+        className="sr-only"
+        aria-hidden="true"
+        tabIndex={-1}
+        onChange={(e) => {
+          const f = e.target.files?.[0] ?? null;
+          void handleFile(f);
+        }}
+      />
+
+      {/* Mode tabs — segmented buttons */}
+      <div className="mb-4">
+        <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-ink-soft mb-2">
+          입력 방식
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {/* 텍스트 버튼 */}
+          {(() => {
+            const isActive = mode === "text";
+            return (
+              <button
+                type="button"
+                onClick={() => setMode("text")}
+                aria-pressed={isActive}
+                disabled={parsing || loading}
+                className={`inline-flex items-center gap-3 px-4 py-2.5 border-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                  isActive
+                    ? "bg-ink text-paper border-ink"
+                    : "bg-paper text-ink border-ink hover:bg-paper-deep"
+                }`}
+              >
+                <span
+                  className={`font-mono text-[10px] uppercase tracking-widest ${
+                    isActive ? "text-paper/60" : "text-ink-soft"
+                  }`}
+                  aria-hidden="true"
+                >
+                  01
+                </span>
+                <span className="flex flex-col items-start leading-tight">
+                  <span className="font-display text-sm font-semibold">
+                    텍스트 붙여넣기
+                  </span>
+                  <span
+                    className={`text-[10px] font-mono tracking-wide ${
+                      isActive ? "text-paper/70" : "text-ink-soft"
+                    }`}
+                  >
+                    분석 요약·표·숫자를 그대로 복붙
+                  </span>
+                </span>
+              </button>
+            );
+          })()}
+
+          {/* 파일 버튼 — 클릭 시 파일 피커 즉시 열림 */}
+          {(() => {
+            const isActive = mode === "file";
+            const busy = parsing || loading;
+            return (
+              <button
+                type="button"
+                onClick={handleOpenFilePicker}
+                aria-pressed={isActive}
+                disabled={busy}
+                className={`inline-flex items-center gap-3 px-4 py-2.5 border-2 transition-all disabled:opacity-60 disabled:cursor-wait ${
+                  isActive
+                    ? "bg-ink text-paper border-ink"
+                    : "bg-paper text-ink border-ink hover:bg-paper-deep"
+                }`}
+              >
+                <span
+                  className={`font-mono text-[10px] uppercase tracking-widest ${
+                    isActive ? "text-paper/60" : "text-ink-soft"
+                  }`}
+                  aria-hidden="true"
+                >
+                  02
+                </span>
+                <span className="flex flex-col items-start leading-tight">
+                  <span className="font-display text-sm font-semibold">
+                    {parsing
+                      ? "파일 파싱 중…"
+                      : loading && isActive
+                        ? "AI 분석 중…"
+                        : "파일 첨부"}
+                  </span>
+                  <span
+                    className={`text-[10px] font-mono tracking-wide ${
+                      isActive ? "text-paper/70" : "text-ink-soft"
+                    }`}
+                  >
+                    CSV · XLSX · Word · TXT · MD (최대 5MB)
+                  </span>
+                </span>
+              </button>
+            );
+          })()}
+
+          {/* URL 입력 (준비 중) */}
           <button
-            key={k}
             type="button"
-            onClick={() => setMode(k)}
-            className={`px-4 py-2 font-display text-sm border-r-2 border-ink last:border-r-0 transition-colors ${
-              mode === k
-                ? "bg-ink text-paper"
-                : "bg-paper text-ink-soft hover:text-ink"
-            }`}
+            disabled
+            title="Phase 2 예정 — Looker Studio 공유 링크 직접 입력"
+            className="inline-flex items-center gap-3 px-4 py-2.5 border-2 border-dashed border-ink-soft/40 bg-paper-deep text-ink-soft/60 cursor-not-allowed"
           >
-            {label}
+            <span
+              className="font-mono text-[10px] uppercase tracking-widest text-ink-soft/40"
+              aria-hidden="true"
+            >
+              03
+            </span>
+            <span className="flex flex-col items-start leading-tight">
+              <span className="font-display text-sm font-semibold">
+                URL 입력
+              </span>
+              <span className="text-[10px] font-mono tracking-wide">
+                준비 중 · Phase 2
+              </span>
+            </span>
           </button>
-        ))}
-        <span
-          className="px-4 py-2 font-display text-sm text-ink-soft/60 border-l-2 border-ink ml-auto cursor-not-allowed"
-          title="Phase 2 예정 — Looker Studio 공유 링크 직접 입력"
-        >
-          URL 입력 (준비 중)
-        </span>
+        </div>
       </div>
 
       {/* Source + Period selectors */}
@@ -308,38 +437,99 @@ export function DataIngestPanel({ workspace }: Props) {
           className="w-full border-2 border-ink-soft/40 bg-paper-deep p-3 text-sm font-mono leading-relaxed resize-y"
         />
       ) : (
-        <div className="border-2 border-dashed border-ink-soft/40 bg-paper-deep p-4">
-          <input
-            type="file"
-            accept=".csv,.xlsx,.xls"
-            onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
-            className="block text-sm"
-          />
-          <p className="mt-2 label-mono">
-            CSV 또는 XLSX (최대 5MB). 헤더 + 상위 200행이 AI에 전달됩니다.
-          </p>
-          {fileError ? (
-            <p className="mt-2 text-sm text-accent">{fileError}</p>
-          ) : null}
-          {fileMeta ? (
-            <div className="mt-3 text-sm">
-              <p className="font-display">
-                {fileMeta.filename}{" "}
-                <span className="label-mono">
-                  · {fileMeta.kind} · 총 {fileMeta.rows_total}행 · 사용{" "}
-                  {fileMeta.rows_used}행{fileMeta.truncated ? " · 잘림" : ""}
-                </span>
-              </p>
-              <details className="mt-2">
-                <summary className="cursor-pointer label-mono">
-                  변환된 텍스트 미리보기
+        <div
+          className={`border-2 border-dashed p-5 transition-colors ${
+            parsing || loading
+              ? "border-ink bg-soft-amber/30"
+              : fileMeta
+                ? "border-ink bg-paper-deep"
+                : "border-ink-soft/40 bg-paper-deep"
+          }`}
+          onDragOver={(e) => {
+            e.preventDefault();
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            const f = e.dataTransfer.files?.[0] ?? null;
+            if (f) void handleFile(f);
+          }}
+        >
+          {parsing ? (
+            <IngestLoadingState
+              labelMono="파일 파싱 중"
+              title="잠시만 기다려주세요…"
+              subtitle="대용량 .docx / .xlsx는 1–2초 걸릴 수 있습니다."
+              accent={false}
+              skeleton={false}
+            />
+          ) : loading ? (
+            <IngestLoadingState
+              labelMono="AI 분석 중"
+              title="마케팅 퍼널 7단계 진단을 작성하고 있습니다."
+              subtitle="신호 추출 · 시사점 · 실무 가이드 작성 (약 10–20초)"
+              accent={true}
+              skeleton={true}
+            />
+          ) : fileMeta ? (
+            <div className="text-sm">
+              <div className="flex items-baseline justify-between gap-3 flex-wrap">
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-ink-soft mb-0.5">
+                    업로드 완료
+                  </p>
+                  <p className="font-display text-[15px] font-semibold">
+                    {fileMeta.filename}
+                  </p>
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-ink-soft mt-1">
+                    {KIND_LABEL[fileMeta.kind]} · {fileMeta.rows_used}개 항목
+                    {fileMeta.truncated ? " · 잘림" : ""}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleOpenFilePicker}
+                  className="px-2.5 py-1 font-mono text-[10px] uppercase tracking-widest border border-ink-soft/50 hover:border-ink hover:bg-paper"
+                >
+                  다른 파일
+                </button>
+              </div>
+              <details className="mt-3">
+                <summary className="cursor-pointer font-mono text-[10px] uppercase tracking-widest text-ink-soft hover:text-ink">
+                  변환된 텍스트 미리보기 ({fileMeta.text.length.toLocaleString()}자)
                 </summary>
                 <pre className="mt-2 text-xs font-mono whitespace-pre-wrap max-h-48 overflow-auto bg-paper p-2 border border-ink-soft/30">
                   {fileMeta.text.slice(0, 4000)}
-                  {fileMeta.text.length > 4000 ? "\n..." : ""}
+                  {fileMeta.text.length > 4000 ? "\n…" : ""}
                 </pre>
               </details>
             </div>
+          ) : (
+            <div className="text-center py-3">
+              <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-ink-soft mb-2">
+                업로드
+              </p>
+              <p className="font-display text-base">
+                여기로 파일을 끌어놓거나
+              </p>
+              <button
+                type="button"
+                onClick={handleOpenFilePicker}
+                className="inline-block px-5 py-2 mt-2.5 font-display text-sm font-semibold bg-ink text-paper border-2 border-ink hover:bg-paper hover:text-ink transition-colors"
+              >
+                파일 선택
+              </button>
+              <p className="mt-3 font-mono text-[10px] uppercase tracking-widest text-ink-soft">
+                CSV · XLSX · WORD · TXT · MD · 최대 5MB · 업로드 즉시 자동 분석
+              </p>
+            </div>
+          )}
+          {fileError ? (
+            <p className="mt-3 text-sm text-accent bg-soft-red/20 border-l-4 border-accent px-3 py-2">
+              <span className="font-mono text-[10px] uppercase tracking-widest mr-2">
+                오류
+              </span>
+              {fileError}
+            </p>
           ) : null}
         </div>
       )}
@@ -369,7 +559,10 @@ export function DataIngestPanel({ workspace }: Props) {
             <FunnelSummary text={result.summary} />
             {result.raw_preview ? (
               <p className="mt-2 text-xs text-ink-soft font-mono break-all">
-                ⚠ 파싱 실패 미리보기: {result.raw_preview}
+                <span className="font-mono text-[10px] uppercase tracking-widest mr-1">
+                  주의
+                </span>
+                파싱 실패 미리보기: {result.raw_preview}
               </p>
             ) : null}
           </div>
@@ -377,8 +570,11 @@ export function DataIngestPanel({ workspace }: Props) {
           {/* Overrides */}
           {result.overrides.length > 0 ? (
             <div>
-              <h3 className="font-display text-lg mb-2">
-                <span className="text-accent">⚡</span> 격상될 기존 업무{" "}
+              <h3 className="font-display text-lg mb-2 flex items-baseline gap-2">
+                <span className="font-mono text-[10px] uppercase tracking-widest bg-accent text-paper px-1.5 py-0.5">
+                  BOOST
+                </span>
+                <span>격상될 기존 업무</span>
                 <span className="label-mono">({result.overrides.length})</span>
               </h3>
               <ul className="space-y-2">
@@ -451,8 +647,8 @@ export function DataIngestPanel({ workspace }: Props) {
                           <p className="mt-1 label-mono">
                             신뢰도 {(o.confidence * 100).toFixed(0)}%
                             {o.confidence < 0.6 ? (
-                              <span className="ml-2 px-1 bg-soft-amber/40 text-ink border border-amber/40">
-                                ⚠ 낮음
+                              <span className="ml-2 px-1 bg-soft-amber/40 text-ink border border-amber/40 font-mono text-[10px] uppercase tracking-widest">
+                                낮음
                               </span>
                             ) : null}
                           </p>
@@ -468,8 +664,11 @@ export function DataIngestPanel({ workspace }: Props) {
           {/* Derived */}
           {result.derived.length > 0 ? (
             <div>
-              <h3 className="font-display text-lg mb-2">
-                <span className="text-accent">🔥</span> 신규 추가될 업무{" "}
+              <h3 className="font-display text-lg mb-2 flex items-baseline gap-2">
+                <span className="font-mono text-[10px] uppercase tracking-widest bg-ink text-paper px-1.5 py-0.5">
+                  NEW
+                </span>
+                <span>신규 추가될 업무</span>
                 <span className="label-mono">({result.derived.length})</span>
               </h3>
               <ul className="space-y-2">
@@ -512,8 +711,8 @@ export function DataIngestPanel({ workspace }: Props) {
                           <p className="mt-1 label-mono">
                             신뢰도 {(d.confidence * 100).toFixed(0)}%
                             {d.confidence < 0.6 ? (
-                              <span className="ml-2 px-1 bg-soft-amber/40 text-ink border border-amber/40">
-                                ⚠ 낮음
+                              <span className="ml-2 px-1 bg-soft-amber/40 text-ink border border-amber/40 font-mono text-[10px] uppercase tracking-widest">
+                                낮음
                               </span>
                             ) : null}
                           </p>
@@ -563,7 +762,7 @@ export function DataIngestPanel({ workspace }: Props) {
             </summary>
             <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
               <div>
-                <p className="label-mono mb-1.5">🔥 신규</p>
+                <p className="font-mono text-[10px] uppercase tracking-[0.2em] mb-1.5"><span className="bg-ink text-paper px-1.5 py-0.5 mr-1">NEW</span> 신규</p>
                 <ul className="space-y-1">
                   {applied.derived.map((d) => (
                     <li
@@ -587,7 +786,7 @@ export function DataIngestPanel({ workspace }: Props) {
                 </ul>
               </div>
               <div>
-                <p className="label-mono mb-1.5">⚡ 격상</p>
+                <p className="font-mono text-[10px] uppercase tracking-[0.2em] mb-1.5"><span className="bg-accent text-paper px-1.5 py-0.5 mr-1">BOOST</span> 격상</p>
                 <ul className="space-y-1">
                   {applied.overrides.map((o) => {
                     const t = taskById.get(o.task_id);
@@ -778,4 +977,129 @@ function splitItalic(text: string, baseKey: number): ReactNode[] {
   }
   if (lastIdx < text.length) out.push(text.slice(lastIdx));
   return out;
+}
+
+// ============================================================
+// IngestLoadingState — 파일 파싱 / AI 분석 공통 로딩 화면
+// ============================================================
+
+function IngestLoadingState({
+  labelMono,
+  title,
+  subtitle,
+  accent,
+  skeleton,
+}: {
+  labelMono: string;
+  title: string;
+  subtitle?: string;
+  accent: boolean;
+  skeleton: boolean;
+}) {
+  const barColor = accent ? "bg-accent" : "bg-ink";
+  const labelColor = accent ? "text-accent" : "text-ink-soft";
+  return (
+    <div className="py-6 px-4 space-y-5">
+      {/* Spinner + label + bouncing dots */}
+      <div className="flex flex-col items-center gap-3">
+        <IngestSpinner accent={accent} />
+        <p
+          className={`font-mono text-[11px] uppercase tracking-[0.3em] ${labelColor} flex items-center gap-1.5 font-semibold`}
+        >
+          <span>{labelMono}</span>
+          <span
+            className="flex items-end gap-0.5 mb-0.5"
+            aria-hidden="true"
+          >
+            <span
+              className={`w-1 h-1 rounded-full ${barColor} animate-bounce [animation-delay:-0.3s]`}
+            />
+            <span
+              className={`w-1 h-1 rounded-full ${barColor} animate-bounce [animation-delay:-0.15s]`}
+            />
+            <span
+              className={`w-1 h-1 rounded-full ${barColor} animate-bounce`}
+            />
+          </span>
+        </p>
+        <p className="font-display text-base font-medium text-center">
+          {title}
+        </p>
+        {subtitle ? (
+          <p className="t-meta text-center">{subtitle}</p>
+        ) : null}
+      </div>
+
+      {/* Indeterminate progress bar — moving stripe */}
+      <div className="mx-auto max-w-md h-1 bg-ink-soft/15 overflow-hidden relative">
+        <div
+          className={`absolute inset-y-0 w-1/3 ${barColor} animate-[loader-slide_1.6s_ease-in-out_infinite]`}
+        />
+      </div>
+
+      {/* Skeleton sections (analysis only) */}
+      {skeleton ? (
+        <div className="mt-2 max-w-lg mx-auto space-y-4">
+          <IngestSkeletonBlock label="인지 (Awareness)" lines={2} />
+          <IngestSkeletonBlock label="획득 (Acquisition)" lines={3} />
+          <IngestSkeletonBlock label="활성화 (Activation)" lines={2} />
+          <IngestSkeletonBlock label="종합 진단 + 우선순위" lines={3} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function IngestSpinner({ accent }: { accent: boolean }) {
+  const color = accent ? "text-accent" : "text-ink";
+  return (
+    <svg
+      className={`w-10 h-10 animate-spin ${color}`}
+      viewBox="0 0 50 50"
+      aria-hidden="true"
+    >
+      <circle
+        cx="25"
+        cy="25"
+        r="20"
+        fill="none"
+        stroke="currentColor"
+        strokeOpacity="0.15"
+        strokeWidth="3"
+      />
+      <path
+        d="M25 5 A20 20 0 0 1 45 25"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function IngestSkeletonBlock({
+  label,
+  lines,
+}: {
+  label: string;
+  lines: number;
+}) {
+  return (
+    <div>
+      <p className="t-label mb-2 pb-1 border-b border-ink-soft/20">{label}</p>
+      <div className="space-y-1.5">
+        {Array.from({ length: lines }).map((_, i) => (
+          <div
+            key={i}
+            className="h-3 bg-ink-soft/15 animate-pulse"
+            style={{
+              width: `${100 - i * 10}%`,
+              animationDelay: `${i * 0.12}s`,
+            }}
+          />
+        ))}
+      </div>
+    </div>
+  );
 }

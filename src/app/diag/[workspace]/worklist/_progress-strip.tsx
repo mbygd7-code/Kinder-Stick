@@ -24,8 +24,12 @@ const STATUS_DOT: Record<Status, string> = {
 };
 
 export function ProgressStrip({ workspace, tasks, autoMap }: Props) {
+  // SSR-safe pattern: 첫 렌더는 localStorage 없이 auto-status 만으로 계산해서
+  // 서버 출력과 일치시킴. mount 후 tick으로 다시 계산해서 클라이언트 override 반영.
+  const [mounted, setMounted] = useState(false);
   const [, setTick] = useState(0);
   useEffect(() => {
+    setMounted(true);
     const handler = () => setTick((t) => t + 1);
     window.addEventListener("worklist:change", handler);
     window.addEventListener("storage", handler);
@@ -35,7 +39,7 @@ export function ProgressStrip({ workspace, tasks, autoMap }: Props) {
     };
   }, []);
 
-  const eff = effectiveStatuses(workspace, tasks, autoMap);
+  const eff = effectiveStatuses(workspace, tasks, autoMap, mounted);
 
   const totalsByStatus: Record<Status, number> = {
     done: 0,
@@ -198,25 +202,30 @@ function effectiveStatuses(
   workspace: string,
   tasks: Task[],
   autoMap: Record<string, AutoStatus>,
+  useLocalStorage: boolean,
 ): Record<string, Status> {
   const out: Record<string, Status> = {};
   for (const t of tasks) {
     let s: Status;
+    const a = autoMap[t.id] ?? "unknown";
+    const autoDefault: Status = a === "unknown" ? "not_started" : a;
+    // SSR / 첫 렌더에서는 localStorage 조회를 건너뛰어 서버와 일치 보장.
+    if (!useLocalStorage) {
+      out[t.id] = autoDefault;
+      continue;
+    }
     try {
-      const raw =
-        typeof window !== "undefined"
-          ? window.localStorage.getItem(`worklist:${workspace}:${t.id}`)
-          : null;
+      const raw = window.localStorage.getItem(
+        `worklist:${workspace}:${t.id}`,
+      );
       if (raw) {
         const parsed = JSON.parse(raw) as { status: Status };
         s = parsed.status;
       } else {
-        const a = autoMap[t.id] ?? "unknown";
-        s = a === "unknown" ? "not_started" : a;
+        s = autoDefault;
       }
     } catch {
-      const a = autoMap[t.id] ?? "unknown";
-      s = a === "unknown" ? "not_started" : a;
+      s = autoDefault;
     }
     out[t.id] = s;
   }

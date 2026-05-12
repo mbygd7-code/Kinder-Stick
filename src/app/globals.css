@@ -93,18 +93,135 @@ body {
   font-family: var(--font-mono);
 }
 
+/* ============================================================
+   Typography Scale — semantic hierarchy (editorial)
+   사용 기준:
+     - 헤드라인 / 페이지 타이틀  → .t-display-*  (Fraunces serif, 큰 폰트)
+     - 카드 / 섹션 타이틀         → .t-display-3 / .t-display-4
+     - 리드 단락 (요약·인트로)    → .t-lede
+     - 본문 단락                  → .t-body, .t-body-sm
+     - 메타 / 캡션                → .t-meta
+     - 카테고리·섹션 라벨         → .t-label, .t-label-ink, .t-label-accent
+     - 숫자 강조                  → .t-num
+   ============================================================ */
+
+.t-display-hero {
+  font-family: var(--font-display);
+  font-size: 3rem;
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.022em;
+}
+.t-display-1 {
+  font-family: var(--font-display);
+  font-size: 2.25rem;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.018em;
+}
+.t-display-2 {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.012em;
+}
+.t-display-3 {
+  font-family: var(--font-display);
+  font-size: 1.375rem;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.008em;
+}
+.t-display-4 {
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -0.004em;
+}
+
+/* 리드 단락 — 요약·인트로, 본문 다음으로 큰 위계 */
+.t-lede {
+  font-size: 1.0625rem;
+  font-weight: 400;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+/* 본문 — 모든 일반 텍스트의 기본 단위 */
+.t-body {
+  font-size: 0.9375rem;
+  font-weight: 400;
+  line-height: 1.65;
+  color: var(--ink);
+}
+.t-body-muted {
+  font-size: 0.9375rem;
+  font-weight: 400;
+  line-height: 1.65;
+  color: var(--ink-soft);
+}
+.t-body-sm {
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+/* 메타 — 캡션, 부가 정보 */
+.t-meta {
+  font-size: 0.8125rem;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+/* 라벨 — 작은 카테고리/섹션 표식. uppercase mono. 최소 가독 사이즈 12px. */
+.t-label {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.t-label-ink {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.t-label-accent {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+/* 숫자 강조 — 표/지표용 */
+.t-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- 레거시 (kicker / label-mono) — 점진적 마이그레이션. 신규 코드는 .t-* 사용 ---- */
 .kicker {
   font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.15em;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--accent);
 }
 
 .label-mono {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.05em;
   color: var(--ink-soft);
 }
@@ -359,6 +476,44 @@ body {
   font-style: italic;
   font-weight: 300;
   letter-spacing: -0.02em;
+}
+
+/* ---- Loader animations (used by LoadingState) ---- */
+@keyframes loader-slide {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+/* GNB 워크리스트 링크 아래 로딩 바 — AI 자동 생성 진행 중 표시.
+   왼→오 채워졌다가 즉시 리셋 후 다시 채움. */
+@keyframes nav-loader-fill {
+  0% {
+    transform: scaleX(0);
+    opacity: 0.9;
+  }
+  85% {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+  90% {
+    transform: scaleX(1);
+    opacity: 0;
+  }
+  91% {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+  92% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: scaleX(0);
+    opacity: 0.9;
+  }
 }
 
 /* ---- Print ---- */

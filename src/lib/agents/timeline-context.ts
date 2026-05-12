@@ -246,12 +246,18 @@ function aggregateQuarter(
   });
 
   const overall = computeOverallScore(domain_scores, domainDefs);
-  const stage = (rows[rows.length - 1]?.stage as Stage) ?? "seed";
+  const stage = (rows[rows.length - 1]?.stage as Stage) ?? "open_beta";
   const fp = computeFailureProbability(
     domain_scores,
     domainDefs,
     responses,
     stage,
+    undefined,
+    {
+      subDefs,
+      now,
+      respondentCount: rows.length,
+    },
   );
 
   const red_critical_codes = domain_scores

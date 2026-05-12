@@ -49,10 +49,10 @@ export function ClaimButton({
   if (!authed) {
     return (
       <a
-        href={`/auth/login?next=${encodeURIComponent(`/diag/${workspace}/dashboard`)}`}
+        href={`/auth/login?next=${encodeURIComponent(`/diag/${workspace}/home`)}`}
         className="tag tag-filled hover:bg-accent hover:border-accent transition-colors"
       >
-        Sign in to claim
+        로그인하고 워크스페이스 저장
       </a>
     );
   }
@@ -76,9 +76,9 @@ export function ClaimButton({
       className="tag tag-accent disabled:opacity-50"
       title={`Claim ${workspace} as your workspace`}
     >
-      {pending ? "claiming…" : "🛡️ Claim ownership"}
+      {pending ? "저장 중…" : "내 워크스페이스로 저장"}
       {msg ? ` · ${msg}` : ""}
-      {err ? ` · ⚠ ${err}` : ""}
+      {err ? ` · 오류: ${err}` : ""}
     </button>
   );
 }

@@ -66,7 +66,7 @@ export function DataDrivenExtras({ workspace }: Props) {
       badge.setAttribute(SELECTOR_DATA, "1");
       badge.className =
         "absolute top-0 right-0 -translate-y-1/2 translate-x-2 z-10 px-2 py-0.5 text-[10px] font-mono uppercase tracking-widest bg-accent text-paper border-2 border-accent";
-      badge.textContent = "⚡ 데이터로 격상";
+      badge.textContent = "BOOST · 데이터로 격상";
       node.style.position = node.style.position || "relative";
       node.appendChild(badge);
       // urgency_note를 task 카드 내부 끝에 추가
@@ -75,7 +75,7 @@ export function DataDrivenExtras({ workspace }: Props) {
         note.setAttribute(SELECTOR_DATA, "1");
         note.className =
           "mx-4 mb-3 mt-1 text-xs leading-snug px-2 py-1 bg-soft-red/40 border border-accent/50";
-        note.innerHTML = `<span class="font-medium">⚡ 격상 이유:</span> ${escapeHtml(o.urgency_note)}`;
+        note.innerHTML = `<span class="font-mono text-[10px] uppercase tracking-widest mr-1">격상 이유</span> ${escapeHtml(o.urgency_note)}`;
         node.appendChild(note);
       }
     }
@@ -100,7 +100,7 @@ export function DataDrivenExtras({ workspace }: Props) {
         <header className="mb-6">
           <p className="kicker mb-1">데이터 주도 변경</p>
           <h2 className="font-display text-3xl sm:text-4xl leading-tight tracking-tight">
-            <span className="text-accent">🔥</span> 외부 데이터에서 도출된{" "}
+            <span className="font-mono text-[11px] uppercase tracking-[0.2em] bg-ink text-paper px-2 py-0.5 mr-2 align-middle">NEW</span> 외부 데이터에서 도출된{" "}
             <span className="italic font-light">신규 업무</span>
           </h2>
           <p className="mt-2 label-mono">
@@ -132,7 +132,7 @@ export function DataDrivenExtras({ workspace }: Props) {
                         className="relative border-2 border-accent/60 bg-soft-red/20 p-4 sm:p-5"
                       >
                         <span className="absolute top-0 right-0 -translate-y-1/2 translate-x-2 z-10 px-2 py-0.5 text-[10px] font-mono uppercase tracking-widest bg-accent text-paper border-2 border-accent">
-                          🔥 신규
+                          NEW
                         </span>
                         <div className="flex items-start gap-3 sm:gap-4">
                           <span className="font-mono text-xs text-ink-soft mt-1 w-6 shrink-0 tabular-nums">
@@ -173,7 +173,7 @@ export function DataDrivenExtras({ workspace }: Props) {
                             </p>
                             {d.source_insight ? (
                               <p className="mt-1.5 text-xs italic text-ink-soft leading-snug">
-                                📊 출처 인사이트: {d.source_insight}
+                                <span className="font-mono text-[10px] uppercase tracking-widest mr-1 not-italic">출처</span> {d.source_insight}
                               </p>
                             ) : null}
                           </div>

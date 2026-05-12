@@ -14,6 +14,7 @@
  */
 
 import { anthropic } from "@/lib/anthropic";
+import { sanitizeMarkdown, sanitizePlain } from "@/lib/agents/sanitize";
 import {
   TASKS,
   TEAM_ORDER,
@@ -238,7 +239,7 @@ function validateOverrides(
     if (!cadence_override && !tier_boost) return [];
     const urgency_note =
       typeof r.urgency_note === "string"
-        ? r.urgency_note.slice(0, 200)
+        ? sanitizePlain(r.urgency_note).slice(0, 200)
         : undefined;
     const confidence =
       typeof r.confidence === "number"
@@ -288,7 +289,7 @@ function validateDerived(
     if (typeof tier !== "string" || !TIER_SET.has(tier)) return [];
     const source_insight =
       typeof r.source_insight === "string"
-        ? r.source_insight.slice(0, 240)
+        ? sanitizePlain(r.source_insight).slice(0, 240)
         : "";
     const confidence =
       typeof r.confidence === "number"
@@ -300,8 +301,8 @@ function validateDerived(
         team: team as Team,
         phase: phase as Phase,
         funnel_stage: funnel_stage as FunnelStage,
-        title: title.slice(0, 140),
-        why: why.slice(0, 320),
+        title: sanitizePlain(title).slice(0, 140),
+        why: sanitizeMarkdown(why).slice(0, 320),
         cadence: cadence as Cadence,
         tier: tier as Tier,
         auto: { kind: "manual_only" },
@@ -330,11 +331,19 @@ export async function deriveWorklistChanges(
     input.text.slice(0, 50_000),
   ].join("\n");
 
+  // Anthropic prompt caching — base task list 134개가 시스템 프롬프트에 들어가므로
+  // ephemeral cache 처리. 동일 워크스페이스에서 여러 번 인입 시 큰 속도 이득.
   const resp = await anthropic().messages.create({
     model,
-    max_tokens: 8000,
+    max_tokens: 6000,
     temperature: 0.2,
-    system: buildSystemPrompt(),
+    system: [
+      {
+        type: "text",
+        text: buildSystemPrompt(),
+        cache_control: { type: "ephemeral" },
+      },
+    ],
     messages: [{ role: "user", content: userMessage }],
   });
 

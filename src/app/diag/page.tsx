@@ -13,7 +13,7 @@ const ISSUE_DATE = new Date().toISOString().slice(0, 10);
 // 14-domain → 4-group mapping for first-time users.
 // (Detailed per-domain view stays available below in <details>.)
 // ============================================================
-type GroupKey = "market" | "economics" | "people" | "ops";
+type GroupKey = "market" | "growth" | "people" | "ops";
 
 const DOMAIN_GROUPS: Record<
   GroupKey,
@@ -21,17 +21,17 @@ const DOMAIN_GROUPS: Record<
 > = {
   market: {
     title: "시장과 제품",
-    subtitle: "고객·문제·제품의 적합성",
+    subtitle: "교사 결정자·문제·제품의 적합성",
     codes: ["A1", "A2", "A3", "A4", "A14"],
   },
-  economics: {
-    title: "자금과 단위경제",
-    subtitle: "런웨이·마진·CAC payback",
-    codes: ["A5", "A6"],
+  growth: {
+    title: "성장과 채널",
+    subtitle: "교사 획득·재방문·확장",
+    codes: ["A6"],
   },
   people: {
     title: "팀과 문화",
-    subtitle: "공동창업자·심리적 안전·핵심인재",
+    subtitle: "리더십 정렬·심리적 안전·핵심인재",
     codes: ["A11", "A13"],
   },
   ops: {

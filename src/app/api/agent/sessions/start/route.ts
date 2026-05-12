@@ -119,7 +119,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const stage = ((rows[rows.length - 1] as DiagnosisRow).stage ?? "seed") as Stage;
+  const stage = ((rows[rows.length - 1] as DiagnosisRow).stage ?? "open_beta") as Stage;
   const org = await ensureWorkspaceOrg(sb, workspace_id, stage);
 
   // Load framework + domain

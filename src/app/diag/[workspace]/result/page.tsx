@@ -15,6 +15,7 @@ import {
   type DomainDef,
   type DomainScoreResult,
 } from "@/lib/scoring";
+import { WorklistImpactBanner } from "./_worklist-impact-banner";
 
 interface Props {
   params: Promise<{ workspace: string }>;
@@ -87,10 +88,10 @@ export default async function ResultPage({ params, searchParams }: Props) {
         <div className="max-w-6xl mx-auto px-6 sm:px-10 py-6 flex items-baseline justify-between gap-6">
           <div className="flex items-baseline gap-3">
             <a
-              href={`/diag/${workspace}/dashboard`}
+              href={`/diag/${workspace}/home`}
               className="kicker hover:text-ink"
             >
-              ← Dashboard
+              ← 홈
             </a>
             <span className="hidden sm:inline label-mono">·</span>
             <span className="hidden sm:inline label-mono">
@@ -103,19 +104,32 @@ export default async function ResultPage({ params, searchParams }: Props) {
 
       {/* HERO */}
       <section className="max-w-6xl mx-auto px-6 sm:px-10 pt-12 pb-6">
-        <p className="kicker mb-4">No. 05 · 진단 결과</p>
+        <p className="kicker mb-4">진단 상세 리포트</p>
         <h1 className="font-display text-5xl sm:text-7xl leading-[0.95] tracking-tight">
           Reality{" "}
           <span className="text-accent italic font-display">Report</span>
         </h1>
         <p className="mt-5 max-w-3xl text-lg leading-relaxed text-ink-soft">
-          {rows.length}명의 응답을 합산해 14-도메인 점수와 6/12개월 실패확률을
-          산출했습니다. 빨간 도메인이 있다면 다음 단계는 해당 도메인 AI 코치
-          소환입니다 (다음 phase에서 wiring).
+          {rows.length}명의 응답으로 12개 도메인 점수와 6/12개월 실패확률을 산출한
+          상세 리포트입니다. <strong>다요인 분해</strong>·도메인 breakdown·응답자 합의도·
+          워크리스트 임팩트가 모두 한 곳에. 매일 보는 화면은{" "}
+          <a
+            href={`/diag/${workspace}/home`}
+            className="underline hover:text-ink"
+          >
+            홈
+          </a>{" "}
+          입니다.
         </p>
         {sp.respondent ? (
           <p className="mt-3 label-mono">
-            방금 제출한 응답은 #{sp.respondent}번입니다.
+            방금 제출한 응답은 #{sp.respondent}번입니다.{" "}
+            <a
+              href={`/diag/${workspace}/home`}
+              className="underline hover:text-ink"
+            >
+              → 홈에서 이번 주 할 일 보기
+            </a>
           </p>
         ) : null}
       </section>
@@ -156,6 +170,21 @@ export default async function ResultPage({ params, searchParams }: Props) {
         prior12m={aggregate.fp["12m"].prior}
         respondents={rows.length}
         stage={aggregate.stage}
+        contributions={aggregate.fp["6m"].domain_contributions ?? []}
+        factorContributions={aggregate.fp["6m"].factor_contributions ?? []}
+        domainNameMap={Object.fromEntries(
+          framework.domains.map((d) => [d.code, d.name_ko]),
+        )}
+      />
+
+      {/* WORKLIST IMPACT — 워크리스트 진행이 점수에 반영된 결과 (실시간) */}
+      <WorklistImpactBanner
+        workspace={workspace}
+        baseline={aggregate.domain_scores.map((d) => ({
+          code: d.domain,
+          score: d.score,
+        }))}
+        baselineOverall={aggregate.overall}
       />
 
       {/* RED CRITICAL DOMAINS BANNER */}
@@ -196,6 +225,30 @@ export default async function ResultPage({ params, searchParams }: Props) {
           </span>
         </div>
       </div>
+
+      {/* 모든 도메인이 같은 점수 (보통 belief=3·evidence=3 으로 균일 응답)인 경우 안내 */}
+      {(() => {
+        const scores = aggregate.domain_scores
+          .map((d) => d.score)
+          .filter((s): s is number => s !== null && s !== undefined);
+        if (scores.length < 3) return null;
+        const allEqual = scores.every((s) => Math.abs(s - scores[0]) < 0.5);
+        if (!allEqual) return null;
+        return (
+          <section className="max-w-6xl mx-auto px-6 sm:px-10 mt-6">
+            <div className="border-l-4 border-amber bg-soft-amber/30 px-4 py-3">
+              <p className="t-label-ink text-amber mb-1">진단 데이터 안내</p>
+              <p className="t-body-sm">
+                모든 도메인 점수가 동일 ({scores[0].toFixed(0)}점)합니다. 진단
+                응답이 모든 sub-item에 대해 belief={"{중간}"}·evidence={"{중간}"} 으로
+                균일하게 저장된 상태일 가능성이 큽니다. 더 정확한 진단 결과를
+                받으려면 워크스페이스 진단 폼에서 각 항목을 본인의 실제 상황에
+                맞게 1–5 다양한 값으로 다시 응답해주세요.
+              </p>
+            </div>
+          </section>
+        );
+      })()}
 
       {/* DOMAIN BARS */}
       <section className="max-w-6xl mx-auto px-6 sm:px-10 mt-8 space-y-3">
@@ -444,7 +497,7 @@ function aggregateRespondents(
   );
 
   // Stage: 가장 흔한 stage (혹은 최신 응답자)
-  const stage = (rows[rows.length - 1]?.stage as Stage) ?? "seed";
+  const stage = (rows[rows.length - 1]?.stage as Stage) ?? "open_beta";
 
   const fp = computeFailureProbability(
     domainScores,
@@ -455,6 +508,12 @@ function aggregateRespondents(
     })),
     responses,
     stage,
+    undefined,
+    {
+      subDefs,
+      now,
+      respondentCount: rows.length,
+    },
   );
 
   return { overall, domain_scores: domainScores, fp, stage };
@@ -472,6 +531,9 @@ function SummaryPanel({
   prior12m,
   respondents,
   stage,
+  contributions,
+  factorContributions,
+  domainNameMap,
 }: {
   overall: number | null;
   fp6m: number;
@@ -480,6 +542,19 @@ function SummaryPanel({
   prior12m: number;
   respondents: number;
   stage: string;
+  contributions: Array<{
+    domain: string;
+    score: number;
+    band: "red" | "amber" | "neutral" | "green" | "excellent";
+    multiplier: number;
+  }>;
+  factorContributions: Array<{
+    factor: string;
+    label: string;
+    log_lr: number;
+    detail: string;
+  }>;
+  domainNameMap: Record<string, string>;
 }) {
   const overallNum = overall ?? 0;
   const overallTone =
@@ -522,12 +597,13 @@ function SummaryPanel({
           : `응답자 ${respondents}명 — 충분한 표본으로 결과가 안정적입니다.`;
 
   const stageLabel =
-    {
-      "pre-seed": "Pre-seed",
-      seed: "Seed",
-      "series-a": "Series A",
-      "series-b+": "Series B 이상",
-    }[stage] ?? stage;
+    ({
+      closed_beta: "비공개 베타",
+      open_beta: "공개 베타",
+      ga_early: "정식 출시 (0–6개월)",
+      ga_growth: "성장기 (6–24개월)",
+      ga_scale: "확장기 (24개월+)",
+    } as Record<string, string>)[stage] ?? stage;
 
   return (
     <section className="max-w-6xl mx-auto px-6 sm:px-10 mt-6">
@@ -608,6 +684,115 @@ function SummaryPanel({
           ⓘ 비교 기준 — {stageLabel} 단계 회사 N=431 (CB Insights)의 6/12개월
           실패율 평균. 우리 진단 결과를 합쳐 베이지안으로 보정한 값입니다.
         </p>
+
+        {/* ── Why this number — 다요인 log-LR 분해 (multi-factor model) ── */}
+        {factorContributions.length > 0 ? (
+          <div className="mt-5 pt-4 border-t border-ink-soft/30">
+            <p className="kicker mb-2">왜 이 숫자가 나왔나 — 8개 요인 분해</p>
+            <p className="text-sm text-ink-soft leading-relaxed mb-3">
+              평균 위험도(prior {(prior6m * 100).toFixed(0)}%)에서 우리 데이터의 8개 신호가
+              각각 위험을 얼마나 올렸/내렸는지 보여줍니다. 양수 = 위험 상승, 음수 = 위험 하락.
+              모두 합산해 최종 배수가 산출됩니다.
+            </p>
+            <ul className="space-y-2">
+              {factorContributions
+                .slice()
+                .sort((a, b) => b.log_lr - a.log_lr)
+                .map((f) => {
+                  const pct = (Math.exp(f.log_lr) - 1) * 100;
+                  const tone =
+                    f.log_lr > 0.2
+                      ? "text-signal-red"
+                      : f.log_lr > 0.05
+                        ? "text-signal-amber"
+                        : f.log_lr < -0.05
+                          ? "text-signal-green"
+                          : "text-ink-soft";
+                  const arrow =
+                    f.log_lr > 0.05 ? "↑" : f.log_lr < -0.05 ? "↓" : "→";
+                  return (
+                    <li
+                      key={f.factor}
+                      className="flex items-start justify-between gap-3 border border-ink-soft/30 bg-paper p-2"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium">{f.label}</p>
+                        <p className="label-mono mt-0.5 leading-relaxed">
+                          {f.detail}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className={`font-mono text-base ${tone}`}>
+                          {arrow}{" "}
+                          {pct > 0
+                            ? `+${pct.toFixed(0)}%`
+                            : `${pct.toFixed(0)}%`}
+                        </p>
+                        <p className="label-mono">위험 {f.log_lr > 0 ? "상승" : f.log_lr < 0 ? "하락" : "동일"}</p>
+                      </div>
+                    </li>
+                  );
+                })}
+            </ul>
+
+            {/* Critical 도메인 가중치 (보조) */}
+            {contributions.length > 0 ? (
+              <details className="mt-3 pt-3 border-t border-ink-soft/20">
+                <summary className="cursor-pointer label-mono inline-flex items-center gap-1.5">
+                  <span className="font-mono">▶</span>
+                  Critical 도메인 가중치 기여도
+                </summary>
+                <ul className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {contributions
+                    .slice()
+                    .sort((a, b) => b.multiplier - a.multiplier)
+                    .map((c) => {
+                      const tone =
+                        c.band === "red"
+                          ? "text-signal-red"
+                          : c.band === "amber"
+                            ? "text-signal-amber"
+                            : c.band === "excellent" || c.band === "green"
+                              ? "text-signal-green"
+                              : "text-ink-soft";
+                      const bandLabel = {
+                        red: "위험 (< 40)",
+                        amber: "주의 (40–60)",
+                        neutral: "중립 (60–75)",
+                        green: "양호 (75–85)",
+                        excellent: "우수 (85+)",
+                      }[c.band];
+                      return (
+                        <li
+                          key={c.domain}
+                          className="flex items-baseline justify-between gap-2 border border-ink-soft/30 bg-paper p-2"
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm truncate">
+                              {c.domain} · {domainNameMap[c.domain] ?? ""}
+                            </p>
+                            <p className={`label-mono ${tone}`}>
+                              점수 {c.score.toFixed(0)} · {bandLabel}
+                            </p>
+                          </div>
+                          <p className="font-mono text-sm shrink-0">
+                            {(c.multiplier * 100).toFixed(0)}%
+                          </p>
+                        </li>
+                      );
+                    })}
+                </ul>
+              </details>
+            ) : null}
+
+            <p className="mt-3 label-mono leading-relaxed">
+              ⓘ 알고리즘 (multi-factor log-LR) — 8개 요인의 log-LR 합산 → exp() → 단일 배수.
+              요인: ① critical 도메인 가중 평균 ② important 도메인 평균 ③ 실측 evidence 비율
+              ④ 평균 응답 경과일 ⑤ 응답자 수 ⑥ belief-evidence 격차 ⑦ critical evidence 결측률
+              ⑧ 응답자 합의도(σ). 폭주 방지 cap = log(15).
+            </p>
+          </div>
+        ) : null}
 
         {/* ── Reliability ── */}
         <div className="mt-5 pt-4 border-t border-ink-soft/30">

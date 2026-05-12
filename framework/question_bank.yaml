@@ -15,39 +15,38 @@ updated: "2026-05-07"
 locale: "ko-KR"
 
 # ---------------------------------------------------------------------
-# 단계별 베이지안 prior (CB Insights N=431 + 한국 EdTech 보정)
+# 제품 출시 단계별 베이지안 prior — 한국 영유아 EdTech 운영 맥락
 # ---------------------------------------------------------------------
 priors:
-  pre_seed:   { failure_6m: 0.25, failure_12m: 0.45 }
-  seed:       { failure_6m: 0.18, failure_12m: 0.32 }
-  series_a:   { failure_6m: 0.10, failure_12m: 0.20 }
-  series_b:   { failure_6m: 0.05, failure_12m: 0.12 }
+  closed_beta: { failure_6m: 0.30, failure_12m: 0.50 }
+  open_beta:   { failure_6m: 0.22, failure_12m: 0.40 }
+  ga_early:    { failure_6m: 0.15, failure_12m: 0.28 }
+  ga_growth:   { failure_6m: 0.08, failure_12m: 0.18 }
+  ga_scale:    { failure_6m: 0.04, failure_12m: 0.10 }
 
 # ---------------------------------------------------------------------
 # Critical 도메인이 빨강일 때 베이지안 odds에 곱하는 likelihood ratio
+# A5(자금성 단위경제) 와 A12(자금·런웨이·IR) 는 본 서비스 범위 밖이라 제거
 # ---------------------------------------------------------------------
 likelihood_ratios:
   A2:  3.5   # PMF
   A7:  3.0   # 한국 EdTech 규제 (KISA·누리·평가제 빨강 = 영업정지 리스크)
   A11: 2.6   # 팀 붕괴
-  A5:  2.4   # Unit economics
   A1:  2.0   # 시장 부재
-  A3:  1.8   # 결제 동기 없음
-  A4:  1.7   # Activation/Retention
+  A3:  1.8   # 결정자(교사) ROI 신호 부재
+  A4:  1.7   # 활성화/유지 실패
 
 # ---------------------------------------------------------------------
 # Critical-Critical: 단독으로도 6개월 실패확률 minimum 강제
 # ---------------------------------------------------------------------
 critical_caps:
-  - { sub_item: A2.SE.40,              condition: "evidence.v <= 2 AND stage IN [seed, series_a]",        min_p_6m: 0.35 }
+  - { sub_item: A2.SE.40,              condition: "evidence.v <= 2 AND stage IN [open_beta, ga_early]",   min_p_6m: 0.35 }
   - { sub_item: A2.RET.M3,             condition: "evidence.v == 1",                                      min_p_6m: 0.35 }
   - { sub_item: A11.FOUNDERS.ALIGN,    condition: "evidence.v <= 2",                                      min_p_6m: 0.35 }
   - { sub_item: A11.RUN.STAY,          condition: "evidence.v <= 2",                                      min_p_6m: 0.25 }
   - { sub_item: A7.KISA.SELFCHECK,     condition: "evidence.v == 1",                                      min_p_6m: 0.40 }
   - { sub_item: A7.PII.INCIDENT,       condition: "evidence.v >= 2",                                      min_p_6m: 0.60 }
-  - { sub_item: A5.GROSS.MARGIN,       condition: "evidence.v <= 2 AND stage != pre_seed",                min_p_6m: 0.30 }
-  - { sub_item: A5.CAC.PAYBACK,        condition: "evidence.v == 1",                                      min_p_6m: 0.25 }
-  - { sub_item: A3.BUYER.WTP,          condition: "evidence.v == 1 AND stage IN [seed, series_a]",        min_p_6m: 0.45 }
+  - { sub_item: A3.BUYER.WTP,          condition: "evidence.v == 1 AND stage IN [open_beta, ga_early]",   min_p_6m: 0.45 }
   - { sub_item: A4.ACT.D1,             condition: "evidence.v == 1",                                      min_p_6m: 0.25 }
   - { sub_item: A1.JTBD.URGENCY,       condition: "evidence.v == 1",                                      min_p_6m: 0.30 }
   - { sub_item: A14.WIN.RATE,          condition: "evidence.v == 1 AND has_active_competitive_deals",     min_p_6m: 0.25 }
@@ -74,7 +73,7 @@ domains:
           tier: critical
           weight_within_group: 0.5
           belief:
-            q: "원장 인터뷰에서 이 문제를 'urgent(급하다)'로 분류한 비율이 50% 이상이다."
+            q: "교사 인터뷰에서 이 문제를 'urgent(급하다)'로 분류한 비율이 50% 이상이다."
             anchors: ["전혀 아니다", "10–20%", "20–35%", "35–50%", "50% 이상"]
             help: "Important과 Urgent는 다르다. Urgent만 지갑을 연다."
           evidence:
@@ -164,7 +163,7 @@ domains:
             kpi_source: "Typeform/Tally pmf_survey, monthly cohort"
             refresh_period_days: 90
           citation: "Ellis 2009 (Superhuman 22→58%); OpenView 2025 PMF playbook; Vohra 'How Superhuman Built an Engine to Find Product-Market Fit' (First Round 2018)"
-          failure_trigger: "evidence.v <= 2 AND stage IN [seed, series_a]"
+          failure_trigger: "evidence.v <= 2 AND stage IN [open_beta, ga_early]"
           cadence: quarterly
           data_quality_required: 2
     - code: A2.RET
@@ -215,53 +214,53 @@ domains:
 
 # ---------------------------------------------------------------------
 - code: A3
-  name_ko: "결정자 ROI (원장)"
-  name_en: "Buyer Economics"
+  name_ko: "결정자 ROI (교사)"
+  name_en: "Teacher Buyer Economics"
   tier: critical
   weight: 9
-  owner_role: ["Founder", "Sales"]
-  framework: "B2B Buyer Economics · ROI Modeling · 평가제 대응"
+  owner_role: ["Founder", "PM", "CS"]
+  framework: "교사 시간 절약 측정 · NPS · Continuation Intent · 누리과정 평가제 부합"
   thresholds: { red: 40, yellow: 60, green: 75 }
   groups:
     - code: A3.BUYER
-      name: "결제 동기"
+      name: "교사 결정자 사용 의사"
       sub_items:
         - code: A3.BUYER.WTP
           tier: critical
           weight_within_group: 0.4
           belief:
-            q: "원장이 '시간 절감/운영 효율/학부모 만족/평가제 대응' 중 어느 것에 돈을 내는지 한 가지 이상 한 문장으로 답할 수 있다."
-            anchors: ["전혀", "추측", "가설 있음", "최근 결제 5건 인터뷰로 확인", "ROI 계산서로 정량 확인"]
+            q: "교사가 우리 서비스에서 가치 있다고 답한 1순위 효익(예: 알림장 작성 시간 N% 단축, 관찰 기록 자동화, 누리과정 자료 절약)을 한 문장으로 답할 수 있다."
+            anchors: ["전혀", "추측", "가설 있음", "교사 인터뷰 5건으로 확인", "측정 가능한 시간 절약 수치로 정량 확인"]
           evidence:
-            q: "현재 결제 중인 원장 수"
+            q: "현재 활성 사용 중인 교사 수 (지난 30일 사용)"
             type: choice
             options:
               - { v: 1, label: "0명" }
-              - { v: 2, label: "1–4명" }
-              - { v: 3, label: "5–19명" }
-              - { v: 4, label: "20–49명" }
-              - { v: 5, label: "≥ 50명" }
-            kpi_source: "Stripe/Toss: active subscriptions"
+              - { v: 2, label: "1–9명" }
+              - { v: 3, label: "10–49명" }
+              - { v: 4, label: "50–199명" }
+              - { v: 5, label: "≥ 200명" }
+            kpi_source: "GA4·Mixpanel: monthly active teachers"
             refresh_period_days: 7
-          citation: "Patrick Campbell (ProfitWell) 'How to Find Your Real Buyer'; 2019 개정 누리과정 평가제 지표"
-          failure_trigger: "evidence.v == 1 AND stage IN [seed, series_a]"
+          citation: "Beverly Kaye stay-intent framework; 2019 개정 누리과정 평가제 지표"
+          failure_trigger: "evidence.v == 1 AND stage IN [open_beta, ga_early]"
           cadence: weekly
           data_quality_required: 3
         - code: A3.BUYER.ROI
           tier: critical
           weight_within_group: 0.35
           belief:
-            q: "원장이 우리를 사는 ROI 산정식을 우리가 한 페이지로 보여줄 수 있다."
+            q: "교사가 우리를 계속 쓰는 ROI 산정식(예: 주당 시간 절약 × 시급 환산)을 한 페이지로 보여줄 수 있다."
           evidence:
-            q: "ROI 한 페이지 자료 최신 갱신일"
+            q: "교사 ROI 한 페이지 자료 최신 갱신일"
             type: choice
             options:
               - { v: 1, label: "없음" }
               - { v: 2, label: "있지만 180일+ 미갱신" }
               - { v: 3, label: "90–180일" }
               - { v: 4, label: "30–90일" }
-              - { v: 5, label: "30일 이내, 결제 5건 이상 검증" }
-          citation: "Bessemer 'Five Cs of Cloud Finance'"
+              - { v: 5, label: "30일 이내, 교사 인터뷰 5건 이상 검증" }
+          citation: "April Dunford 'Obviously Awesome' positioning framework"
           failure_trigger: "evidence.v <= 2"
           cadence: monthly
 
@@ -322,56 +321,11 @@ domains:
           cadence: weekly
 
 # ---------------------------------------------------------------------
-- code: A5
-  name_ko: "단위경제·수익성"
-  name_en: "Unit Economics"
-  tier: critical
-  weight: 9
-  owner_role: ["Founder", "CFO"]
-  framework: "2025 SaaS Benchmarks · Rule of 40 · Magic Number"
-  thresholds: { red: 40, yellow: 60, green: 75 }
-  groups:
-    - code: A5.GROSS
-      name: "Gross Margin"
-      sub_items:
-        - code: A5.GROSS.MARGIN
-          tier: critical
-          weight_within_group: 0.4
-          belief:
-            q: "매출에서 직접 원가(서버·결제수수료·고객성공 인건비)를 뺀 gross margin을 매월 계산한다."
-          evidence:
-            q: "TTM gross margin"
-            type: choice
-            options:
-              - { v: 1, label: "< 30% 또는 미계산" }
-              - { v: 2, label: "30–49%" }
-              - { v: 3, label: "50–64%" }
-              - { v: 4, label: "65–74%" }
-              - { v: 5, label: "≥ 75%" }
-            kpi_source: "회계: TTM revenue - TTM COGS"
-            refresh_period_days: 30
-          citation: "Bessemer State of the Cloud 2025 (Top quartile SaaS GM ≥ 75%)"
-          failure_trigger: "evidence.v <= 2 AND stage != pre_seed"
-          cadence: monthly
-        - code: A5.CAC.PAYBACK
-          tier: critical
-          weight_within_group: 0.35
-          belief:
-            q: "CAC payback (개월) = CAC / (월 ARR × gross margin)을 분기마다 계산한다."
-          evidence:
-            q: "CAC payback months"
-            type: choice
-            options:
-              - { v: 1, label: "> 24 또는 미계산" }
-              - { v: 2, label: "18–24" }
-              - { v: 3, label: "12–18" }
-              - { v: 4, label: "6–12" }
-              - { v: 5, label: "< 6" }
-          citation: "Bessemer Cloud Index; OpenView 2025 SaaS Benchmarks"
-          failure_trigger: "evidence.v == 1"
-          cadence: monthly
+# A5 (자금·단위경제·수익성) 도메인은 본 서비스 범위 밖이라 제거됨.
+# 교사 중심 EdTech 운영 진단에서는 자생력·매출 효율을 별도 도메인으로 다루지
+# 않는다. CAC·매출 관련 task는 catalog.ts 에 유지되지만 도메인 점수에는
+# 반영되지 않음 (가중치 0).
 
-# ---------------------------------------------------------------------
 - code: A6
   name_ko: "획득 채널 (GTM)"
   name_en: "Acquisition & GTM"
@@ -600,18 +554,18 @@ domains:
   owner_role: ["CEO", "COO"]
   framework: "Lencioni 5 Dysfunctions · Westrum Culture · Edmondson Psychological Safety · Project Aristotle"
   thresholds: { red: 40, yellow: 65, green: 80 }
-  notes: "CB Insights 23% 실패 = 'not the right team'. 한국 EdTech는 공동창업자 결별이 시리즈 A 데드의 흔한 원인."
+  notes: "CB Insights 23% 실패 = 'not the right team'. 한국 EdTech는 경영진 정렬 붕괴가 시리즈 A 데드의 흔한 원인."
   groups:
     - code: A11.FOUNDERS
-      name: "공동창업자 정렬"
+      name: "리더십 정렬"
       sub_items:
         - code: A11.FOUNDERS.ALIGN
           tier: critical
           weight_within_group: 0.4
           belief:
-            q: "공동창업자 간 비전·역할·equity·exit 시점에 대한 정렬도가 4점(5점 만점) 이상이다."
+            q: "핵심 의사결정권자 간 비전·역할·equity·exit 시점에 대한 정렬도가 4점(5점 만점) 이상이다."
           evidence:
-            q: "최근 분기 공동창업자 정렬 자가평가 (5점 평균)"
+            q: "최근 분기 리더십 정렬 자가평가 (5점 평균)"
             type: choice
             options:
               - { v: 1, label: "< 2.5 또는 측정 안 함" }

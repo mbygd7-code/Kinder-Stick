@@ -125,10 +125,10 @@ export function ActionsBoard({
         <div className="max-w-6xl mx-auto px-6 sm:px-10 py-6 flex items-baseline justify-between gap-6">
           <div className="flex items-baseline gap-3">
             <a
-              href={`/diag/${workspace}/dashboard`}
+              href={`/diag/${workspace}/home`}
               className="kicker hover:text-ink"
             >
-              ← Dashboard
+              ← 홈
             </a>
             <span className="hidden sm:inline label-mono">·</span>
             <span className="hidden sm:inline label-mono">
@@ -414,7 +414,7 @@ function Badge({
     ? `${label} ✗`
     : mock
       ? `${label} (mock)`
-      : `🔗 ${label}`;
+      : `→ ${label}`;
   const inner = (
     <span className={`tag ${tone}`} title={failed ? disp.error : undefined}>
       {text}

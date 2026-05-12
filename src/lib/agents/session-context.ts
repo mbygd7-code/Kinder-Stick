@@ -79,7 +79,7 @@ export async function buildSessionSystemPrompt(args: {
   const diagnosisRows = (rows ?? []) as DiagnosisRow[];
   const stage =
     args.stage ??
-    ((diagnosisRows[diagnosisRows.length - 1]?.stage as Stage) ?? "seed");
+    ((diagnosisRows[diagnosisRows.length - 1]?.stage as Stage) ?? "open_beta");
 
   const aggregated = aggregateDomainResponses(diagnosisRows, domain);
 

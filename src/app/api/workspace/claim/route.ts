@@ -45,7 +45,7 @@ export async function POST(req: Request) {
   }
 
   const sb = supabaseAdmin();
-  const org = await ensureWorkspaceOrg(sb, workspace_id, "seed");
+  const org = await ensureWorkspaceOrg(sb, workspace_id, "open_beta");
 
   // Check existing membership
   const { data: existing } = await sb

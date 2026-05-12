@@ -30,12 +30,31 @@ export const dynamic = "force-dynamic";
 
 const WS_PATTERN = /^[a-zA-Z0-9_-]{3,50}$/;
 const VALID_STAGES = new Set<Stage>([
-  "pre_seed",
-  "seed",
-  "series_a",
-  "series_b",
-  "series_c_plus",
+  "closed_beta",
+  "open_beta",
+  "ga_early",
+  "ga_growth",
+  "ga_scale",
 ]);
+
+/**
+ * 레거시 VC 펀딩 단계 값을 새 출시 단계로 매핑.
+ * 기존 클라이언트 (oldschool DB row, localStorage) 에서 들어온 값을 호환.
+ */
+const LEGACY_STAGE_MAP: Record<string, Stage> = {
+  pre_seed: "closed_beta",
+  seed: "open_beta",
+  series_a: "ga_early",
+  series_b: "ga_growth",
+  series_c_plus: "ga_scale",
+};
+
+function normalizeStage(input: unknown): Stage | null {
+  if (typeof input !== "string") return null;
+  if (VALID_STAGES.has(input as Stage)) return input as Stage;
+  const mapped = LEGACY_STAGE_MAP[input];
+  return mapped ?? null;
+}
 
 interface IncomingResponse {
   belief: number;
@@ -73,12 +92,21 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
-  if (!payload.context || !VALID_STAGES.has(payload.context.stage)) {
+  if (!payload.context) {
+    return NextResponse.json(
+      { ok: false, message: "context 가 누락되었습니다" },
+      { status: 400 },
+    );
+  }
+  const normalizedStage = normalizeStage(payload.context.stage);
+  if (!normalizedStage) {
     return NextResponse.json(
       { ok: false, message: "context.stage 값이 유효하지 않습니다" },
       { status: 400 },
     );
   }
+  // Normalize for downstream code (handles legacy values transparently)
+  payload.context.stage = normalizedStage;
   if (
     !payload.responses ||
     typeof payload.responses !== "object" ||
@@ -307,6 +335,12 @@ function computeAllScores(
     domainDefs,
     subResponses,
     payload.context.stage,
+    undefined,
+    {
+      subDefs,
+      now,
+      respondentCount: 1, // 단일 응답자 제출 시점
+    },
   );
 
   // Consensus is meaningful only with multiple respondents.

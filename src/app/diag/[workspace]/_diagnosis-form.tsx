@@ -35,7 +35,7 @@ type ResponsesMap = Record<string, Response>;
 interface Context {
   role: string;
   perspective: string;
-  stage: "pre_seed" | "seed" | "series_a" | "series_b" | "series_c_plus";
+  stage: "closed_beta" | "open_beta" | "ga_early" | "ga_growth" | "ga_scale";
   team_size: string;
 }
 
@@ -48,7 +48,7 @@ interface PersistShape {
 const DEFAULT_CONTEXT: Context = {
   role: "",
   perspective: "founder",
-  stage: "seed",
+  stage: "open_beta",
   team_size: "",
 };
 
@@ -208,9 +208,9 @@ export function DiagnosisForm({
           setError(json.message ?? "제출 실패");
           return;
         }
-        // localStorage 보존 (이력 보기용). 결과 페이지로 이동
+        // localStorage 보존 (이력 보기용). 통합 홈으로 이동 (진단→운영 자연 흐름)
         router.push(
-          `/diag/${workspace}/result?session=${encodeURIComponent(json.session_id ?? "")}&respondent=${json.respondent_num ?? ""}`,
+          `/diag/${workspace}/home?session=${encodeURIComponent(json.session_id ?? "")}&respondent=${json.respondent_num ?? ""}`,
         );
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
@@ -372,7 +372,7 @@ export function DiagnosisForm({
         </div>
         {error ? (
           <div className="border-t border-signal-red bg-soft-red text-signal-red font-mono text-xs px-6 sm:px-10 py-2">
-            ⚠ {error}
+            <span className="font-mono text-[10px] uppercase tracking-widest mr-1">오류</span> {error}
           </div>
         ) : null}
       </div>
@@ -457,7 +457,7 @@ function ContextStage({
         <p className="kicker mb-2">§ Stage 1 · Respondent context</p>
         <h2 className="font-display text-3xl mb-4">응답자 정보</h2>
         <p className="text-ink-soft mb-5 text-sm">
-          역할과 회사 단계는 Bayesian failure probability 산출에 직접 사용됩니다.
+          역할과 출시 단계는 진단·우선순위·실패확률 산정에 직접 사용됩니다.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="역할 (자유 기재)">
@@ -479,14 +479,14 @@ function ContextStage({
               }
               className="evidence-input"
             >
-              <option value="founder">창립자/경영진</option>
+              <option value="founder">대표·경영진</option>
               <option value="product">제품·엔지니어링</option>
               <option value="growth">마케팅·영업·CS</option>
               <option value="ops">운영·재무</option>
               <option value="advisor">자문·외부</option>
             </select>
           </Field>
-          <Field label="회사 단계 (Bayesian prior에 적용)">
+          <Field label="제품 출시 단계 (우선순위 산정에 사용)">
             <select
               value={context.stage}
               onChange={(e) =>
@@ -497,11 +497,11 @@ function ContextStage({
               }
               className="evidence-input"
             >
-              <option value="pre_seed">Pre-seed</option>
-              <option value="seed">Seed</option>
-              <option value="series_a">Series A</option>
-              <option value="series_b">Series B</option>
-              <option value="series_c_plus">Series C+</option>
+              <option value="closed_beta">비공개 베타 (초청 사용자)</option>
+              <option value="open_beta">공개 베타 (PMF 검증)</option>
+              <option value="ga_early">정식 출시 (0–6개월)</option>
+              <option value="ga_growth">성장기 (6–24개월)</option>
+              <option value="ga_scale">확장기 (24개월+)</option>
             </select>
           </Field>
           <Field label="팀 규모 (선택)">

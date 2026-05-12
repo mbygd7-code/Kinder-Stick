@@ -91,10 +91,10 @@ export function TaskTitle({
   const hasCustom = mounted && custom !== null && custom !== task.title;
 
   return (
-    <p className="font-display text-lg sm:text-xl leading-snug break-keep">
+    <p className="t-display-3 sm:t-display-2 text-ink break-keep">
       {displayTitle}
       {hasCustom ? (
-        <span className="ml-2 align-middle inline-block tag tag-gold !text-[9px] !py-0">
+        <span className="ml-2 align-middle inline-block tag tag-gold">
           수정됨
         </span>
       ) : null}
@@ -284,7 +284,7 @@ export function TaskEditButton({
                 className="px-3 py-1.5 text-sm font-medium border-2 border-ink-soft/40 hover:border-ink hover:bg-paper-deep disabled:opacity-50"
                 title="현재 입력을 AI가 다듬어 줍니다"
               >
-                {aiBusy ? "AI 작성 중…" : "✨ AI로 다듬기"}
+                {aiBusy ? "AI 작성 중…" : "AI로 다듬기"}
               </button>
               {hasCustom ? (
                 <button
@@ -320,12 +320,12 @@ export function TaskEditButton({
                   ? "생성 중…"
                   : derivatives.length > 0
                     ? "↻ 다시 생성"
-                    : "✨ AI로 변형 추천"}
+                    : "AI 변형 추천"}
               </button>
             </div>
             {derivError ? (
               <p className="text-xs text-signal-red font-mono mb-2">
-                ⚠ {derivError}
+                <span className="uppercase tracking-widest mr-1">오류</span> {derivError}
               </p>
             ) : null}
             {derivatives.length > 0 ? (

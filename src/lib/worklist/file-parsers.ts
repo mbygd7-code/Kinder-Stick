@@ -1,12 +1,15 @@
 /**
- * Client-side file parsers — CSV/XLSX → 텍스트 직렬화.
+ * Client-side file parsers — CSV/XLSX/DOCX/TXT/MD → 텍스트 직렬화.
  *
  * 서버 라우트는 텍스트만 받기 때문에 (Vercel 함수 body 4.5MB 제한 회피 + Supabase
- * Storage 권한 불필요) 클라이언트에서 1차 파싱 후 헤더 + 상위 N행을 압축한
- * 텍스트로 변환해 AI에 전달한다.
+ * Storage 권한 불필요) 클라이언트에서 1차 파싱 후 헤더 + 상위 N행 또는 본문
+ * 텍스트를 압축해 AI에 전달한다.
  *
- * - papaparse: CSV (5KB gzipped, eager)
- * - xlsx (SheetJS CE): XLSX (~600KB minified, dynamic import로 lazy load)
+ * 지원 형식:
+ * - CSV         : papaparse (5KB gzipped, eager)
+ * - XLSX / XLS  : SheetJS CE (~600KB, dynamic import)
+ * - DOCX        : mammoth (~200KB, dynamic import) — Word 문서 텍스트 추출
+ * - TXT / MD    : 그대로 읽기
  */
 
 import Papa from "papaparse";
@@ -14,9 +17,11 @@ import Papa from "papaparse";
 const MAX_PREVIEW_ROWS = 200;
 const MAX_TEXT_LEN = 50_000;
 
+export type FileKind = "csv" | "xlsx" | "docx" | "text";
+
 export interface FileParseResult {
   filename: string;
-  kind: "csv" | "xlsx";
+  kind: FileKind;
   rows_total: number;
   rows_used: number;
   text: string;
@@ -24,7 +29,7 @@ export interface FileParseResult {
 }
 
 /** Serialize an array-of-arrays (headers + rows) to a compact text block. */
-function tabularize(rows: string[][], filename: string, kind: "csv" | "xlsx"): {
+function tabularize(rows: string[][], filename: string, kind: FileKind): {
   text: string;
   rows_used: number;
   truncated: boolean;
@@ -112,10 +117,79 @@ export async function parseXlsx(file: File): Promise<FileParseResult> {
   };
 }
 
+export async function parseDocx(file: File): Promise<FileParseResult> {
+  const mammoth = await import("mammoth");
+  const buf = await file.arrayBuffer();
+  // 브라우저 빌드는 arrayBuffer 옵션 받아서 raw text 추출
+  const res = await mammoth.extractRawText({ arrayBuffer: buf });
+  const raw = res.value ?? "";
+  let text = `# ${file.name} (docx)\n${raw}`;
+  let truncated = false;
+  if (text.length > MAX_TEXT_LEN) {
+    text = text.slice(0, MAX_TEXT_LEN) + "\n... (잘림)";
+    truncated = true;
+  }
+  // rows_total/rows_used는 문단 수로 근사
+  const paragraphs = raw.split(/\n+/).filter((l) => l.trim().length > 0);
+  return {
+    filename: file.name,
+    kind: "docx",
+    rows_total: paragraphs.length,
+    rows_used: paragraphs.length,
+    text,
+    truncated,
+  };
+}
+
+export async function parseText(file: File): Promise<FileParseResult> {
+  const raw = await file.text();
+  let text = `# ${file.name}\n${raw}`;
+  let truncated = false;
+  if (text.length > MAX_TEXT_LEN) {
+    text = text.slice(0, MAX_TEXT_LEN) + "\n... (잘림)";
+    truncated = true;
+  }
+  const lines = raw.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  return {
+    filename: file.name,
+    kind: "text",
+    rows_total: lines.length,
+    rows_used: lines.length,
+    text,
+    truncated,
+  };
+}
+
+/** Accept attribute string for <input type="file"> — all supported extensions. */
+export const FILE_ACCEPT =
+  ".csv,.xlsx,.xls,.docx,.txt,.md,text/csv,text/plain,text/markdown,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+/** Human label for kind — for UI. */
+export const KIND_LABEL: Record<FileKind, string> = {
+  csv: "CSV 표",
+  xlsx: "Excel 시트",
+  docx: "Word 문서",
+  text: "텍스트",
+};
+
 /** Dispatch a File to the right parser by extension. Returns text+meta. */
 export async function parseFile(file: File): Promise<FileParseResult> {
   const ext = file.name.split(".").pop()?.toLowerCase();
   if (ext === "csv") return parseCsv(file);
   if (ext === "xlsx" || ext === "xls") return parseXlsx(file);
-  throw new Error(`지원하지 않는 파일 형식: .${ext ?? "?"} (.csv / .xlsx 만 허용)`);
+  if (ext === "docx") return parseDocx(file);
+  if (ext === "txt" || ext === "md" || ext === "markdown") return parseText(file);
+  if (ext === "doc") {
+    throw new Error(
+      ".doc (구형 Word 바이너리) 는 지원되지 않습니다. Word에서 .docx 로 다시 저장해주세요.",
+    );
+  }
+  if (ext === "pdf") {
+    throw new Error(
+      "PDF 파싱은 준비 중입니다. 본문 텍스트를 복사해서 [텍스트 붙여넣기] 모드에 입력해주세요.",
+    );
+  }
+  throw new Error(
+    `지원하지 않는 파일 형식: .${ext ?? "?"} (.csv / .xlsx / .docx / .txt / .md 만 허용)`,
+  );
 }

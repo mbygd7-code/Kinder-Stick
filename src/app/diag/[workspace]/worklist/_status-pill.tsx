@@ -7,6 +7,7 @@ import {
   type Status,
 } from "@/lib/worklist/catalog";
 import type { AutoStatus } from "@/lib/worklist/derive";
+import { readKpiProgress } from "./_task-kpi-checklist";
 
 interface Props {
   workspace: string;
@@ -73,30 +74,63 @@ export function StatusPill({ workspace, taskId, autoStatus }: Props) {
   const [override, setOverride] = useState<Status | null>(null);
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [kpiProgress, setKpiProgress] = useState<{
+    checked: number;
+    total: number;
+    percent: number;
+  } | null>(null);
 
   // Load override on mount + listen to cross-component changes
   useEffect(() => {
     setMounted(true);
-    const ov = readOverride(workspace, taskId);
-    setOverride(ov?.status ?? null);
+    const refresh = () => {
+      const ov = readOverride(workspace, taskId);
+      setOverride(ov?.status ?? null);
+      setKpiProgress(readKpiProgress(workspace, taskId));
+    };
+    refresh();
 
     const handler = (e: Event) => {
       const ce = e as CustomEvent<{
         workspace: string;
         taskId: string;
-        status: Status | null;
+        status?: Status | null;
+        kpi?: boolean;
       }>;
-      if (ce.detail.workspace === workspace && ce.detail.taskId === taskId) {
-        setOverride(ce.detail.status);
+      // Refresh on any change for this task (status or kpi)
+      if (
+        ce.detail?.workspace === workspace &&
+        ce.detail?.taskId === taskId
+      ) {
+        refresh();
+      } else if (!ce.detail) {
+        refresh();
       }
     };
     window.addEventListener("worklist:change", handler);
-    return () => window.removeEventListener("worklist:change", handler);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener("worklist:change", handler);
+      window.removeEventListener("storage", refresh);
+    };
   }, [workspace, taskId]);
 
+  // KPI-derived status takes effect ONLY if user hasn't manually overridden.
+  // Manual override always wins so the user can mark "done" even before
+  // checking all KPIs, or stay "not started" even with KPIs checked.
+  const kpiDerived: Status | null = (() => {
+    if (!kpiProgress || kpiProgress.total === 0) return null;
+    if (kpiProgress.percent === 100) return "done";
+    if (kpiProgress.checked > 0) return "in_progress";
+    return null;
+  })();
+
   const effective: Status =
-    override ?? (autoStatus === "unknown" ? "not_started" : autoStatus);
+    override ??
+    kpiDerived ??
+    (autoStatus === "unknown" ? "not_started" : autoStatus);
   const isOverridden = override !== null;
+  const isFromKpi = override === null && kpiDerived !== null;
 
   const handleSelect = useCallback(
     (s: Status) => {
@@ -121,14 +155,16 @@ export function StatusPill({ workspace, taskId, autoStatus }: Props) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className={`px-2.5 py-1 text-xs font-semibold border tracking-tight transition-all ${STATUS_TONE[display]} ${
+        className={`px-2.5 py-1.5 text-xs font-semibold border tracking-tight transition-all ${STATUS_TONE[display]} ${
           open ? "ring-2 ring-ink/30" : ""
         }`}
-        aria-label={`상태: ${STATUS_LABEL[display]}`}
+        aria-label={`상태: ${STATUS_LABEL[display]}${
+          isFromKpi && kpiProgress ? ` · ${kpiProgress.percent}%` : ""
+        }`}
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        <span className="flex items-center gap-1">
+        <span className="flex items-center gap-1.5">
           <span
             className={`inline-block w-1.5 h-1.5 rounded-full ${
               display === "done"
@@ -140,11 +176,18 @@ export function StatusPill({ workspace, taskId, autoStatus }: Props) {
                     : "bg-ink-soft"
             }`}
           />
-          {STATUS_LABEL[display]}
+          <span className="font-display">{STATUS_LABEL[display]}</span>
+          {isFromKpi && kpiProgress && display === "in_progress" ? (
+            <span className="font-mono text-[10px] font-bold tabular-nums">
+              {kpiProgress.percent}%
+            </span>
+          ) : null}
           {isOverridden ? (
-            <span className="font-mono text-[9px] opacity-70">·수동</span>
+            <span className="font-mono text-[10px] opacity-70">·수동</span>
+          ) : isFromKpi ? (
+            <span className="font-mono text-[10px] opacity-70">·KPI</span>
           ) : autoStatus === "unknown" ? null : (
-            <span className="font-mono text-[9px] opacity-60">·자동</span>
+            <span className="font-mono text-[10px] opacity-60">·자동</span>
           )}
         </span>
       </button>

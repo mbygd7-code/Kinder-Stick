@@ -21,7 +21,7 @@ export interface WorkspaceOrg {
 export async function ensureWorkspaceOrg(
   sb: SupabaseClient,
   workspaceId: string,
-  stage: Stage = "seed",
+  stage: Stage = "open_beta",
 ): Promise<WorkspaceOrg> {
   // Try existing
   const { data: existing, error: selErr } = await sb
@@ -108,7 +108,7 @@ export async function resolveOrgWithBackfill(
     return {
       id: existing.id,
       name: existing.name,
-      stage: (existing.stage ?? "seed") as Stage,
+      stage: (existing.stage ?? "open_beta") as Stage,
     };
   }
 
@@ -130,7 +130,7 @@ export async function resolveOrgWithBackfill(
     .order("respondent_num", { ascending: false })
     .limit(1)
     .maybeSingle();
-  const stage = ((row?.stage as Stage) ?? "seed") as Stage;
+  const stage = ((row?.stage as Stage) ?? "open_beta") as Stage;
   try {
     return await ensureWorkspaceOrg(sb, workspaceId, stage);
   } catch {

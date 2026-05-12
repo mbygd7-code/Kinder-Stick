@@ -89,10 +89,11 @@ export interface Domain {
 }
 
 export interface PriorTable {
-  pre_seed: { failure_6m: number; failure_12m: number };
-  seed: { failure_6m: number; failure_12m: number };
-  series_a: { failure_6m: number; failure_12m: number };
-  series_b: { failure_6m: number; failure_12m: number };
+  closed_beta: { failure_6m: number; failure_12m: number };
+  open_beta: { failure_6m: number; failure_12m: number };
+  ga_early: { failure_6m: number; failure_12m: number };
+  ga_growth: { failure_6m: number; failure_12m: number };
+  ga_scale: { failure_6m: number; failure_12m: number };
 }
 
 export interface CriticalCapRaw {

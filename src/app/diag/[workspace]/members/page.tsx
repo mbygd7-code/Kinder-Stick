@@ -95,10 +95,10 @@ export default async function MembersPage({ params }: Props) {
         <div className="max-w-6xl mx-auto px-6 sm:px-10 py-6 flex items-baseline justify-between gap-6 flex-wrap">
           <div className="flex items-baseline gap-3 flex-wrap">
             <a
-              href={`/diag/${workspace}/dashboard`}
+              href={`/diag/${workspace}/home`}
               className="kicker hover:text-ink"
             >
-              ← Dashboard
+              ← 홈
             </a>
             <span className="hidden sm:inline label-mono">·</span>
             <span className="hidden sm:inline label-mono">
@@ -135,10 +135,10 @@ export default async function MembersPage({ params }: Props) {
 
       <footer className="max-w-6xl mx-auto px-6 sm:px-10 mt-16 border-t border-ink-soft pt-6 flex flex-wrap items-baseline justify-between gap-4">
         <a
-          href={`/diag/${workspace}/dashboard`}
+          href={`/diag/${workspace}/home`}
           className="label-mono hover:text-ink"
         >
-          ← back to dashboard
+          ← 홈으로
         </a>
         <p className="label-mono">{ISSUE_DATE} · members v1</p>
       </footer>
@@ -174,13 +174,13 @@ function NotMemberView({ workspace }: { workspace: string }) {
           이 워크스페이스 멤버가 아닙니다
         </h1>
         <p className="mt-3 text-ink-soft text-sm">
-          dashboard 에서 "Claim ownership" 으로 가입할 수 있습니다.
+          홈 페이지에서 "Claim ownership" 으로 가입할 수 있습니다.
         </p>
         <a
-          href={`/diag/${workspace}/dashboard`}
+          href={`/diag/${workspace}/home`}
           className="btn-secondary mt-6 inline-flex"
         >
-          ← Dashboard
+          ← 홈
         </a>
       </div>
     </main>

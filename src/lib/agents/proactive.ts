@@ -65,7 +65,7 @@ export async function triggerProactiveCoach(
     signal_narrative,
     signal_severity,
     signal_metadata,
-    stage = "seed",
+    stage = "open_beta",
   } = args;
 
   // 1. Resolve org

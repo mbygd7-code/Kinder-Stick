@@ -415,8 +415,8 @@ export function CoachClient({
       <header className="border-b-2 border-ink">
         <div className="max-w-5xl mx-auto px-6 sm:px-10 py-6 flex items-baseline justify-between gap-6">
           <div className="flex items-baseline gap-3 flex-wrap">
-            <a href={`/diag/${workspace}/dashboard`} className="kicker hover:text-ink">
-              ← Dashboard
+            <a href={`/diag/${workspace}/home`} className="kicker hover:text-ink">
+              ← 홈
             </a>
             <span className="hidden sm:inline label-mono">·</span>
             <span className="hidden sm:inline label-mono">
@@ -705,6 +705,42 @@ export function CoachClient({
           </div>
         </div>
       ) : null}
+
+      {/* Sticky exit footer — 코치 종료 후 어디로 가야 하나 명확히 (G2) */}
+      <div className="fixed bottom-0 left-0 right-0 border-t-2 border-ink bg-paper/95 backdrop-blur-sm z-20 print:hidden">
+        <div className="max-w-6xl mx-auto px-6 sm:px-10 py-2.5 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-baseline gap-3 flex-wrap min-w-0">
+            <span className="label-mono">
+              {domain.code} · {domain.name_ko}
+            </span>
+            {actions.length > 0 ? (
+              <span className="label-mono">
+                · 채택된 액션 {actions.length}건
+              </span>
+            ) : null}
+          </div>
+          <div className="flex items-center gap-2 flex-wrap shrink-0">
+            <a
+              href={`/diag/${workspace}/home`}
+              className="px-3 py-1.5 text-sm font-medium border border-ink-soft hover:border-ink hover:bg-paper-deep transition-colors"
+            >
+              ← 홈으로
+            </a>
+            <a
+              href={`/diag/${workspace}/actions`}
+              className="px-3 py-1.5 text-sm font-medium border border-ink-soft hover:border-ink hover:bg-paper-deep transition-colors"
+            >
+              액션 보드 →
+            </a>
+            <a
+              href={`/diag/${workspace}/worklist`}
+              className="px-3 py-1.5 text-sm font-medium border-2 border-ink hover:bg-ink hover:text-paper transition-colors"
+            >
+              워크리스트 실행 →
+            </a>
+          </div>
+        </div>
+      </div>
     </main>
   );
 }
@@ -733,10 +769,10 @@ function MessageBlock({
         ? (message.content.text as string)
         : JSON.stringify(message.content);
     return (
-      <article className="ml-auto max-w-[85%] area-card !bg-paper-deep border-ink-soft">
-        <p className="kicker mb-2">YOU</p>
-        <p className="whitespace-pre-wrap">{text}</p>
-        <p className="mt-2 label-mono">
+      <article className="ml-auto max-w-[85%] border-2 border-ink-soft/60 bg-paper-deep p-5">
+        <p className="t-label mb-2">내 답변</p>
+        <p className="t-body whitespace-pre-wrap">{text}</p>
+        <p className="mt-3 t-label pt-2 border-t border-ink-soft/30">
           {formatTime(message.created_at)}
         </p>
       </article>
@@ -747,8 +783,8 @@ function MessageBlock({
   const agent = parseAgentContent(message.content);
   if (!agent) {
     return (
-      <article className="area-card">
-        <p className="kicker !text-signal-red">Agent (parse failed)</p>
+      <article className="border-2 border-signal-red bg-soft-red/30 p-5">
+        <p className="t-label-accent mb-2">파싱 실패</p>
         <pre className="mt-2 font-mono text-xs whitespace-pre-wrap">
           {message.content?.raw
             ? String(message.content.raw)
@@ -759,126 +795,196 @@ function MessageBlock({
   }
 
   return (
-    <article className="area-card">
-      <header className="flex items-baseline justify-between gap-3 flex-wrap">
-        <p className="kicker">DOMAIN COACH</p>
-        <div className="flex items-center gap-2">
+    <article className="border-2 border-ink bg-paper p-6 sm:p-7">
+      {/* ── Header ───────────────────────────────────────── */}
+      <header className="flex items-baseline justify-between gap-3 flex-wrap pb-3 border-b-2 border-ink">
+        <div className="flex items-baseline gap-3 flex-wrap">
+          <p className="t-label-accent">도메인 코치</p>
+          <p className="t-label">AI 진단·SMART 액션 제안</p>
+        </div>
+        <div className="flex items-center gap-1.5">
           <span
-            className={`tag ${agent.severity >= 4 ? "tag-red" : agent.severity >= 3 ? "tag-gold" : "tag-green"}`}
+            className={`t-label-ink px-2 py-0.5 border-2 ${
+              agent.severity >= 4
+                ? "bg-signal-red !text-paper border-signal-red"
+                : agent.severity >= 3
+                  ? "bg-amber !text-paper border-amber"
+                  : "bg-green !text-paper border-green"
+            }`}
           >
-            severity {agent.severity}
+            SEVERITY {agent.severity}
           </span>
           {agent.confidence !== null ? (
-            <span className="tag">
-              conf {Math.round(agent.confidence * 100)}%
+            <span className="t-label-ink px-2 py-0.5 border-2 border-ink">
+              CONF {Math.round(agent.confidence * 100)}%
             </span>
           ) : null}
         </div>
       </header>
 
+      {/* ── Finding (hero) ───────────────────────────────── */}
       {agent.finding ? (
-        <h3 className="mt-3 font-display text-2xl leading-tight">
-          {agent.finding}
-        </h3>
-      ) : null}
-
-      {agent.evidence.length > 0 ? (
-        <div className="mt-4 dotted-rule pt-3">
-          <p className="label-mono mb-2">Evidence cited</p>
-          <ul className="space-y-2">
-            {agent.evidence.map((e, i) => (
-              <li key={i} className="flex items-baseline gap-3 text-sm">
-                <span className={`tag ${kindTag(e.kind)}`}>
-                  {e.kind.toUpperCase()}
-                </span>
-                <span className="font-mono text-xs text-ink-soft min-w-[80px]">
-                  {e.source_id}
-                </span>
-                <span>{e.summary}</span>
-              </li>
-            ))}
-          </ul>
+        <div className="mt-5 border-l-[6px] border-ink pl-5 py-1">
+          <p className="t-label mb-2">진단 요약</p>
+          <p className="t-lede font-display">{agent.finding}</p>
         </div>
       ) : null}
 
+      {/* ── A. Evidence ──────────────────────────────────── */}
+      {agent.evidence.length > 0 ? (
+        <CoachSection label={`근거 ${agent.evidence.length}`} index="A">
+          <ul className="space-y-2.5 mt-2">
+            {agent.evidence.map((e, i) => {
+              const kindKo = evidenceKindLabel(e.kind);
+              const kindBg =
+                e.kind.toLowerCase() === "rag"
+                  ? "bg-ink"
+                  : e.kind.toLowerCase() === "kpi"
+                    ? "bg-green"
+                    : "bg-gold";
+              return (
+                <li
+                  key={i}
+                  className="grid grid-cols-[4.5rem_minmax(120px,auto)_1fr] gap-3 items-baseline"
+                >
+                  <span
+                    className={`t-label-ink !text-paper px-2 py-0.5 text-center ${kindBg}`}
+                    title={`출처 종류: ${kindKo}`}
+                  >
+                    {kindKo}
+                  </span>
+                  <span className="t-label text-ink truncate" title={e.source_id}>
+                    {humanizeSourceId(e.source_id)}
+                  </span>
+                  <span className="t-body-sm text-ink/90">
+                    {humanizeEvidenceSummary(e.summary)}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </CoachSection>
+      ) : null}
+
+      {/* ── B. Next step ─────────────────────────────────── */}
       {agent.next_step ? (
-        <div className="mt-4 dotted-rule pt-3">
-          <p className="kicker mb-1">Next step · {agent.next_step.kind}</p>
-          <p className="font-display text-lg leading-snug">
+        <CoachSection
+          label={`다음 단계 · ${agent.next_step.kind.replace(/_/g, " ")}`}
+          index="B"
+        >
+          <p className="t-display-4 text-ink mt-2">
             {agent.next_step.prompt}
           </p>
-        </div>
+        </CoachSection>
       ) : null}
 
+      {/* ── C. SMART action plan ─────────────────────────── */}
       {agent.smart_actions.length > 0 ? (
-        <div className="mt-5 dotted-rule pt-3">
-          <p className="kicker mb-3">SMART action plan</p>
-          <ul className="space-y-3">
+        <CoachSection
+          label={`SMART 액션 플랜 ${agent.smart_actions.length}`}
+          index="C"
+        >
+          <ol className="space-y-4 mt-3">
             {agent.smart_actions.map((a, i) => {
               const accepted = acceptedTitles.has(a.action);
               return (
                 <li
                   key={i}
-                  className="border border-ink-soft p-3 bg-paper-soft flex flex-col gap-2"
+                  className={`grid grid-cols-[3rem_1fr] gap-4 border-2 px-4 py-3 transition-colors ${
+                    accepted
+                      ? "border-green bg-soft-green/30"
+                      : "border-ink-soft/40 bg-paper-deep"
+                  }`}
                 >
-                  <header className="flex items-baseline justify-between gap-3">
-                    <span className="kicker">
-                      <span className="section-num">No. </span>
+                  <div className="text-right">
+                    <p className="t-display-1 text-ink leading-none">
                       {String(i + 1).padStart(2, "0")}
-                    </span>
-                    <span className="tag tag-filled">
-                      {a.owner} · {a.deadline_days}d
-                    </span>
-                  </header>
-                  <p className="font-display text-base leading-snug">
-                    {a.action}
-                  </p>
-                  {a.verification_metric ? (
-                    <p className="label-mono">
-                      검증 — {a.verification_metric}
                     </p>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => onAcceptAction(a, i)}
-                    disabled={accepted || accepting}
-                    className={`self-start text-xs px-3 py-1.5 border-2 transition ${
-                      accepted
-                        ? "bg-signal-green text-paper border-signal-green cursor-default"
-                        : "bg-paper border-ink hover:bg-ink hover:text-paper"
-                    }`}
-                  >
-                    {accepted ? "✓ 채택됨" : "채택하기"}
-                  </button>
+                  </div>
+                  <div className="border-l-2 border-ink-soft/30 pl-4">
+                    <div className="flex items-baseline gap-2 flex-wrap">
+                      <span className="t-label">담당</span>
+                      <span className="t-body-sm font-semibold text-ink">
+                        {a.owner}
+                      </span>
+                      <span className="t-label text-ink-soft/40">·</span>
+                      <span className="t-label">기한</span>
+                      <span className="t-body-sm font-semibold text-ink t-num">
+                        {a.deadline_days}일
+                      </span>
+                    </div>
+                    <p className="mt-2 t-display-4 text-ink">{a.action}</p>
+                    {a.verification_metric ? (
+                      <p className="mt-2 t-body-sm">
+                        <span className="t-label mr-1.5 align-middle">검증</span>
+                        <span className="text-ink/85">
+                          {a.verification_metric}
+                        </span>
+                      </p>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => onAcceptAction(a, i)}
+                      disabled={accepted || accepting}
+                      className={`mt-3 px-4 py-1.5 t-label-ink transition-colors ${
+                        accepted
+                          ? "bg-green !text-paper border-2 border-green cursor-default"
+                          : "bg-paper border-2 border-ink hover:bg-ink hover:!text-paper disabled:opacity-50"
+                      }`}
+                    >
+                      {accepted ? "채택됨" : "채택하기"}
+                    </button>
+                  </div>
                 </li>
               );
             })}
-          </ul>
-        </div>
+          </ol>
+        </CoachSection>
       ) : null}
 
-      <p className="mt-3 label-mono">
+      <p className="mt-5 t-label pt-3 border-t border-ink-soft/30">
         {formatTime(message.created_at)}
       </p>
     </article>
   );
 }
 
+function CoachSection({
+  label,
+  index,
+  children,
+}: {
+  label: string;
+  index: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="mt-6">
+      <div className="flex items-baseline gap-3 mb-3 pb-2 border-b-2 border-ink">
+        <span className="t-display-2 text-accent leading-none">{index}</span>
+        <h4 className="t-label-ink">{label}</h4>
+      </div>
+      {children}
+    </section>
+  );
+}
+
 function ExternalExpertBlock({ message }: { message: MessageRow }) {
   const c = message.content as ExpertContent;
   return (
-    <article
-      className="area-card !border-cobalt bg-soft-cobalt/40"
-    >
-      <header className="flex items-baseline justify-between gap-3 flex-wrap">
+    <article className="border-2 border-cobalt bg-soft-cobalt/40 p-6 sm:p-7">
+      <header className="flex items-baseline justify-between gap-3 flex-wrap pb-3 border-b-2 border-cobalt">
         <div>
-          <p className="kicker" style={{ color: "var(--cobalt)" }}>
-            EXTERNAL EXPERT · {c.provider ?? "—"}
+          <p
+            className="t-label-ink"
+            style={{ color: "var(--cobalt)" }}
+          >
+            외부 전문가 · {c.provider ?? "—"}
           </p>
-          <p className="label-mono mt-0.5">
-            domain: {c.domain ?? "—"}
+          <p className="t-label mt-1">
+            도메인 {c.domain ?? "—"}
             {typeof c.confidence === "number"
-              ? ` · confidence ${Math.round(c.confidence * 100)}%`
+              ? ` · 신뢰도 ${Math.round(c.confidence * 100)}%`
               : ""}
             {typeof c.cost_krw === "number"
               ? ` · ₩${c.cost_krw.toLocaleString()}`
@@ -886,79 +992,115 @@ function ExternalExpertBlock({ message }: { message: MessageRow }) {
           </p>
         </div>
         {c._note ? (
-          <span className="tag" style={{ borderColor: "var(--cobalt)", color: "var(--cobalt)" }}>
+          <span
+            className="t-label-ink px-2 py-0.5 border-2"
+            style={{
+              borderColor: "var(--cobalt)",
+              color: "var(--cobalt)",
+            }}
+          >
             {c.provider === "mock_expert" ? "MOCK" : "VERIFIED"}
           </span>
         ) : null}
       </header>
 
       {c.expert_finding ? (
-        <h3 className="mt-3 font-display text-2xl leading-tight">
-          {c.expert_finding}
-        </h3>
+        <div className="mt-5 border-l-[6px] pl-5 py-1" style={{ borderColor: "var(--cobalt)" }}>
+          <p className="t-label mb-2">전문가 의견</p>
+          <p className="t-lede font-display">{c.expert_finding}</p>
+        </div>
       ) : null}
 
       {c.citations && c.citations.length > 0 ? (
-        <div className="mt-4 dotted-rule pt-3">
-          <p className="label-mono mb-2">Citations</p>
-          <ul className="space-y-2">
+        <CoachSection
+          label={`참고 출처 ${c.citations.length}`}
+          index="A"
+        >
+          <ul className="space-y-2.5 mt-2">
             {c.citations.map((cit, i) => (
-              <li key={i} className="flex items-baseline gap-3 text-sm">
-                <span className="tag tag-gold">{cit.kind?.toUpperCase()}</span>
-                <span className="font-mono text-xs text-ink-soft">
-                  {cit.source_id}
+              <li
+                key={i}
+                className="grid grid-cols-[4.5rem_minmax(120px,auto)_1fr] gap-3 items-baseline"
+              >
+                <span className="t-label-ink !text-paper bg-gold px-2 py-0.5 text-center">
+                  {citationKindLabel(cit.kind)}
                 </span>
-                <span>{cit.summary}</span>
+                <span className="t-label text-ink truncate" title={cit.source_id}>
+                  {humanizeSourceId(cit.source_id)}
+                </span>
+                <span className="t-body-sm text-ink/90">{cit.summary}</span>
               </li>
             ))}
           </ul>
-        </div>
+        </CoachSection>
       ) : null}
 
       {c.recommended_actions && c.recommended_actions.length > 0 ? (
-        <div className="mt-4 dotted-rule pt-3">
-          <p className="kicker mb-2">Expert recommendations</p>
-          <ul className="space-y-3">
+        <CoachSection
+          label={`전문가 권고 ${c.recommended_actions.length}`}
+          index="B"
+        >
+          <ol className="space-y-4 mt-3">
             {c.recommended_actions.map((a, i) => (
               <li
                 key={i}
-                className="border border-ink-soft p-3 bg-paper-soft"
+                className="grid grid-cols-[3rem_1fr] gap-4 border-2 border-ink-soft/40 bg-paper px-4 py-3"
               >
-                <header className="flex items-baseline justify-between gap-3">
-                  <span className="kicker">
-                    <span className="section-num">No. </span>
+                <div className="text-right">
+                  <p className="t-display-1 text-ink leading-none">
                     {String(i + 1).padStart(2, "0")}
-                  </span>
-                  <span className="tag tag-filled">
-                    {a.owner_hint} · {a.deadline_days}d
-                  </span>
-                </header>
-                <p className="mt-2 font-display text-base leading-snug">
-                  {a.title}
-                </p>
-                {a.risk_if_skipped ? (
-                  <p className="mt-2 label-mono">
-                    skipping risk — {a.risk_if_skipped}
                   </p>
-                ) : null}
+                </div>
+                <div className="border-l-2 border-ink-soft/30 pl-4">
+                  <div className="flex items-baseline gap-2 flex-wrap">
+                    <span className="t-label">담당</span>
+                    <span className="t-body-sm font-semibold text-ink">
+                      {a.owner_hint}
+                    </span>
+                    <span className="t-label text-ink-soft/40">·</span>
+                    <span className="t-label">기한</span>
+                    <span className="t-body-sm font-semibold text-ink t-num">
+                      {a.deadline_days}일
+                    </span>
+                  </div>
+                  <p className="mt-2 t-display-4 text-ink">{a.title}</p>
+                  {a.risk_if_skipped ? (
+                    <p className="mt-2 t-body-sm">
+                      <span className="t-label-ink text-amber mr-1.5 align-middle">
+                        주의
+                      </span>
+                      <span className="text-ink/85">{a.risk_if_skipped}</span>
+                    </p>
+                  ) : null}
+                </div>
               </li>
             ))}
-          </ul>
-        </div>
+          </ol>
+        </CoachSection>
       ) : null}
 
       {c.follow_up_questions && c.follow_up_questions.length > 0 ? (
-        <div className="mt-4 dotted-rule pt-3">
-          <p className="kicker mb-2">Follow-up questions</p>
-          <ul className="space-y-1.5 text-sm">
+        <CoachSection
+          label={`후속 질문 ${c.follow_up_questions.length}`}
+          index="C"
+        >
+          <ul className="space-y-2 mt-2">
             {c.follow_up_questions.map((q, i) => (
-              <li key={i}>· {q}</li>
+              <li
+                key={i}
+                className="grid grid-cols-[2.5rem_1fr] gap-3 t-body-sm"
+              >
+                <span className="t-label t-num">
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                <span className="text-ink/90">{q}</span>
+              </li>
             ))}
           </ul>
-        </div>
+        </CoachSection>
       ) : null}
 
-      <p className="mt-3 label-mono">
+      <p className="mt-5 t-label pt-3 border-t" style={{ borderColor: "var(--cobalt)" }}>
         {formatTime(message.created_at)}
       </p>
     </article>
@@ -1125,4 +1267,105 @@ function formatTime(iso: string): string {
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// ============================================================
+// 평이한 한국어 라벨 변환 — 직원이 쉽게 이해할 수 있도록
+// ============================================================
+
+/**
+ * 근거 종류(DOC/RAG/KPI/USER_INPUT)를 한국어 라벨로 변환.
+ *  - DOC : 진단 응답 (사용자가 입력한 belief/evidence)
+ *  - RAG : 참고 문헌 (Christensen, Mom Test 등)
+ *  - KPI : 자동 수집된 KPI 수치
+ *  - 기타: 그대로 대문자 표기
+ */
+function evidenceKindLabel(kind: string): string {
+  const k = kind.toLowerCase();
+  if (k === "doc") return "진단";
+  if (k === "rag") return "문헌";
+  if (k === "kpi") return "KPI";
+  if (k === "user_input") return "답변";
+  return kind.toUpperCase();
+}
+
+/**
+ * 외부 전문가 citation 의 kind(law / guideline / benchmark)를 한국어로.
+ */
+function citationKindLabel(kind?: string): string {
+  if (!kind) return "참고";
+  const k = kind.toLowerCase();
+  if (k === "law") return "법령";
+  if (k === "guideline") return "가이드";
+  if (k === "benchmark") return "벤치마크";
+  return kind.toUpperCase();
+}
+
+/**
+ * sub_item code 나 RAG source id 를 직원이 읽기 쉬운 형태로 변환.
+ *  - "A1.JTBD.URGENCY" → "A1 · 긴급성"
+ *  - "Christensen_Competing_Against_Luck_2016" → "Christensen — Competing Against Luck (2016)"
+ *  - 알 수 없으면 그대로 반환
+ */
+const SUB_ITEM_KO: Record<string, string> = {
+  "A1.JTBD.URGENCY": "A1 · 긴급성",
+  "A1.JTBD.PUSH": "A1 · 구매 동기 (Push)",
+  "A1.JTBD.LANG": "A1 · 고객 언어",
+  "A2.SE.40": "A2 · Sean Ellis 40% 테스트",
+  "A2.RET.M3": "A2 · 3개월 retention",
+  "A3.BUYER.WTP": "A3 · 교사 활성 사용자",
+  "A3.BUYER.ROI": "A3 · 교사 ROI 자료",
+  "A4.ACT.D1": "A4 · D1 활성화율",
+  "A7.KISA.SELFCHECK": "A7 · KISA 자기점검",
+  "A7.PII.INCIDENT": "A7 · 개인정보 사고",
+  "A11.FOUNDERS.ALIGN": "A11 · 리더십 정렬",
+  "A11.RUN.STAY": "A11 · 핵심 인재 stay-intent",
+  "A14.WIN.RATE": "A14 · 경쟁 win-rate",
+};
+
+function humanizeSourceId(id: string): string {
+  if (SUB_ITEM_KO[id]) return SUB_ITEM_KO[id];
+  // RAG 출처 패턴: "Christensen_Competing_Against_Luck_2016"
+  if (/^[A-Z][a-zA-Z]+(_[A-Z][a-zA-Z]+)+_\d{4}$/.test(id)) {
+    const parts = id.split("_");
+    const year = parts[parts.length - 1];
+    const author = parts[0];
+    const title = parts.slice(1, -1).join(" ");
+    return `${author} — ${title} (${year})`;
+  }
+  return id;
+}
+
+/**
+ * 코치가 evidence summary 에 "belief=3·evidence=3·score=50 — …" 같은 raw 표현을
+ * 그대로 넣은 경우 평이한 한국어로 풀어준다.
+ */
+function humanizeEvidenceSummary(text: string): string {
+  if (!text) return text;
+  // "belief=3·evidence=3·score=50 — " 같은 머리말 제거 후 본문만 표시.
+  // belief 1–5 → 평가 5단계 라벨로 변환할 수도 있으나 가독성 위해 머리말 자체를 평이하게.
+  return text.replace(
+    /^belief=(\d)[\s·]+evidence=([\dN/A]+)[\s·]+score=([\d\-—]+)\s*—?\s*/,
+    (_m, b, e, s) => {
+      const beliefMap: Record<string, string> = {
+        "1": "측정 안 함",
+        "2": "낮음",
+        "3": "중간",
+        "4": "높음",
+        "5": "매우 높음",
+      };
+      const evidenceMap: Record<string, string> = {
+        "1": "측정 안 함",
+        "2": "초기 신호",
+        "3": "중간 수준",
+        "4": "양호",
+        "5": "강한 증거",
+        "N/A": "해당 없음",
+      };
+      const beliefLabel = beliefMap[b] ?? `level ${b}`;
+      const evidenceLabel = evidenceMap[e] ?? `level ${e}`;
+      const scoreNum = s === "—" || s === "-" ? "—" : `${s}점`;
+      return `자가평가 ${beliefLabel} · 증거 ${evidenceLabel} · 점수 ${scoreNum} — `;
+    },
+  );
 }

@@ -41,6 +41,10 @@ import { TaskDescriptionPopover } from "./_task-description";
 import { ImpactPanel } from "./_impact-panel";
 import { DataIngestPanel } from "./_data-ingest-panel";
 import { DataDrivenExtras } from "./_data-driven-extras";
+import { Emphasize } from "./_emphasize";
+import { TaskKpiChecklist } from "./_task-kpi-checklist";
+import { BulkPlaybookGenerator } from "./_bulk-playbook-generator";
+import { sortByPriority } from "@/lib/worklist/priority";
 
 interface Props {
   params: Promise<{ workspace: string }>;
@@ -73,7 +77,7 @@ export default async function WorklistPage({ params }: Props) {
   }>;
 
   const baselines: DomainBaseline[] = [];
-  let stage: Stage = "seed";
+  let stage: Stage = "open_beta";
   if (diagList.length > 0) {
     // average per-domain score across respondents
     const sums = new Map<string, { sum: number; n: number }>();
@@ -86,7 +90,7 @@ export default async function WorklistPage({ params }: Props) {
         sums.set(ds.code, cur);
       }
     }
-    stage = ((diagList[diagList.length - 1].stage as Stage) ?? "seed") as Stage;
+    stage = ((diagList[diagList.length - 1].stage as Stage) ?? "open_beta") as Stage;
     for (const d of framework.domains) {
       const agg = sums.get(d.code);
       baselines.push({
@@ -99,9 +103,9 @@ export default async function WorklistPage({ params }: Props) {
       });
     }
   }
-  const stagePriors = DEFAULT_PRIORS[stage] ?? DEFAULT_PRIORS.seed;
+  const stagePriors = DEFAULT_PRIORS[stage] ?? DEFAULT_PRIORS.open_beta;
 
-  // group by team -> phase -> tasks
+  // group by team -> phase -> tasks (sorted by priority within each phase)
   const grouped: Record<Team, Record<Phase, Task[]>> = {
     director: emptyPhaseMap(),
     planning: emptyPhaseMap(),
@@ -111,6 +115,12 @@ export default async function WorklistPage({ params }: Props) {
     marketing: emptyPhaseMap(),
   };
   for (const t of TASKS) grouped[t.team][t.phase].push(t);
+  // 각 (team, phase) 블록 안에서 priorityScore 내림차순 정렬 — 1번 카드가 가장 중요.
+  for (const team of TEAM_ORDER) {
+    for (const phase of PHASE_ORDER) {
+      grouped[team][phase] = sortByPriority(grouped[team][phase], stage);
+    }
+  }
 
   // funnel-stage counts (for ribbon)
   const funnelCounts: Record<FunnelStage, number> = {
@@ -283,8 +293,11 @@ export default async function WorklistPage({ params }: Props) {
                               className="relative border border-ink-soft/40 hover:border-ink/60 bg-paper transition-colors"
                             >
                               <div className="flex items-start gap-3 sm:gap-4 p-4 sm:p-5">
-                                <span className="font-mono text-xs text-ink-soft mt-1 w-6 shrink-0 tabular-nums">
-                                  {(i + 1).toString().padStart(2, "0")}
+                                <span
+                                  className="font-mono text-[11px] font-semibold text-accent mt-1 w-9 shrink-0 tabular-nums tracking-wide"
+                                  title={`팀-단계 내 우선순위 P${(i + 1).toString().padStart(2, "0")}`}
+                                >
+                                  P{(i + 1).toString().padStart(2, "0")}
                                 </span>
                                 <div className="flex-1 min-w-0">
                                   {/* Tags row + action toolbar (?, ✎, Status) on the right */}
@@ -316,10 +329,10 @@ export default async function WorklistPage({ params }: Props) {
                                       </span>
                                       {ai ? (
                                         <span
-                                          className="label-mono px-1.5 bg-soft-green/40 text-green border border-green/40"
+                                          className="font-mono text-[10px] uppercase tracking-widest px-1.5 py-0.5 bg-green text-paper"
                                           title={`AI 활용: ${ai}`}
                                         >
-                                          ✨ AI 활용
+                                          AI
                                         </span>
                                       ) : null}
                                       {t.domain ? (
@@ -338,6 +351,7 @@ export default async function WorklistPage({ params }: Props) {
                                         cadence={t.cadence}
                                         tier={t.tier}
                                         domain={t.domain}
+                                        task={t}
                                       />
                                       <TaskEditButton
                                         workspace={workspace}
@@ -351,41 +365,39 @@ export default async function WorklistPage({ params }: Props) {
                                     </div>
                                   </div>
                                   <TaskTitle workspace={workspace} task={t} />
-                                  <p className="mt-1.5 text-sm leading-relaxed text-ink-soft">
-                                    <span className="font-medium text-ink">
-                                      왜:
-                                    </span>{" "}
-                                    {t.why}
+                                  <p className="mt-3 t-body">
+                                    <span className="inline-block mr-2 px-1.5 py-0.5 t-label-ink !text-paper bg-ink align-middle">
+                                      왜
+                                    </span>
+                                    <Emphasize text={t.why} />
                                   </p>
                                   {ai ? (
-                                    <p className="mt-1 text-sm leading-relaxed text-ink-soft">
-                                      <span className="font-medium text-ink">
-                                        AI 활용:
-                                      </span>{" "}
-                                      {ai}
+                                    <p className="mt-2 t-body">
+                                      <span className="inline-block mr-2 px-1.5 py-0.5 t-label-ink !text-paper bg-green align-middle">
+                                        AI 활용
+                                      </span>
+                                      <Emphasize text={ai} />
                                     </p>
                                   ) : null}
                                   {t.hint ? (
-                                    <p className="mt-1 text-sm leading-relaxed text-ink-soft">
-                                      <span className="font-medium text-ink">
-                                        힌트:
-                                      </span>{" "}
-                                      {t.hint}
+                                    <p className="mt-2 t-body">
+                                      <span className="inline-block mr-2 px-1.5 py-0.5 t-label-ink !text-paper bg-cobalt align-middle">
+                                        힌트
+                                      </span>
+                                      <Emphasize text={t.hint} />
                                     </p>
                                   ) : null}
                                   {t.escalation_hint ? (
-                                    <p className="mt-2 inline-flex items-baseline gap-1.5 text-xs px-2 py-1 bg-soft-amber/40 border border-amber/40 text-ink leading-snug">
-                                      <span className="font-display text-sm text-accent leading-none">
-                                        ↑
+                                    <p className="mt-3 inline-flex items-baseline gap-2 t-body-sm px-3 py-2 bg-soft-amber/50 border-l-4 border-amber/80">
+                                      <span className="t-label-ink text-amber shrink-0">
+                                        목표 가속
                                       </span>
-                                      <span>
-                                        <span className="font-medium">목표 가속:</span>{" "}
-                                        {t.escalation_hint}
-                                      </span>
+                                      <Emphasize text={t.escalation_hint} />
                                     </p>
                                   ) : null}
                                 </div>
                               </div>
+                              <TaskKpiChecklist task={t} workspace={workspace} />
                             </li>
                           );
                         })}
@@ -401,6 +413,12 @@ export default async function WorklistPage({ params }: Props) {
 
       {/* DATA-DRIVEN EXTRAS — derived 신규 업무 + override 배지 데코레이션 */}
       <DataDrivenExtras workspace={workspace} />
+
+      {/* BULK PLAYBOOK GENERATOR — 진단 완료 후 모든 카드 실무 자료 자동 생성 */}
+      <BulkPlaybookGenerator
+        workspace={workspace}
+        hasDiagnosis={baselines.length > 0}
+      />
 
       {/* FOOTER */}
       <footer className="max-w-6xl mx-auto px-6 sm:px-10 mt-16 border-t border-ink-soft pt-6 flex flex-wrap items-baseline justify-between gap-4">

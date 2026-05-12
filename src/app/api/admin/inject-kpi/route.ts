@@ -38,13 +38,6 @@ interface Bucket {
 }
 
 const TRANSFORMS: Record<string, (value: number) => Bucket> = {
-  "stripe:runway_months": (v) => {
-    if (v < 6) return { v: 1, severity: "red", label: "런웨이 < 6개월 — 즉시 자금 조달" };
-    if (v < 9) return { v: 2, severity: "red", label: "런웨이 6-9개월 — 빨강" };
-    if (v < 14) return { v: 3, severity: "amber", label: "런웨이 9-14개월 — 주의" };
-    if (v < 18) return { v: 4, severity: "amber", label: "런웨이 14-18개월 — 양호" };
-    return { v: 5, severity: "green", label: "런웨이 ≥ 18개월 — 안전" };
-  },
   "ga4:d1_activation_rate": (v) => {
     if (v < 0.2) return { v: 1, severity: "red", label: "D1 < 20% — 활성화 결손" };
     if (v < 0.35) return { v: 2, severity: "amber", label: "D1 20-34% — 주의" };
@@ -126,7 +119,7 @@ export async function POST(req: Request) {
   }
 
   // Resolve org
-  const stage: Stage = "seed";
+  const stage: Stage = "open_beta";
   const org = await ensureWorkspaceOrg(sb, workspace_id, stage);
 
   // Apply transform
@@ -235,8 +228,6 @@ function formatNarrative({
 function formatValue(source: string, metric_key: string, value: number): string {
   const key = `${source}:${metric_key}`;
   switch (key) {
-    case "stripe:runway_months":
-      return `${value.toFixed(1)}개월`;
     case "ga4:d1_activation_rate":
     case "mixpanel:m3_retention_rate":
       return `${(value * 100).toFixed(1)}%`;
@@ -251,6 +242,6 @@ export async function GET() {
   return NextResponse.json({
     ok: true,
     message:
-      "POST { workspace_id, source, metric_key, value }. 매핑된 sources: stripe.runway_months, ga4.d1_activation_rate, mixpanel.m3_retention_rate, channeltalk.nps",
+      "POST { workspace_id, source, metric_key, value }. 매핑된 sources: ga4.d1_activation_rate, mixpanel.m3_retention_rate, channeltalk.nps",
   });
 }

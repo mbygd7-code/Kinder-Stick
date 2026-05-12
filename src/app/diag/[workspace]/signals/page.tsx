@@ -1,6 +1,11 @@
 import { notFound } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { resolveOrgWithBackfill } from "@/lib/org";
+import { loadFramework } from "@/lib/framework/loader";
+import {
+  isStaleFinanceContent,
+  isRemovedDomain,
+} from "@/lib/stale-content-filter";
 import { SignalsClient } from "./_signals";
 
 interface Props {
@@ -64,11 +69,17 @@ export default async function SignalsPage({ params }: Props) {
           "id, kind, domain_code, narrative, severity, metadata, created_at",
         )
         .eq("org_id", org.id)
+        // 자금 관련 제거된 도메인 (A5/A12) 의 stale row 는 표시하지 않음
+        .not("domain_code", "in", "(A5,A12)")
         .order("created_at", { ascending: false })
         .limit(50),
     ]);
     snapshots = (snapRes.data ?? []) as KpiSnapshot[];
-    events = (evRes.data ?? []) as SignalEvent[];
+    // 자금·IR 관련 stale narrative + 제거된 도메인 시그널 제외
+    events = ((evRes.data ?? []) as SignalEvent[]).filter(
+      (e) =>
+        !isRemovedDomain(e.domain_code) && !isStaleFinanceContent(e.narrative),
+    );
   }
 
   const { data: metricDefs } = await sb
@@ -77,6 +88,11 @@ export default async function SignalsPage({ params }: Props) {
     .eq("active", true)
     .order("source");
 
+  const framework = loadFramework();
+  const domainNameMap: Record<string, string> = Object.fromEntries(
+    framework.domains.map((d) => [d.code, d.name_ko]),
+  );
+
   return (
     <SignalsClient
       workspace={workspace}
@@ -84,6 +100,7 @@ export default async function SignalsPage({ params }: Props) {
       snapshots={snapshots}
       events={events}
       metricDefs={(metricDefs ?? []) as MetricDefinition[]}
+      domainNameMap={domainNameMap}
       showMockInjector={process.env.NODE_ENV !== "production"}
     />
   );

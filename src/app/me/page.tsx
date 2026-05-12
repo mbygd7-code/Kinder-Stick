@@ -143,7 +143,7 @@ export default async function MePage() {
         </h1>
         <p className="mt-5 max-w-3xl text-lg leading-relaxed text-ink-soft">
           소속된 {cards.length}개 워크스페이스의 핵심 시그널을 한 화면에서.
-          새 워크스페이스를 claim 하려면 <a href="/diag" className="underline hover:text-accent">/diag</a> 에서 ID 입력 후 dashboard에서 "Claim ownership" 버튼.
+          새 워크스페이스를 만들려면 <a href="/diag" className="underline hover:text-accent">/diag</a> 에서 ID 입력 후 진단을 시작하고, 홈 페이지에서 "내 워크스페이스로 저장" 버튼.
         </p>
       </section>
 
@@ -151,7 +151,7 @@ export default async function MePage() {
         {cards.map((c) => (
           <a
             key={c.org_id}
-            href={`/diag/${c.workspace_id}/dashboard`}
+            href={`/diag/${c.workspace_id}/home`}
             className="area-card hover:bg-paper-deep/30 block transition-colors"
           >
             <header className="flex items-baseline justify-between gap-2 flex-wrap">

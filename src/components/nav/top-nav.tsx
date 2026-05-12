@@ -17,30 +17,45 @@ interface NavItem {
 const GLOBAL_NAV: NavItem[] = [
   { href: "/", label: "홈", short: "홈" },
   { href: "/diag", label: "진단", short: "진단" },
-  { href: "/worklist", label: "워크리스트", short: "워크리스트" },
   { href: "/me", label: "내 워크스페이스", short: "내 워크스페이스" },
 ];
 
-/** 직원 일상 흐름 — 자주 보는 5개만 primary로 노출 */
+/** 일상 흐름 — 4개로 압축. 진단→홈→실행→타임라인의 자연 순서. */
 function workspacePrimaryNav(ws: string): NavItem[] {
   return [
-    { href: `/diag/${ws}/dashboard`, label: "대시보드", short: "대시보드" },
+    { href: `/diag/${ws}/home`, label: "홈", short: "홈" },
     { href: `/diag/${ws}/worklist`, label: "워크리스트", short: "워크리스트" },
     { href: `/diag/${ws}/actions`, label: "액션", short: "액션" },
-    { href: `/diag/${ws}/result`, label: "결과", short: "결과" },
-    { href: `/diag/${ws}`, label: "재진단", short: "재진단" },
+    { href: `/diag/${ws}/timeline`, label: "타임라인", short: "타임라인" },
   ];
 }
 
-/** 가끔 보는 운영·관리 — 드롭다운에 정리 */
+/** 가끔 보는 운영·관리 — 드롭다운. 깊이 보기 + 설정. */
 function workspaceSecondaryNav(ws: string): NavItem[] {
   return [
-    { href: `/diag/${ws}/timeline`, label: "타임라인 — 분기별 변화" },
-    { href: `/diag/${ws}/signals`, label: "KPI 시그널 — 자동 측정" },
+    { href: `/diag/${ws}/result`, label: "결과 상세 — 요인 분해·breakdown" },
+    { href: `/diag/${ws}/signals`, label: "시그널 피드 — KPI 자동 측정" },
     { href: `/diag/${ws}/members`, label: "멤버 관리" },
     { href: `/diag/${ws}/integrations`, label: "외부 연동" },
-    { href: `/diag/${ws}/audit`, label: "감사 — 코칭 효과 분석" },
+    { href: `/diag/${ws}/audit`, label: "감사 — 응답·코칭 로그" },
   ];
+}
+
+/**
+ * 어떤 워크스페이스든 bulk AI 자동 생성이 진행 중인지 확인.
+ * localStorage 키 `worklist:bulk:running:*` 가 존재하고 같은 ws의 dismiss
+ * 플래그가 없으면 active.
+ */
+function detectBulkActive(): boolean {
+  if (typeof window === "undefined") return false;
+  for (let i = 0; i < window.localStorage.length; i++) {
+    const key = window.localStorage.key(i);
+    if (!key || !key.startsWith("worklist:bulk:running:")) continue;
+    const ws = key.slice("worklist:bulk:running:".length);
+    const dismissKey = `worklist:bulk:dismissed:${ws}`;
+    if (!window.localStorage.getItem(dismissKey)) return true;
+  }
+  return false;
 }
 
 export function TopNav({ userEmail }: Props) {
@@ -58,6 +73,28 @@ export function TopNav({ userEmail }: Props) {
 
   // Manage state
   const [adminOpen, setAdminOpen] = useState(false);
+
+  // Bulk AI 자동 생성 진행 상태 — 워크리스트 GNB 링크에 로딩 바 표시
+  const [bulkActive, setBulkActive] = useState(false);
+
+  useEffect(() => {
+    setBulkActive(detectBulkActive());
+    const onState = (e: Event) => {
+      const ce = e as CustomEvent<{ active?: boolean }>;
+      if (typeof ce.detail?.active === "boolean") {
+        setBulkActive(ce.detail.active || detectBulkActive());
+      } else {
+        setBulkActive(detectBulkActive());
+      }
+    };
+    const onStorage = () => setBulkActive(detectBulkActive());
+    window.addEventListener("worklist:bulk:state", onState);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("worklist:bulk:state", onState);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, []);
 
   // Close menus on route change
   useEffect(() => {
@@ -99,18 +136,34 @@ export function TopNav({ userEmail }: Props) {
         >
           {GLOBAL_NAV.map((item) => {
             const active = isActive(pathname, item.href, ws);
+            const isWorklist = item.href === "/worklist";
+            const showLoader = isWorklist && bulkActive;
             return (
-              <Link
+              <span
                 key={item.href}
-                href={item.href}
-                className={`px-3 py-1.5 text-sm font-medium tracking-tight transition-colors border-b-2 -mb-[2px] ${
-                  active
-                    ? "border-accent text-ink"
-                    : "border-transparent text-ink-soft hover:text-ink hover:border-ink-soft"
-                }`}
+                className="relative inline-flex flex-col items-stretch"
               >
-                {item.short ?? item.label}
-              </Link>
+                <Link
+                  href={item.href}
+                  className={`px-3 py-1.5 text-sm font-medium tracking-tight transition-colors border-b-2 -mb-[2px] ${
+                    active
+                      ? "border-accent text-ink"
+                      : "border-transparent text-ink-soft hover:text-ink hover:border-ink-soft"
+                  }`}
+                  title={showLoader ? "AI 자동 생성 진행 중" : undefined}
+                >
+                  {item.short ?? item.label}
+                </Link>
+                {showLoader ? (
+                  <span
+                    aria-hidden="true"
+                    className="pointer-events-none absolute left-0 right-0 bottom-[-2px] h-0.5 bg-accent origin-left"
+                    style={{
+                      animation: "nav-loader-fill 1.4s ease-in-out infinite",
+                    }}
+                  />
+                ) : null}
+              </span>
             );
           })}
         </nav>
@@ -171,7 +224,7 @@ export function TopNav({ userEmail }: Props) {
           <div className="max-w-7xl mx-auto px-6 sm:px-10 h-11 flex items-center gap-4">
             {/* WS chip */}
             <Link
-              href={`/diag/${ws}/dashboard`}
+              href={`/diag/${ws}/home`}
               className="flex items-baseline gap-1.5 px-2 py-1 border border-ink-soft hover:border-ink hover:bg-paper-deep transition-colors min-w-0 shrink-0"
               title={`Workspace: ${ws}`}
             >
@@ -188,18 +241,35 @@ export function TopNav({ userEmail }: Props) {
             >
               {primaryItems.map((item) => {
                 const active = isActive(pathname, item.href, ws);
+                const isWorklist = item.href.endsWith("/worklist");
+                const showLoader = isWorklist && bulkActive;
                 return (
-                  <Link
+                  <span
                     key={item.href}
-                    href={item.href}
-                    className={`px-2.5 py-1 text-sm font-medium tracking-tight transition-colors border-b-2 -mb-[1px] whitespace-nowrap ${
-                      active
-                        ? "border-accent text-ink"
-                        : "border-transparent text-ink-soft hover:text-ink hover:border-ink-soft"
-                    }`}
+                    className="relative inline-flex flex-col items-stretch"
                   >
-                    {item.short ?? item.label}
-                  </Link>
+                    <Link
+                      href={item.href}
+                      className={`px-2.5 py-1 text-sm font-medium tracking-tight transition-colors border-b-2 -mb-[1px] whitespace-nowrap ${
+                        active
+                          ? "border-accent text-ink"
+                          : "border-transparent text-ink-soft hover:text-ink hover:border-ink-soft"
+                      }`}
+                      title={showLoader ? "AI 자동 생성 진행 중" : undefined}
+                    >
+                      {item.short ?? item.label}
+                    </Link>
+                    {showLoader ? (
+                      <span
+                        aria-hidden="true"
+                        className="pointer-events-none absolute left-0 right-0 bottom-[-1px] h-0.5 bg-accent origin-left"
+                        style={{
+                          animation:
+                            "nav-loader-fill 1.4s ease-in-out infinite",
+                        }}
+                      />
+                    ) : null}
+                  </span>
                 );
               })}
             </nav>
@@ -367,19 +437,13 @@ function isActive(
   if (href === "/") return pathname === "/";
   // 진단 시작: highlighted on /diag landing only (workspaces have their own row)
   if (href === "/diag") return pathname === "/diag";
-  // 워크리스트 (global): highlighted on /worklist OR /diag/[ws]/worklist
-  if (href === "/worklist") {
-    return (
-      pathname === "/worklist" ||
-      (ws !== null && pathname.startsWith(`/diag/${ws}/worklist`))
-    );
-  }
   // 내 워크스페이스: highlighted on /me OR inside any workspace
-  // (but NOT when we're specifically on /diag/[ws]/worklist — that goes to 워크리스트)
+  // (워크리스트 글로벌 라우트는 제거됨 — 워크스페이스 컨텍스트의 primary nav에서만 접근)
   if (href === "/me") {
     if (pathname === "/me") return true;
+    // 워크스페이스 내부 어느 페이지든 "내 워크스페이스" 메뉴를 active로 표시
     if (ws !== null && pathname.startsWith("/diag/")) {
-      return !pathname.startsWith(`/diag/${ws}/worklist`);
+      return true;
     }
     return false;
   }

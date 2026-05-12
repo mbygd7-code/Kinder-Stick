@@ -20,7 +20,7 @@ export default function StartDiagnosisForm() {
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        if (valid) router.push(`/diag/${ws}/dashboard`);
+        if (valid) router.push(`/diag/${ws}/home`);
       }}
     >
       <label

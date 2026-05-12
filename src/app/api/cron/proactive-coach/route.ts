@@ -138,7 +138,12 @@ async function run(req: Request) {
       signal_narrative: sig.narrative,
       signal_severity: sig.severity,
       signal_metadata: sig.metadata ?? {},
-      stage: (org.stage ?? "seed") as "pre_seed" | "seed" | "series_a" | "series_b" | "series_c_plus",
+      stage: (org.stage ?? "open_beta") as
+        | "closed_beta"
+        | "open_beta"
+        | "ga_early"
+        | "ga_growth"
+        | "ga_scale",
     });
     results.push(r);
     if (r.applied) processed++;
