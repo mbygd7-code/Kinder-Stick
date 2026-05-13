@@ -124,14 +124,26 @@ export function ProgressStrip({ workspace, tasks, autoMap }: Props) {
         />
       </div>
 
-      {/* per-team mini-bar */}
+      {/* per-team mini-bar — 클릭 시 해당 팀 업무 리스트 헤더로 스크롤 */}
       <div className="mt-5 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {(Object.keys(byTeam) as Team[]).map((tm) => {
           const { done, total } = byTeam[tm];
           const p = total > 0 ? Math.round((done / total) * 100) : 0;
           return (
-            <div key={tm} className="border border-ink-soft/40 bg-paper p-3">
-              <p className="label-mono mb-1 truncate">{TEAM_LABEL[tm]}</p>
+            <button
+              key={tm}
+              type="button"
+              onClick={() => scrollToTeam(tm)}
+              className="text-left border border-ink-soft/40 bg-paper p-3 hover:border-ink hover:bg-paper-deep/40 transition-colors cursor-pointer group"
+              title={`${TEAM_LABEL[tm]} 업무 리스트로 이동`}
+              aria-label={`${TEAM_LABEL[tm]} 섹션으로 스크롤 (완료 ${done}/${total})`}
+            >
+              <p className="label-mono mb-1 truncate flex items-center justify-between gap-1">
+                <span className="truncate">{TEAM_LABEL[tm]}</span>
+                <span className="opacity-0 group-hover:opacity-100 transition-opacity text-ink shrink-0">
+                  ↓
+                </span>
+              </p>
               <p className="font-display text-xl leading-none">
                 {done}
                 <span className="font-mono text-xs text-ink-soft">
@@ -144,7 +156,7 @@ export function ProgressStrip({ workspace, tasks, autoMap }: Props) {
                   style={{ width: `${p}%` }}
                 />
               </div>
-            </div>
+            </button>
           );
         })}
       </div>
@@ -196,6 +208,25 @@ function SegmentedBar({
       </div>
     </div>
   );
+}
+
+function scrollToTeam(team: Team) {
+  if (typeof window === "undefined") return;
+  const el = document.querySelector(
+    `[data-team-section="${team}"]`,
+  ) as HTMLElement | null;
+  if (!el) return;
+  el.scrollIntoView({ behavior: "smooth", block: "start" });
+  // 살짝 하이라이트 (잠깐 깜빡 효과)
+  el.classList.add("ring-2", "ring-ink", "ring-offset-2", "ring-offset-paper");
+  window.setTimeout(() => {
+    el.classList.remove(
+      "ring-2",
+      "ring-ink",
+      "ring-offset-2",
+      "ring-offset-paper",
+    );
+  }, 1200);
 }
 
 function effectiveStatuses(

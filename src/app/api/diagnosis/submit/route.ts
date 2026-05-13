@@ -12,6 +12,7 @@ import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { ensureWorkspaceOrg } from "@/lib/org";
 import { loadFramework } from "@/lib/framework/loader";
+import { getCurrentProfile } from "@/lib/auth/session";
 import {
   computeSubItemScore,
   computeGroupScore,
@@ -198,8 +199,21 @@ export async function POST(req: Request) {
   }
   const respondent_num = nextNumData as number;
 
-  // 2. INSERT diagnosis_responses (v1 호환 + v2 컬럼)
+  // 2. INSERT diagnosis_responses (v1 호환 + v2 컬럼 + PIN-auth team tag)
   const session_id = crypto.randomUUID();
+
+  // 커스텀 PIN 세션이 있으면 응답자 정체성을 태그.
+  // - admin: respondent_team = 'admin' (모든 팀 응답 가능 의미)
+  // - member: respondent_team = profile.team ?? null
+  // 익명 응답 (PIN 미로그인) 은 둘 다 null
+  const me = await getCurrentProfile().catch(() => null);
+  const respondent_profile_id = me?.id ?? null;
+  const respondent_team = me
+    ? me.role === "admin"
+      ? "admin"
+      : (me.team ?? null)
+    : null;
+
   const insertRow = {
     workspace_id: payload.workspace_id,
     respondent_num,
@@ -210,6 +224,8 @@ export async function POST(req: Request) {
     result: result as unknown as Record<string, unknown>,
     session_id,
     context: payload.context as unknown as Record<string, unknown>,
+    respondent_profile_id,
+    respondent_team,
   };
 
   const { data: inserted, error: insErr } = await sb

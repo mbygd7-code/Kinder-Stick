@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { loadFramework } from "@/lib/framework/loader";
 import { UnifiedDiagnosisShell } from "./_unified-shell";
+import { DiagnosisPermissionBanner } from "./_permission-banner";
 
 interface Props {
   params: Promise<{ workspace: string }>;
@@ -20,5 +21,11 @@ export default async function DiagnosisPage({ params }: Props) {
 
   const framework = loadFramework();
 
-  return <UnifiedDiagnosisShell workspace={workspace} framework={framework} />;
+  return (
+    <>
+      {/* PIN 로그인 권한 배너 (admin / 팀멤버 / 익명) */}
+      <DiagnosisPermissionBanner />
+      <UnifiedDiagnosisShell workspace={workspace} framework={framework} />
+    </>
+  );
 }

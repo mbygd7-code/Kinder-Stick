@@ -45,6 +45,7 @@ import { DataDrivenExtras } from "./_data-driven-extras";
 import { Emphasize } from "./_emphasize";
 import { TaskKpiChecklist } from "./_task-kpi-checklist";
 import { BulkPlaybookGenerator } from "./_bulk-playbook-generator";
+import { ScrollToTopButton } from "./_scroll-to-top";
 import { sortByPriority } from "@/lib/worklist/priority";
 
 interface Props {
@@ -208,14 +209,14 @@ export default async function WorklistPage({ params }: Props) {
         }}
       />
 
-      {/* FUNNEL RIBBON — 고객여정 단계별 분포. 항상 노출 (예전엔 collapsible) */}
+      {/* PROGRESS STRIP — slim, 단독 */}
       <section className="max-w-6xl mx-auto px-6 sm:px-10 mt-8">
-        <FunnelRibbon workspace={workspace} counts={funnelCounts} />
+        <ProgressStrip workspace={workspace} tasks={TASKS} autoMap={autoMap} />
       </section>
 
-      {/* PROGRESS STRIP — slim, 단독 */}
+      {/* FUNNEL RIBBON — 고객여정 단계별 분포. 항상 노출 (예전엔 collapsible) */}
       <section className="max-w-6xl mx-auto px-6 sm:px-10 mt-6">
-        <ProgressStrip workspace={workspace} tasks={TASKS} autoMap={autoMap} />
+        <FunnelRibbon workspace={workspace} counts={funnelCounts} />
       </section>
 
       {/* TEAM SECTIONS HEADER + SEARCH·FILTER — 업무 리스트 바로 위에 배치 */}
@@ -447,6 +448,9 @@ export default async function WorklistPage({ params }: Props) {
         </p>
         <p className="label-mono">{ISSUE_DATE}</p>
       </footer>
+
+      {/* FLOATING — 맨 위로 스크롤 버튼 */}
+      <ScrollToTopButton />
     </main>
   );
 }

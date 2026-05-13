@@ -3,7 +3,12 @@
  *
  * 진단·결과·코칭이 무엇인지 한 화면에 소개하고
  * 진단 시작·내 워크리스트 두 가지 CTA 제공.
+ *
+ * 2026-05-14: 우측 hero "이 시스템이 답하는 질문" 자리에 종합 건강도 카드를
+ * 노출 (로그인 사용자는 cross-card aggregate, 비로그인은 가입 유도).
  */
+
+import { AggregateSummary } from "./_aggregate-summary";
 
 const ISSUE_DATE = new Date().toISOString().slice(0, 10);
 
@@ -50,17 +55,10 @@ export default function Home() {
               </div>
             </div>
 
-            <aside className="lg:col-span-4 lg:pl-8 lg:border-l border-ink-soft/40">
-              <p className="kicker mb-3">이 시스템이 답하는 질문</p>
-              <ul className="space-y-3">
-                <Q text="어디부터 손대야 할지 모르겠다." />
-                <Q text="매주 같은 문제를 고치는데 결과가 안 변한다." />
-                <Q text="팀원들이 같은 문제를 다르게 보고 있다." />
-              </ul>
-              <p className="mt-5 label-mono">
-                한국 영유아 EdTech 운영진 기준으로 설계.
-              </p>
-            </aside>
+            {/* AggregateSummary — server component (async).
+                로그인 사용자: 모든 진단 카드 종합 건강도.
+                비로그인: 가입 유도 + 기능 소개. */}
+            <AggregateSummary />
           </div>
         </div>
       </section>
@@ -163,15 +161,6 @@ export default function Home() {
         </div>
       </footer>
     </main>
-  );
-}
-
-function Q({ text }: { text: string }) {
-  return (
-    <li className="flex items-baseline gap-3">
-      <span className="font-display text-xl text-accent">·</span>
-      <span className="text-base leading-relaxed">“{text}”</span>
-    </li>
   );
 }
 
