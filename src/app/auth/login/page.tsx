@@ -6,7 +6,7 @@
  * 흐름:
  *   1) 이메일 입력 (이전 사용 ID 호버 시 드롭다운)
  *   2) PIN 4자리 입력
- *   3) 로그인 성공 → next 또는 /me
+ *   3) 로그인 성공 → next 또는 /diag
  *
  * 재방문 편의:
  *   - localStorage 'kso_last_emails' 에 최근 사용 이메일 5개 보관 → ID 입력란 호버 시 노출
@@ -90,7 +90,8 @@ export default function LoginPage() {
       rememberEmail(email);
       setSuccess(true);
       const params = new URLSearchParams(window.location.search);
-      const next = params.get("next") ?? "/me";
+      // 기본 redirect: 진단 카드 hub (/me 라우트 없음)
+      const next = params.get("next") ?? "/diag";
       setTimeout(() => router.replace(next), 500);
     });
   }

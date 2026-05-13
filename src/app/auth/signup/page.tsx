@@ -70,7 +70,8 @@ export default function SignupPage() {
       }
       rememberEmail(email);
       setSuccess(true);
-      setTimeout(() => router.replace("/me"), 600);
+      // 신규 가입자는 진단 카드 hub 로 — 첫 진단 시작 또는 기존 카드 합류
+      setTimeout(() => router.replace("/diag"), 600);
     });
   }
 
@@ -96,7 +97,7 @@ export default function SignupPage() {
               <span className="font-mono text-base">{email}</span>
             </h2>
             <p className="mt-3 text-sm text-ink-soft">
-              자동으로 로그인되었습니다. /me 로 이동합니다…
+              자동으로 로그인되었습니다. 진단 카드로 이동합니다…
             </p>
           </div>
         ) : (

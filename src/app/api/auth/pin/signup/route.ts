@@ -4,7 +4,7 @@
  *
  * - 신규 kso_profiles row 생성
  * - 첫 사용자는 자동 admin (운영 편의)
- * - 성공 시 세션 쿠키 발급 → /me 로 이동 가능
+ * - 성공 시 세션 쿠키 발급 → /diag 진단 카드 hub 로 이동
  */
 
 import { NextResponse } from "next/server";

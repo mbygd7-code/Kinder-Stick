@@ -29,7 +29,7 @@ export default function AuthCallbackPage() {
     const next =
       params.get("next") ??
       hashParams.get("next") ??
-      "/me";
+      "/diag";
     const code = params.get("code");
     const errorDescription =
       params.get("error_description") ?? hashParams.get("error_description");
