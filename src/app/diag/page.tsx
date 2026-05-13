@@ -6,44 +6,161 @@ import {
 } from "@/lib/framework/loader";
 import StartDiagnosisForm from "./_start-form";
 import { getCurrentUser } from "@/lib/supabase/auth";
+import { supabaseAdmin } from "@/lib/supabase/server";
+import { aggregateRespondents, type DiagRowMin } from "@/lib/diagnosis-aggregate";
+
+// 새 진단 제출 직후 워크스페이스 카드 목록이 즉시 보여야 함 → 캐시 비활성화.
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const ISSUE_DATE = new Date().toISOString().slice(0, 10);
+
+// ============================================================
+// DEV-ONLY: 모든 워크스페이스 진단 통계
+// [TODO PRODUCTION] 로그인 인증 복원 시 user 의 org_members 만 표시하도록 변경.
+// ============================================================
+interface WorkspaceSummary {
+  workspace_id: string;
+  respondents: number;
+  latest_completed_at: string;
+  /**
+   * 홈 페이지(`/diag/{ws}/home`) 와 동일한 aggregate 계산 결과.
+   * sub-item 단위 합산 + time decay + consensus 보정.
+   */
+  score: number | null;
+  fp_6m: number | null;
+  fp_12m: number | null;
+  latest_stage: string | null;
+}
+
+async function fetchAllWorkspaces(): Promise<WorkspaceSummary[]> {
+  const framework = loadFramework();
+  const sb = supabaseAdmin();
+  const { data, error } = await sb
+    .from("diagnosis_responses")
+    .select("workspace_id, completed_at, stage, respondent_num, responses")
+    .order("completed_at", { ascending: false })
+    .limit(500);
+
+  if (error || !data) return [];
+
+  // 워크스페이스별로 모든 응답 row 모음
+  const groups = new Map<
+    string,
+    {
+      workspace_id: string;
+      rows: Array<
+        DiagRowMin & {
+          completed_at: string;
+        }
+      >;
+    }
+  >();
+  for (const row of data as Array<{
+    workspace_id: string;
+    completed_at: string;
+    stage: string | null;
+    respondent_num: number;
+    responses: DiagRowMin["responses"];
+  }>) {
+    const slim: DiagRowMin & { completed_at: string } = {
+      respondent_num: row.respondent_num,
+      stage: row.stage,
+      responses: row.responses,
+      completed_at: row.completed_at,
+    };
+    const existing = groups.get(row.workspace_id);
+    if (!existing) {
+      groups.set(row.workspace_id, {
+        workspace_id: row.workspace_id,
+        rows: [slim],
+      });
+    } else {
+      existing.rows.push(slim);
+    }
+  }
+
+  // 각 워크스페이스마다 home 과 동일한 aggregate 호출
+  const out: WorkspaceSummary[] = [];
+  for (const g of groups.values()) {
+    const sorted = g.rows
+      .slice()
+      .sort(
+        (a, b) =>
+          new Date(b.completed_at).getTime() -
+          new Date(a.completed_at).getTime(),
+      );
+    try {
+      const agg = aggregateRespondents(framework, g.rows);
+      out.push({
+        workspace_id: g.workspace_id,
+        respondents: g.rows.length,
+        latest_completed_at: sorted[0].completed_at,
+        score: agg.overall === null ? null : Math.round(agg.overall),
+        fp_6m:
+          agg.fp["6m"]?.final !== undefined
+            ? Math.round(agg.fp["6m"].final * 100)
+            : null,
+        fp_12m:
+          agg.fp["12m"]?.final !== undefined
+            ? Math.round(agg.fp["12m"].final * 100)
+            : null,
+        latest_stage: sorted[0].stage,
+      });
+    } catch {
+      // aggregate 실패 시 빈 점수로 카드만 표시
+      out.push({
+        workspace_id: g.workspace_id,
+        respondents: g.rows.length,
+        latest_completed_at: sorted[0].completed_at,
+        score: null,
+        fp_6m: null,
+        fp_12m: null,
+        latest_stage: sorted[0].stage,
+      });
+    }
+  }
+
+  return out.sort(
+    (a, b) =>
+      new Date(b.latest_completed_at).getTime() -
+      new Date(a.latest_completed_at).getTime(),
+  );
+}
+
+const STAGE_LABEL: Record<string, string> = {
+  closed_beta: "비공개 베타",
+  open_beta: "공개 베타",
+  ga_early: "정식 출시",
+  ga_growth: "성장기",
+  ga_scale: "확장기",
+  pre_seed: "비공개 베타",
+  seed: "공개 베타",
+  series_a: "정식 출시",
+  series_b: "성장기",
+  series_c_plus: "확장기",
+};
+
+function daysAgo(iso: string): string {
+  const diff = (Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60 * 24);
+  if (diff < 1) return "오늘";
+  if (diff < 2) return "어제";
+  if (diff < 30) return `${Math.floor(diff)}일 전`;
+  if (diff < 365) return `${Math.floor(diff / 30)}달 전`;
+  return `${Math.floor(diff / 365)}년 전`;
+}
 
 // ============================================================
 // 14-domain → 4-group mapping for first-time users.
 // (Detailed per-domain view stays available below in <details>.)
 // ============================================================
-type GroupKey = "market" | "growth" | "people" | "ops";
-
-const DOMAIN_GROUPS: Record<
-  GroupKey,
-  { title: string; subtitle: string; codes: string[] }
-> = {
-  market: {
-    title: "시장과 제품",
-    subtitle: "교사 결정자·문제·제품의 적합성",
-    codes: ["A1", "A2", "A3", "A4", "A14"],
-  },
-  growth: {
-    title: "성장과 채널",
-    subtitle: "교사 획득·재방문·확장",
-    codes: ["A6"],
-  },
-  people: {
-    title: "팀과 문화",
-    subtitle: "리더십 정렬·심리적 안전·핵심인재",
-    codes: ["A11", "A13"],
-  },
-  ops: {
-    title: "운영·규제·AI",
-    subtitle: "실행 속도·KISA/누리·AI 전환",
-    codes: ["A7", "A8", "A9", "A10"],
-  },
-};
+// (DOMAIN_GROUPS · GroupKey · GroupCard · NextCard · FaqCard 는 STEP 2/3/FAQ 섹션과 함께 제거됨)
+// 14-영역 전체 보기는 EXPANDABLE FRAMEWORK DETAIL 의 DomainCard 가 담당.
 
 export default async function DiagLandingPage() {
   const framework = loadFramework();
   const currentUser = await getCurrentUser();
+  const allWorkspaces = await fetchAllWorkspaces();
   const totalSubItems = framework.domains
     .flatMap((d) => d.groups.flatMap((g) => g.sub_items))
     .length;
@@ -51,24 +168,24 @@ export default async function DiagLandingPage() {
 
   return (
     <main className="min-h-dvh w-full">
-      {/* ============== STEP 1 — START WORKSPACE (PRIMARY) ============== */}
+      {/* ============== STEP 1 — START WORKSPACE ============== */}
       <section className="border-b-2 border-ink bg-paper-soft">
         <div className="max-w-6xl mx-auto px-6 sm:px-10 py-12 sm:py-14">
           <div className="grid lg:grid-cols-12 gap-10 items-start">
             <div className="lg:col-span-7">
               <div className="flex items-baseline gap-3 mb-4 flex-wrap">
-                <span className="kicker">Step 1 · 시작</span>
+                <span className="kicker">새 진단 카드 만들기</span>
                 <span className="label-mono">·</span>
                 <span className="label-mono">25–35분 · 익명</span>
               </div>
-              <h1 className="font-display text-4xl sm:text-6xl leading-[1.05] tracking-tight break-keep">
-                사업 진단{" "}
-                <span className="text-accent italic font-display">시작</span>
+              <h1 className="font-display text-4xl sm:text-5xl leading-[1.05] tracking-tight break-keep">
+                새 진단 카드{" "}
+                <span className="text-accent italic font-display">만들기</span>
               </h1>
               <p className="mt-5 max-w-2xl text-base sm:text-lg leading-relaxed text-ink-soft">
                 팀 이름이나 분기명으로{" "}
                 <strong className="font-medium text-ink">
-                  진단 ID(워크스페이스)
+                  진단 카드 ID
                 </strong>
                 를 정해 시작하세요. 같은 ID로 팀원이 응답하면 자동으로 합산되고,
                 응답은 익명으로 저장됩니다.
@@ -82,144 +199,216 @@ export default async function DiagLandingPage() {
               </div>
 
               <p className="mt-4 label-mono">
-                {currentUser
-                  ? "로그인됨 · 진단 후 자동으로 본인 계정에 연결됩니다."
-                  : "익명으로 시작 가능 · "}
-                {!currentUser ? (
-                  <a
-                    href="/auth/login?next=/diag"
-                    className="underline hover:text-ink"
-                  >
-                    로그인
-                  </a>
-                ) : null}
-                {!currentUser
-                  ? " 하면 워크스페이스가 본인 계정에 자동 연결됩니다."
-                  : null}
+                개발 모드 — 로그인 없이 누구나 진단 카드 진입 가능. 위
+                목록에서 기존 카드 클릭하거나 새 ID 입력.
               </p>
             </div>
 
             <aside className="lg:col-span-5 lg:pl-8 lg:border-l border-ink-soft/40">
-              <p className="kicker mb-3">이미 시작했다면</p>
-              <a
-                href={currentUser ? "/me" : "/auth/login?next=/me"}
-                className="block area-card hover:bg-paper-deep/40 transition-colors"
-              >
-                <p className="font-display text-2xl leading-tight">
-                  {currentUser
-                    ? "내 워크스페이스 →"
-                    : "로그인하고 내 워크스페이스 보기 →"}
+              <p className="kicker mb-3">진단 카드란?</p>
+              <div className="area-card">
+                <p className="text-sm leading-relaxed">
+                  <strong>우리 팀의 진단·운영 단위</strong>입니다. 응답 · KPI ·
+                  코칭 세션 · 액션 · 업무가 모두 이 카드 ID 하나에 묶여 다음
+                  분기에 다시 돌아올 때 그대로 이어집니다.
                 </p>
-                <p className="mt-2 text-sm text-ink-soft">
-                  참여 중인 워크스페이스 목록과 진행 상황을 한 화면에서 확인.
-                </p>
-              </a>
-
-              <div className="mt-4 note-box">
-                <strong>워크스페이스란?</strong> 우리 팀의 진단 컨테이너입니다.
-                응답 · KPI · 코칭 세션 · 액션이 모두 이 ID 하나에 묶여 다음
-                분기에 다시 돌아올 때 그대로 이어집니다.
+                <ul className="mt-3 space-y-1 text-sm text-ink-soft">
+                  <li>· 영문·숫자·하이픈 3–50자</li>
+                  <li>· 예: <span className="font-mono">acme-2026-q2</span></li>
+                  <li>· 같은 ID = 같은 팀 데이터</li>
+                </ul>
               </div>
+
+              {currentUser ? (
+                <a
+                  href="/worklist"
+                  className="mt-4 block area-card hover:bg-paper-deep/40 transition-colors"
+                >
+                  <p className="font-display text-lg leading-tight">
+                    내 워크리스트 →
+                  </p>
+                  <p className="mt-1 text-xs text-ink-soft">
+                    {currentUser.email}
+                  </p>
+                </a>
+              ) : null}
             </aside>
           </div>
         </div>
       </section>
 
-      {/* ============== STEP 2 — WHAT GETS MEASURED (4 GROUPS) ============== */}
-      <section className="max-w-6xl mx-auto px-6 sm:px-10 pt-14 pb-6">
-        <div className="flex items-baseline gap-3 mb-3">
-          <span className="kicker">Step 2 · 무엇을 보나요</span>
-        </div>
-        <h2 className="font-display text-3xl sm:text-5xl leading-tight tracking-tight break-keep">
-          크게 4개 영역,{" "}
-          <span className="italic font-light">{framework.domains.length}개 세부 영역</span>
-        </h2>
-        <p className="mt-4 max-w-3xl text-base leading-relaxed text-ink-soft">
-          한 영역만 빨강이어도 다른 영역의 점수를 가립니다 — 평균이 아니라
-          치명타를 봅니다. 진단을 시작할 때는 이 정도 윤곽만 알면 충분합니다.
-        </p>
-      </section>
+      {/* ============== ALL WORKSPACES — STEP 1 뒤에 노출 ============== */}
+      {allWorkspaces.length > 0 ? (
+        <section className="max-w-6xl mx-auto px-6 sm:px-10 pt-14 pb-10">
+          <div className="flex items-baseline gap-3 mb-3 flex-wrap">
+            <span className="kicker">진단 카드</span>
+            <span className="label-mono">·</span>
+            <span className="label-mono">
+              총 {allWorkspaces.length}개 · 클릭하면 바로 홈으로
+            </span>
+            <span className="tag tag-gold ml-auto">개발 모드</span>
+          </div>
+          <h2 className="font-display text-3xl sm:text-5xl leading-[1.05] tracking-tight break-keep mb-6">
+            어느 진단 카드로 들어가시겠어요?
+          </h2>
 
-      <section className="max-w-6xl mx-auto px-6 sm:px-10 mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-        {(Object.keys(DOMAIN_GROUPS) as GroupKey[]).map((k) => (
-          <GroupCard
-            key={k}
-            group={DOMAIN_GROUPS[k]}
-            domains={framework.domains.filter((d) =>
-              DOMAIN_GROUPS[k].codes.includes(d.code),
-            )}
-          />
-        ))}
-      </section>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {allWorkspaces.slice(0, 12).map((ws) => {
+              const tone =
+                ws.score === null
+                  ? "neutral"
+                  : ws.score >= 70
+                    ? "green"
+                    : ws.score >= 40
+                      ? "amber"
+                      : "red";
+              return (
+                <div
+                  key={ws.workspace_id}
+                  className={`border-2 p-4 transition-colors ${
+                    tone === "red"
+                      ? "border-signal-red/60"
+                      : tone === "amber"
+                        ? "border-signal-amber/60"
+                        : tone === "green"
+                          ? "border-signal-green/60"
+                          : "border-ink-soft/40"
+                  }`}
+                >
+                  <p className="font-mono text-sm font-medium truncate mb-2">
+                    {ws.workspace_id}
+                  </p>
 
-      {/* ============== STEP 3 — TIMELINE / WHAT HAPPENS NEXT ============== */}
-      <section className="max-w-6xl mx-auto px-6 sm:px-10 pt-16 pb-6">
-        <div className="flex items-baseline gap-3 mb-3">
-          <span className="kicker">Step 3 · 진단 후</span>
-        </div>
-        <h2 className="font-display text-3xl sm:text-5xl leading-tight tracking-tight break-keep">
-          25분 뒤,{" "}
-          <span className="italic font-light">손에 쥐는 것</span>
-        </h2>
-      </section>
+                  <div className="flex items-baseline gap-2 mb-1">
+                    <span
+                      className={`font-display text-3xl leading-none ${
+                        tone === "red"
+                          ? "text-signal-red"
+                          : tone === "amber"
+                            ? "text-signal-amber"
+                            : tone === "green"
+                              ? "text-signal-green"
+                              : "text-ink"
+                      }`}
+                    >
+                      {ws.score ?? "—"}
+                    </span>
+                    <span className="text-sm text-ink-soft">/ 100</span>
+                    <span
+                      className={`label-mono ml-auto ${
+                        tone === "red"
+                          ? "!text-signal-red"
+                          : tone === "amber"
+                            ? "!text-signal-amber"
+                            : tone === "green"
+                              ? "!text-signal-green"
+                              : ""
+                      }`}
+                    >
+                      {ws.score === null
+                        ? "측정 안 됨"
+                        : tone === "green"
+                          ? "● 양호"
+                          : tone === "amber"
+                            ? "● 주의"
+                            : tone === "red"
+                              ? "● 위험"
+                              : ""}
+                    </span>
+                  </div>
+                  <p className="label-mono">종합 건강도 (0–100점)</p>
 
-      <section className="max-w-6xl mx-auto px-6 sm:px-10 mt-6 grid grid-cols-1 md:grid-cols-3 gap-px bg-ink border-2 border-ink">
-        <NextCard
-          n="1"
-          title="14-영역 신호등"
-          body="우리 팀이 어디서 빨강인지 30초 안에. 한 영역만 빨강이어도 도메인이 ‘노랑 이상 못 가도록’ 강제로 묶여 있어 평균 환상을 차단."
-        />
-        <NextCard
-          n="2"
-          title="이번 주 할 일 3가지"
-          body="영역마다 ‘담당자·기한·검증 KPI’가 붙은 SMART 액션 3개. 점수가 아니라 액션이 변화의 단위입니다."
-        />
-        <NextCard
-          n="3"
-          title="자동 follow-up"
-          body="액션 마감일에 KPI 자동 재측정. 효과 있으면 닫고, 없으면 코치가 다음 단계를 제안. 챙기지 않아도 루프가 돕니다."
-        />
-      </section>
+                  <p className="mt-2 label-mono">
+                    응답자 {ws.respondents}명 · {daysAgo(ws.latest_completed_at)}
+                    {ws.latest_stage
+                      ? ` · ${STAGE_LABEL[ws.latest_stage] ?? ws.latest_stage}`
+                      : ""}
+                    {ws.fp_6m !== null ? ` · 6m 위험 ${ws.fp_6m}%` : ""}
+                  </p>
+                  {/* 카드 안에 워크스페이스 모든 진입점 통합 (이전 secondary nav 대체) */}
+                  <div className="mt-3 pt-3 border-t border-ink-soft/30">
+                    {/* 자주 쓰는 4개 — 큰 버튼 그리드 */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <a
+                        href={`/diag/${ws.workspace_id}/home`}
+                        className="text-center px-2 py-2 border-2 border-ink text-xs font-medium hover:bg-ink hover:text-paper transition-colors"
+                        title="종합 점수·이번 주 할 일·도메인 신호등"
+                      >
+                        홈
+                      </a>
+                      <a
+                        href={`/diag/${ws.workspace_id}`}
+                        className="text-center px-2 py-2 border border-ink-soft/60 text-xs hover:border-ink hover:bg-paper-deep/40 transition-colors"
+                        title="진단 시작 — 새 응답·재진단"
+                      >
+                        진단 시작
+                      </a>
+                      <a
+                        href={`/diag/${ws.workspace_id}/actions`}
+                        className="text-center px-2 py-2 border border-ink-soft/60 text-xs hover:border-ink hover:bg-paper-deep/40 transition-colors"
+                      >
+                        액션
+                      </a>
+                      <a
+                        href={`/diag/${ws.workspace_id}/worklist`}
+                        className="text-center px-2 py-2 border border-ink-soft/60 text-xs hover:border-ink hover:bg-paper-deep/40 transition-colors"
+                      >
+                        워크리스트
+                      </a>
+                    </div>
 
-      {/* ============== FAQ ============== */}
-      <section className="max-w-6xl mx-auto px-6 sm:px-10 pt-16 pb-6">
-        <div className="flex items-baseline gap-3 mb-3">
-          <span className="kicker">자주 묻는 질문</span>
-        </div>
-        <h2 className="font-display text-3xl leading-tight tracking-tight break-keep">
-          시작 전 확인하면 좋은 것
-        </h2>
-      </section>
+                    {/* 가끔 쓰는 항목 — 작은 링크 모음 */}
+                    <div className="mt-2 pt-2 border-t border-dotted border-ink-soft/30 flex flex-wrap gap-x-3 gap-y-1">
+                      <a
+                        href={`/diag/${ws.workspace_id}/timeline`}
+                        className="label-mono hover:text-ink"
+                      >
+                        타임라인
+                      </a>
+                      <a
+                        href={`/diag/${ws.workspace_id}/result`}
+                        className="label-mono hover:text-ink"
+                      >
+                        결과 상세
+                      </a>
+                      <a
+                        href={`/diag/${ws.workspace_id}/signals`}
+                        className="label-mono hover:text-ink"
+                      >
+                        시그널
+                      </a>
+                      <a
+                        href={`/diag/${ws.workspace_id}/audit`}
+                        className="label-mono hover:text-ink"
+                      >
+                        감사
+                      </a>
+                      <a
+                        href={`/diag/${ws.workspace_id}/members`}
+                        className="label-mono hover:text-ink"
+                      >
+                        멤버
+                      </a>
+                      <a
+                        href={`/diag/${ws.workspace_id}/integrations`}
+                        className="label-mono hover:text-ink"
+                      >
+                        연동
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
 
-      <section className="max-w-6xl mx-auto px-6 sm:px-10 mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-        <FaqCard
-          q="얼마나 걸리나요?"
-          a="혼자 진단할 경우 25–35분. 팀원 여러 명이 응답하면 동시에 진행해도 좋습니다(같은 ID 사용)."
-        />
-        <FaqCard
-          q="응답이 다른 사람에게 보이나요?"
-          a="아니요. 모든 응답은 익명입니다. 결과 화면에는 합산 통계만 나오며, 워크스페이스 ID를 아는 사람만 결과를 봅니다."
-        />
-        <FaqCard
-          q="아직 잘 모르는 항목이 있어요"
-          a={
-            "‘잘 모르겠다’ 옵션이 있어도 괜찮습니다. 객관적 근거가 없는 항목은 자동으로 ‘근거 부족’으로 표시되고, 진단 후 코치가 ‘이 데이터를 모으세요’ 라는 액션부터 만들어 줍니다."
-          }
-        />
-        <FaqCard
-          q="다음 분기에 다시 진단할 수 있나요?"
-          a="네. 같은 워크스페이스 ID로 돌아오면 이전 진단·액션·점수 변화가 그대로 이어집니다. 30일 뒤 자동 재측정도 됩니다."
-        />
-      </section>
-
-      {/* ============== DIVIDER ============== */}
-      <div className="max-w-6xl mx-auto px-6 sm:px-10 mt-16">
-        <div className="divider-ornament">
-          <span className="font-mono text-xs uppercase tracking-widest">
-            § Reference
-          </span>
-        </div>
-      </div>
+          {allWorkspaces.length > 12 ? (
+            <p className="mt-4 label-mono">
+              상위 12개만 표시. 새 카드로 시작하려면 위 폼 사용.
+            </p>
+          ) : null}
+        </section>
+      ) : null}
 
       {/* ============== EXPANDABLE FRAMEWORK DETAIL ============== */}
       <section className="max-w-6xl mx-auto px-6 sm:px-10 mt-6 pb-12">
@@ -268,77 +457,7 @@ export default async function DiagLandingPage() {
 // Components
 // ============================================================
 
-function GroupCard({
-  group,
-  domains,
-}: {
-  group: { title: string; subtitle: string; codes: string[] };
-  domains: Domain[];
-}) {
-  const criticalCount = domains.filter((d) => d.tier === "critical").length;
-  const totalWeight = domains.reduce((s, d) => s + d.weight, 0);
-  return (
-    <article className="area-card flex flex-col">
-      <div className="flex items-baseline justify-between gap-3 flex-wrap">
-        <h3 className="font-display text-2xl leading-tight">{group.title}</h3>
-        <span className="label-mono">가중치 {totalWeight}%</span>
-      </div>
-      <p className="mt-1 label-mono">{group.subtitle}</p>
-      <ul className="mt-4 space-y-1.5">
-        {domains.map((d) => (
-          <li
-            key={d.code}
-            className="flex items-baseline gap-2 text-sm"
-          >
-            <span className="font-mono text-xs text-ink-soft min-w-[36px]">
-              {d.code}
-            </span>
-            <span>{d.name_ko}</span>
-            {d.tier === "critical" ? (
-              <span className="ml-auto tag tag-accent">필수</span>
-            ) : d.tier === "important" ? (
-              <span className="ml-auto tag tag-gold">중요</span>
-            ) : (
-              <span className="ml-auto tag">보조</span>
-            )}
-          </li>
-        ))}
-      </ul>
-      <p className="mt-4 dotted-rule pt-3 label-mono">
-        필수 영역 {criticalCount}개 · 한 곳만 빨강이어도 그룹 전체가 묶입니다.
-      </p>
-    </article>
-  );
-}
-
-function NextCard({
-  n,
-  title,
-  body,
-}: {
-  n: string;
-  title: string;
-  body: string;
-}) {
-  return (
-    <article className="bg-paper p-6 sm:p-7 flex flex-col">
-      <span className="font-display text-3xl text-accent leading-none">{n}</span>
-      <h3 className="mt-3 font-display text-xl font-medium leading-tight">
-        {title}
-      </h3>
-      <p className="mt-3 text-sm leading-relaxed text-ink-soft">{body}</p>
-    </article>
-  );
-}
-
-function FaqCard({ q, a }: { q: string; a: string }) {
-  return (
-    <article className="area-card !p-5">
-      <h3 className="font-display text-lg leading-tight font-medium">{q}</h3>
-      <p className="mt-2 text-sm leading-relaxed text-ink-soft">{a}</p>
-    </article>
-  );
-}
+// GroupCard / NextCard / FaqCard 는 STEP 2/3/FAQ 섹션과 함께 제거.
 
 function tierTagClass(tier: Tier): string {
   switch (tier) {

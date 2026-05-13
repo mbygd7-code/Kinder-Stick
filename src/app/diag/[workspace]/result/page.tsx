@@ -8,6 +8,7 @@ import {
   computeOverallScore,
   computeFailureProbability,
   computeConsensus,
+  buildScoringConfig,
   type Stage,
   type SubItemDef,
   type SubItemResponse,
@@ -25,6 +26,22 @@ interface Props {
 const WS_PATTERN = /^[a-zA-Z0-9_-]{3,50}$/;
 const ISSUE_DATE = new Date().toISOString().slice(0, 10);
 
+interface EvidenceFileMeta {
+  url: string;
+  name: string;
+  size: number;
+  mime: string;
+  uploaded_at: string;
+}
+interface AIAnalysisMeta {
+  summary: string;
+  suggested_bucket: number | null;
+  confidence: number;
+  flags: string[];
+  analyzed_at: string;
+  model: string;
+}
+
 interface DiagnosisRow {
   id: string;
   workspace_id: string;
@@ -39,6 +56,10 @@ interface DiagnosisRow {
       evidence: number | null;
       na?: boolean;
       evidence_recorded_at: string;
+      actual_value?: string;
+      notes?: string;
+      evidence_files?: EvidenceFileMeta[];
+      ai_analysis?: AIAnalysisMeta;
     }
   > | null;
   result: Record<string, unknown> | null;
@@ -242,7 +263,7 @@ export default async function ResultPage({ params, searchParams }: Props) {
                 모든 도메인 점수가 동일 ({scores[0].toFixed(0)}점)합니다. 진단
                 응답이 모든 sub-item에 대해 belief={"{중간}"}·evidence={"{중간}"} 으로
                 균일하게 저장된 상태일 가능성이 큽니다. 더 정확한 진단 결과를
-                받으려면 워크스페이스 진단 폼에서 각 항목을 본인의 실제 상황에
+                받으려면 진단 카드 응답 폼에서 각 항목을 본인의 실제 상황에
                 맞게 1–5 다양한 값으로 다시 응답해주세요.
               </p>
             </div>
@@ -264,6 +285,9 @@ export default async function ResultPage({ params, searchParams }: Props) {
           );
         })}
       </section>
+
+      {/* EVIDENCE SUMMARY — AI 가 분석한 증거 묶음 */}
+      <EvidenceSummarySection rows={rows} framework={framework} />
 
       {/* RESPONDENTS LIST */}
       <section className="max-w-6xl mx-auto px-6 sm:px-10 mt-12">
@@ -508,7 +532,7 @@ function aggregateRespondents(
     })),
     responses,
     stage,
-    undefined,
+    buildScoringConfig(framework),
     {
       subDefs,
       now,
@@ -997,13 +1021,197 @@ function DomainBar({
   );
 }
 
+// ============================================================
+// Evidence summary section — 진단에서 수집된 실측·문서·AI 요약을 도메인별로
+// 묶어 노출. 직원이 점수 옆에 "왜 이 점수인지" 의 인용 증거를 한눈에 본다.
+// ============================================================
+function EvidenceSummarySection({
+  rows,
+  framework,
+}: {
+  rows: DiagnosisRow[];
+  framework: ReturnType<typeof loadFramework>;
+}) {
+  // sub_item_code → domain 매핑
+  const subToDomain = new Map<string, { domain: string; name_ko: string }>();
+  for (const d of framework.domains) {
+    for (const g of d.groups) {
+      for (const s of g.sub_items) {
+        subToDomain.set(s.code, { domain: d.code, name_ko: d.name_ko });
+      }
+    }
+  }
+
+  interface EvidenceItem {
+    respondent_num: number;
+    sub_code: string;
+    domain: string;
+    domain_name: string;
+    actual_value?: string;
+    notes?: string;
+    file_count: number;
+    files: EvidenceFileMeta[];
+    ai?: AIAnalysisMeta;
+    user_bucket: number | null;
+  }
+
+  const items: EvidenceItem[] = [];
+  for (const row of rows) {
+    if (!row.responses) continue;
+    for (const [code, r] of Object.entries(row.responses)) {
+      const hasValue = !!r.actual_value?.trim();
+      const hasNotes = !!r.notes?.trim();
+      const fileCount = r.evidence_files?.length ?? 0;
+      const hasAI = !!r.ai_analysis;
+      if (!hasValue && !hasNotes && fileCount === 0 && !hasAI) continue;
+      const dom = subToDomain.get(code);
+      if (!dom) continue;
+      items.push({
+        respondent_num: row.respondent_num,
+        sub_code: code,
+        domain: dom.domain,
+        domain_name: dom.name_ko,
+        actual_value: r.actual_value,
+        notes: r.notes,
+        file_count: fileCount,
+        files: r.evidence_files ?? [],
+        ai: r.ai_analysis,
+        user_bucket: r.evidence ?? null,
+      });
+    }
+  }
+
+  if (items.length === 0) return null;
+
+  // 도메인별 그룹화
+  const byDomain = new Map<string, EvidenceItem[]>();
+  for (const it of items) {
+    const arr = byDomain.get(it.domain) ?? [];
+    arr.push(it);
+    byDomain.set(it.domain, arr);
+  }
+  const domainOrder = framework.domains
+    .map((d) => d.code)
+    .filter((code) => byDomain.has(code));
+
+  return (
+    <section className="max-w-6xl mx-auto px-6 sm:px-10 mt-14">
+      <div className="divider-ornament mb-6">
+        <span className="font-mono text-xs uppercase tracking-widest">
+          § Evidence · 수집된 실측·문서·AI 분석 ({items.length})
+        </span>
+      </div>
+
+      <p className="text-sm text-ink-soft mb-5 max-w-3xl leading-relaxed">
+        진단 응답에 첨부된 실측 수치·컨텍스트 노트·증거 문서를 Claude 가 검토한 결과.
+        AI 추론 신뢰도가 60% 이상이면 evidence 점수에 자동 반영됩니다 (자가 응답
+        조작 방지).
+      </p>
+
+      <div className="space-y-4">
+        {domainOrder.map((dcode) => {
+          const list = byDomain.get(dcode)!;
+          const dom = framework.domains.find((d) => d.code === dcode)!;
+          return (
+            <div key={dcode} className="border-2 border-ink-soft/40 bg-paper p-5">
+              <div className="flex items-baseline justify-between gap-3 flex-wrap mb-3">
+                <h3 className="font-display text-xl">
+                  {dom.code} · {dom.name_ko}
+                </h3>
+                <span className="label-mono">{list.length}개 증거</span>
+              </div>
+              <ul className="space-y-3">
+                {list.map((it, idx) => (
+                  <li
+                    key={`${it.respondent_num}-${it.sub_code}-${idx}`}
+                    className="border-l-4 border-ink-soft pl-3 py-1.5"
+                  >
+                    <div className="flex items-baseline gap-2 flex-wrap mb-1">
+                      <span className="font-mono text-xs text-ink-soft">
+                        {it.sub_code}
+                      </span>
+                      <span className="label-mono">
+                        응답자 #{it.respondent_num}
+                      </span>
+                      {it.actual_value ? (
+                        <span className="tag tag-filled">
+                          측정값 {it.actual_value}
+                        </span>
+                      ) : null}
+                      {it.file_count > 0 ? (
+                        <span className="tag tag-accent">
+                          문서 {it.file_count}건
+                        </span>
+                      ) : null}
+                      {it.ai ? (
+                        <span
+                          className={`tag ${
+                            it.ai.suggested_bucket !== null &&
+                            it.user_bucket !== null &&
+                            Math.abs(
+                              it.ai.suggested_bucket - it.user_bucket,
+                            ) >= 2
+                              ? "tag-gold"
+                              : "tag-green"
+                          }`}
+                          title="AI 분석"
+                        >
+                          AI {it.ai.suggested_bucket ?? "—"}/5
+                        </span>
+                      ) : null}
+                    </div>
+                    {it.ai?.summary ? (
+                      <p className="text-sm leading-relaxed">{it.ai.summary}</p>
+                    ) : it.notes ? (
+                      <p className="text-sm leading-relaxed text-ink-soft">
+                        {it.notes}
+                      </p>
+                    ) : null}
+                    {it.files.length > 0 ? (
+                      <ul className="mt-1.5 flex flex-wrap gap-2">
+                        {it.files.map((f, i) => (
+                          <li key={i}>
+                            <a
+                              href={f.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="label-mono hover:text-ink underline"
+                              title={`${(f.size / 1024).toFixed(0)}KB`}
+                            >
+                              📎 {f.name}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    {it.ai && it.ai.flags.length > 0 ? (
+                      <p className="mt-1 label-mono">
+                        flags:{" "}
+                        {it.ai.flags.map((f) => (
+                          <span key={f} className="mr-1 font-mono">
+                            {f}
+                          </span>
+                        ))}
+                      </p>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function EmptyView({ workspace }: { workspace: string }) {
   return (
     <main className="min-h-dvh flex items-center justify-center p-8">
       <div className="max-w-md text-center">
         <p className="kicker mb-2">No data</p>
         <h1 className="font-display text-3xl leading-tight">
-          이 워크스페이스에는 아직 응답이 없습니다
+          이 진단 카드에는 아직 응답이 없습니다
         </h1>
         <p className="mt-3 text-ink-soft">
           <span className="font-mono">{workspace}</span> 로 진단을 시작하세요.

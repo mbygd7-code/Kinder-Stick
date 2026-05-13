@@ -8,6 +8,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { ensureWorkspaceOrg } from "@/lib/org";
 import { loadFramework } from "@/lib/framework/loader";
@@ -18,6 +19,7 @@ import {
   computeOverallScore,
   computeFailureProbability,
   computeConsensus,
+  buildScoringConfig,
   type Stage,
   type SubItemDef,
   type SubItemResponse,
@@ -56,11 +58,34 @@ function normalizeStage(input: unknown): Stage | null {
   return mapped ?? null;
 }
 
+interface IncomingEvidenceFile {
+  url: string;
+  name: string;
+  size: number;
+  mime: string;
+  uploaded_at: string;
+}
+
+interface IncomingAIAnalysis {
+  summary: string;
+  suggested_bucket: number | null;
+  confidence: number;
+  flags: string[];
+  analyzed_at: string;
+  model: string;
+}
+
 interface IncomingResponse {
   belief: number;
   evidence: number | null;
   na?: boolean;
   evidence_recorded_at: string;
+
+  // ── Evidence-based diagnosis 확장 ──
+  actual_value?: string;
+  notes?: string;
+  evidence_files?: IncomingEvidenceFile[];
+  ai_analysis?: IncomingAIAnalysis;
 }
 
 interface IncomingPayload {
@@ -203,6 +228,16 @@ export async function POST(req: Request) {
     );
   }
 
+  // 새 진단 제출 후 워크스페이스 목록·홈·결과 페이지 캐시 무효화 (best-effort)
+  try {
+    revalidatePath("/diag");
+    revalidatePath(`/diag/${payload.workspace_id}`);
+    revalidatePath(`/diag/${payload.workspace_id}/home`);
+    revalidatePath(`/diag/${payload.workspace_id}/result`);
+  } catch {
+    // ignore
+  }
+
   return NextResponse.json({
     ok: true,
     id: inserted.id,
@@ -239,15 +274,37 @@ function computeAllScores(
   );
   const subDefMap = new Map(subDefs.map((s) => [s.code, s]));
 
-  // Collect responses with valid mappings
+  // Collect responses with valid mappings.
+  // AI suggested_bucket (confidence ≥ 0.6) 이 있고 사용자가 선택한 bucket 과
+  // 격차가 1 이상이면, evidence 점수 계산에 AI bucket 을 우선 사용 (조작 방지).
   const subResponses: SubItemResponse[] = [];
   for (const [code, r] of Object.entries(payload.responses)) {
     if (!subDefMap.has(code)) continue;
     if (!r.belief || r.belief < 1 || r.belief > 5) continue;
-    const evidence =
+
+    // 사용자가 선택한 bucket
+    const userEvidence =
       r.na || r.evidence === null || r.evidence === undefined
         ? null
         : (r.evidence as 1 | 2 | 3 | 4 | 5);
+
+    // AI 추론 bucket 적용 규칙:
+    // - na 가 아니고 (실측·노트·파일 중 하나라도 있고)
+    // - AI 신뢰도 ≥ 0.6
+    // - AI suggested_bucket 이 1-5 범위
+    // 인 경우, AI bucket 을 evidence 로 사용 (자가 평가 조작 방어)
+    let evidence: 1 | 2 | 3 | 4 | 5 | null = userEvidence;
+    if (
+      !r.na &&
+      r.ai_analysis &&
+      r.ai_analysis.confidence >= 0.6 &&
+      typeof r.ai_analysis.suggested_bucket === "number" &&
+      r.ai_analysis.suggested_bucket >= 1 &&
+      r.ai_analysis.suggested_bucket <= 5
+    ) {
+      evidence = r.ai_analysis.suggested_bucket as 1 | 2 | 3 | 4 | 5;
+    }
+
     subResponses.push({
       sub_item_code: code,
       respondent_id: "anon-1",
@@ -329,13 +386,13 @@ function computeAllScores(
 
   const overall = computeOverallScore(domainScores, domainDefs);
 
-  // Failure probability (no critical_caps wired yet — will add in phase 2)
+  // YAML SoT 의 priors·LRs·critical_caps 를 ScoringConfig 로 빌드해 주입 (H-1.1, H-1.2)
   const fp = computeFailureProbability(
     domainScores,
     domainDefs,
     subResponses,
     payload.context.stage,
-    undefined,
+    buildScoringConfig(framework),
     {
       subDefs,
       now,

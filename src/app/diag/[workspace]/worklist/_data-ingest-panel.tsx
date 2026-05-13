@@ -249,7 +249,7 @@ export function DataIngestPanel({ workspace }: Props) {
           </h2>
           <p className="mt-1 label-mono">
             텍스트 요약·CSV·XLSX 를 붙여넣으면 AI가 (a) 기존 업무 격상 (b) 신규
-            업무 추가를 제안합니다. 모두 localStorage에 저장 — 워크스페이스
+            업무 추가를 제안합니다. 모두 localStorage에 저장 — 진단 카드
             범위로만 적용됩니다.
           </p>
         </div>
@@ -757,7 +757,7 @@ export function DataIngestPanel({ workspace }: Props) {
         <div className="mt-6 border-t border-ink-soft/30 pt-4">
           <details>
             <summary className="cursor-pointer kicker">
-              현재 워크스페이스에 적용된 데이터 주도 변경 ({applied.derived.length}
+              현재 진단 카드에 적용된 데이터 주도 변경 ({applied.derived.length}
               신규 / {applied.overrides.length} 격상)
             </summary>
             <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">

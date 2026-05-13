@@ -48,9 +48,22 @@ export interface DeriveInput {
   workspace: string;
 }
 
+export interface ExtractedMetric {
+  source: string;       // ga4 / mixpanel / channeltalk / admin / ...
+  metric_key: string;   // d1_activation_rate / wau / nps ...
+  value: number;        // raw value (예: 0.38, 12345)
+  confidence: number;   // 0..1 — AI 추출 신뢰도
+}
+
 export interface DeriveOutput {
   overrides: TaskOverride[];
   derived: DerivedTask[];
+  /**
+   * C6 — 텍스트에서 추출된 정량 메트릭.
+   * route handler 가 syncMetricsToSubItems 로 sub_item_responses 에 upsert.
+   * 없으면 빈 배열.
+   */
+  metrics: ExtractedMetric[];
   summary: string;
   model: string;
   raw_preview?: string;
@@ -59,6 +72,7 @@ export interface DeriveOutput {
 interface AiResponse {
   overrides?: unknown[];
   derived?: unknown[];
+  metrics?: unknown[];
   summary?: unknown;
 }
 
@@ -73,7 +87,18 @@ function buildBaseTaskList(): string {
 function buildSystemPrompt(): string {
   const baseList = buildBaseTaskList();
   return [
-    "당신은 한국 EdTech 운영진을 돕는 마케팅 퍼널 분석가 + 워크리스트 매니저입니다.",
+    "당신은 한국 **영유아(0–5세) EdTech** 운영진을 돕는 마케팅 퍼널 분석가 + 워크리스트 매니저입니다.",
+    "",
+    "## 🚨 도메인 제약 — 절대 위반 금지",
+    "본 서비스는 **만 0–5세 영유아 교육**(어린이집·유치원·가정 보육) 도메인 서비스입니다.",
+    "**다음 컨텍스트는 절대 등장시키지 마세요**:",
+    "- 초등학교·중학교·고등학교 (어린이집·유치원·영유아 교육 기관만 해당)",
+    "- 인디스쿨 등 초등 교사 커뮤니티 (대신: 키더 매트·보육교사 카페·키즈비즈·유치원 교사 모임)",
+    "- 학원·입시·수능·내신·교과서 (영유아 도메인 무관)",
+    "- 학년 (대신 '연령 반', 예: '만 3세반·만 4세반')",
+    "- 사용자 = 교사 = 어린이집/유치원/가정 보육 종사자.",
+    "",
+    "## 작업 정의",
     "주간/월간 데이터 분석 텍스트가 들어오면 세 가지를 결정합니다:",
     "  (a) **마케팅 퍼널 7단계** (인지→획득→활성화→유지→매출→추천→확장) 관점에서 어디에서 무슨 일이 벌어지고 있는지를 평이한 한국어로 설명 (summary).",
     "  (b) 기존 워크리스트의 어떤 task를 격상/가속해야 하는지 (overrides)",
@@ -357,6 +382,7 @@ export async function deriveWorklistChanges(
     return {
       overrides: [],
       derived: [],
+      metrics: [],
       summary: "(AI 응답을 JSON으로 파싱하지 못했습니다. 텍스트를 더 정돈해서 다시 시도해보세요.)",
       model,
       raw_preview: raw.slice(0, 400),
@@ -369,10 +395,32 @@ export async function deriveWorklistChanges(
   const derived = Array.isArray(parsed.derived)
     ? validateDerived(parsed.derived, signal_id, now).slice(0, 5)
     : [];
+  // C6 — metrics 추출 (AI 가 시스템 프롬프트 지시대로 출력했을 때만)
+  const metrics: ExtractedMetric[] = Array.isArray(parsed.metrics)
+    ? validateMetrics(parsed.metrics).slice(0, 20)
+    : [];
   const summary =
     typeof parsed.summary === "string" && parsed.summary.trim().length > 0
       ? parsed.summary.slice(0, 8000)
       : `${derived.length}개 신규 + ${overrides.length}개 격상 후보가 도출되었습니다.`;
 
-  return { overrides, derived, summary, model };
+  return { overrides, derived, metrics, summary, model };
+}
+
+function validateMetrics(arr: unknown[]): ExtractedMetric[] {
+  const out: ExtractedMetric[] = [];
+  for (const item of arr) {
+    if (!item || typeof item !== "object") continue;
+    const o = item as Record<string, unknown>;
+    const source = typeof o.source === "string" ? o.source : null;
+    const metric_key = typeof o.metric_key === "string" ? o.metric_key : null;
+    const value = typeof o.value === "number" ? o.value : null;
+    const confidence =
+      typeof o.confidence === "number"
+        ? Math.max(0, Math.min(1, o.confidence))
+        : 0.5;
+    if (!source || !metric_key || value === null) continue;
+    out.push({ source, metric_key, value, confidence });
+  }
+  return out;
 }

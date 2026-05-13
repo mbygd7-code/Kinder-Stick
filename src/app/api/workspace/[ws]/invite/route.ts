@@ -63,7 +63,7 @@ export async function POST(
     .maybeSingle();
   if (!org) {
     return NextResponse.json(
-      { ok: false, message: "워크스페이스가 없습니다" },
+      { ok: false, message: "진단 카드가 없습니다" },
       { status: 404 },
     );
   }

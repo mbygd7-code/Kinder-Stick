@@ -20,9 +20,19 @@ export default function AuthCallbackPage() {
   const [stage, setStage] = useState<string>("초기화 중…");
 
   useEffect(() => {
-    const next = params.get("next") ?? "/me";
+    // hash 안에 next 가 있을 수도 있어 양쪽 모두 확인
+    const hashParams = new URLSearchParams(
+      window.location.hash.startsWith("#")
+        ? window.location.hash.slice(1)
+        : window.location.hash,
+    );
+    const next =
+      params.get("next") ??
+      hashParams.get("next") ??
+      "/me";
     const code = params.get("code");
-    const errorDescription = params.get("error_description");
+    const errorDescription =
+      params.get("error_description") ?? hashParams.get("error_description");
 
     if (errorDescription) {
       setError(errorDescription);
@@ -35,31 +45,23 @@ export default function AuthCallbackPage() {
       try {
         // Path 1 — PKCE: ?code=
         if (code) {
-          setStage("코드 교환 중…");
+          setStage("로그인 처리 중…");
           const { error: e } = await sb.auth.exchangeCodeForSession(code);
           if (e) {
             setError(e.message);
             return;
           }
           await consumeInvites();
+          setStage("성공! 이동 중…");
           router.replace(next);
           return;
         }
 
         // Path 2 — Implicit: #access_token=...
-        const hash = window.location.hash.startsWith("#")
-          ? window.location.hash.slice(1)
-          : window.location.hash;
-        const hp = new URLSearchParams(hash);
-        const access_token = hp.get("access_token");
-        const refresh_token = hp.get("refresh_token");
-        const hashError = hp.get("error_description");
-        if (hashError) {
-          setError(hashError);
-          return;
-        }
+        const access_token = hashParams.get("access_token");
+        const refresh_token = hashParams.get("refresh_token");
         if (access_token && refresh_token) {
-          setStage("세션 설정 중…");
+          setStage("로그인 처리 중…");
           const { error: e } = await sb.auth.setSession({
             access_token,
             refresh_token,
@@ -69,12 +71,34 @@ export default function AuthCallbackPage() {
             return;
           }
           await consumeInvites();
+          setStage("성공! 이동 중…");
+          router.replace(next);
+          return;
+        }
+
+        // Path 3 — OTP token_hash (매직링크 신규 형식): ?token_hash=...&type=email
+        const tokenHash = params.get("token_hash");
+        const otpType = params.get("type");
+        if (tokenHash && otpType) {
+          setStage("로그인 처리 중…");
+          const { error: e } = await sb.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: otpType as "email" | "magiclink",
+          });
+          if (e) {
+            setError(e.message);
+            return;
+          }
+          await consumeInvites();
+          setStage("성공! 이동 중…");
           router.replace(next);
           return;
         }
 
         // Neither — likely arrived via direct URL or stale link
-        setError("매직링크 토큰이 없습니다 (링크가 만료되었거나 잘못되었을 수 있습니다)");
+        setError(
+          "매직링크 토큰이 없습니다 (링크가 만료되었거나 이미 사용되었을 수 있습니다).",
+        );
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       }

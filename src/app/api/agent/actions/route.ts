@@ -29,6 +29,12 @@ interface CreateBody {
   owner_role?: string;
   deadline_days?: number;
   verification_metric?: string | Record<string, unknown>;
+  /**
+   * C5 — 이 액션이 어느 sub_item 의 evidence 를 변경할 의도인지.
+   * 예: "A2.SE.40" — Sean Ellis 측정값 evidence v 를 1→4 로 끌어올리는 액션.
+   * smart_payload 에도 함께 저장되어 추후 추적·workflows 와 연결.
+   */
+  sub_item_code?: string;
 }
 
 interface PatchBody {
@@ -86,13 +92,24 @@ export async function POST(req: Request) {
       ? { description: body.verification_metric }
       : body.verification_metric ?? null;
 
+  // C5 — sub_item_code 가 명시되면 smart_payload 에 합쳐 저장 (스키마 추가 없이 jsonb 활용)
+  const enrichedPayload: Record<string, unknown> = {
+    ...smart_payload,
+    ...(body.sub_item_code
+      ? {
+          sub_item_code: body.sub_item_code,
+          target_sub_item: body.sub_item_code, // 호환성: 다른 이름으로도 검색 가능
+        }
+      : {}),
+  };
+
   const { data: inserted, error: insErr } = await sb
     .from("coaching_actions")
     .insert({
       session_id,
       org_id: session.org_id,
       title,
-      smart_payload,
+      smart_payload: enrichedPayload,
       owner_role: body.owner_role ?? null,
       deadline: deadline.toISOString(),
       status: "accepted",

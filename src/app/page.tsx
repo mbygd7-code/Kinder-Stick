@@ -1,13 +1,16 @@
-import { getCurrentUser } from "@/lib/supabase/auth";
+/**
+ * 홈 (/) — 카인더스틱 OS 랜딩 페이지.
+ *
+ * 진단·결과·코칭이 무엇인지 한 화면에 소개하고
+ * 진단 시작·내 워크리스트 두 가지 CTA 제공.
+ */
 
 const ISSUE_DATE = new Date().toISOString().slice(0, 10);
 
-export default async function Home() {
-  const user = await getCurrentUser();
-
+export default function Home() {
   return (
     <main className="min-h-dvh w-full">
-      {/* ============== HERO ============== */}
+      {/* HERO */}
       <section className="border-b-2 border-ink">
         <div className="max-w-6xl mx-auto px-6 sm:px-10 pt-16 sm:pt-24 pb-14 sm:pb-20">
           <div className="grid lg:grid-cols-12 gap-10 items-end">
@@ -25,9 +28,12 @@ export default async function Home() {
                 </span>
               </h1>
               <p className="mt-8 max-w-2xl text-lg sm:text-xl leading-relaxed text-ink-soft">
-                점수표가 아닙니다. <strong className="font-semibold text-ink">우리 팀이 어디서 막혔는지, 이번 주 무엇을 해결하면 되는지</strong>를
-                한 화면에 풀어드립니다. 추측 대신 통계에 기반한 진단과,
-                AI 코치가 옆에서 같이 걷는 운영 시스템.
+                점수표가 아닙니다.{" "}
+                <strong className="font-semibold text-ink">
+                  우리 팀이 어디서 막혔는지, 이번 주 무엇을 해결하면 되는지
+                </strong>
+                를 한 화면에 풀어드립니다. 추측 대신 통계에 기반한 진단과, AI
+                코치가 옆에서 같이 걷는 운영 시스템.
               </p>
 
               <div className="mt-10 flex flex-wrap gap-3 items-center">
@@ -35,55 +41,31 @@ export default async function Home() {
                   진단 시작
                   <span className="font-mono text-xs">→</span>
                 </a>
-                {user ? (
-                  <a href="/me" className="btn-secondary text-base">
-                    <span className="font-mono text-xs">→</span>
-                    내 워크스페이스
-                  </a>
-                ) : (
-                  <a
-                    href="/auth/login?next=/me"
-                    className="btn-secondary text-base"
-                  >
-                    <span className="font-mono text-xs">→</span>
-                    로그인하고 이어가기
-                  </a>
-                )}
-                <span className="label-mono ml-2">5분 안에 시작 · 25분 안에 첫 결과</span>
+                <a href="/worklist" className="btn-secondary text-base">
+                  <span className="font-mono text-xs">→</span>내 워크리스트
+                </a>
+                <span className="label-mono ml-2">
+                  5분 안에 시작 · 25분 안에 첫 결과
+                </span>
               </div>
             </div>
 
             <aside className="lg:col-span-4 lg:pl-8 lg:border-l border-ink-soft/40">
               <p className="kicker mb-3">이 시스템이 답하는 질문</p>
               <ul className="space-y-3">
-                <li className="flex items-baseline gap-3">
-                  <span className="font-display text-xl text-accent">·</span>
-                  <span className="text-base leading-relaxed">
-                    “어디부터 손대야 할지 모르겠다.”
-                  </span>
-                </li>
-                <li className="flex items-baseline gap-3">
-                  <span className="font-display text-xl text-accent">·</span>
-                  <span className="text-base leading-relaxed">
-                    “매주 같은 문제를 고치는데 결과가 안 변한다.”
-                  </span>
-                </li>
-                <li className="flex items-baseline gap-3">
-                  <span className="font-display text-xl text-accent">·</span>
-                  <span className="text-base leading-relaxed">
-                    “팀원들이 같은 문제를 다르게 보고 있다.”
-                  </span>
-                </li>
+                <Q text="어디부터 손대야 할지 모르겠다." />
+                <Q text="매주 같은 문제를 고치는데 결과가 안 변한다." />
+                <Q text="팀원들이 같은 문제를 다르게 보고 있다." />
               </ul>
               <p className="mt-5 label-mono">
-                한국 EdTech 초기·Series A 팀 기준으로 설계.
+                한국 영유아 EdTech 운영진 기준으로 설계.
               </p>
             </aside>
           </div>
         </div>
       </section>
 
-      {/* ============== HOW IT WORKS ============== */}
+      {/* HOW IT WORKS */}
       <section className="max-w-6xl mx-auto px-6 sm:px-10 pt-16 pb-10">
         <div className="flex items-baseline gap-3 mb-3">
           <span className="kicker">이렇게 작동합니다</span>
@@ -100,13 +82,13 @@ export default async function Home() {
           n="01"
           title="응답한다"
           time="25–35분 · 익명"
-          body="팀원 각자가 같은 워크스페이스 ID로 응답합니다. 같은 ID로 여러 명이 응답하면 자동 합산되고, 응답자 간 의견 차이가 큰 항목은 ‘이견 큼’으로 따로 표시됩니다."
+          body="팀원 각자가 같은 진단 카드 ID로 응답합니다. 같은 ID로 여러 명이 응답하면 자동 합산되고, 응답자 간 의견 차이가 큰 항목은 ‘이견 큼’으로 따로 표시됩니다."
         />
         <StepCard
           n="02"
           title="진단을 받는다"
           time="실시간 · 자동"
-          body="14개 영역에 대해 신호등(빨강/노랑/초록), 6·12개월 실패 위험도, 영역별 우선순위가 자동 산출됩니다. CB Insights 431개 실패 분석을 기반으로 한 통계적 추정."
+          body="12개 영역에 대해 신호등(빨강/노랑/초록), 6·12개월 어려움 가능성, 영역별 우선순위가 자동 산출됩니다. CB Insights 431개 실패 분석을 기반으로 한 통계적 추정."
         />
         <StepCard
           n="03"
@@ -116,7 +98,7 @@ export default async function Home() {
         />
       </section>
 
-      {/* ============== OUTCOMES ============== */}
+      {/* OUTCOMES */}
       <section className="max-w-6xl mx-auto px-6 sm:px-10 pt-20 pb-6">
         <div className="flex items-baseline gap-3 mb-3">
           <span className="kicker">진단을 받으면 손에 쥐는 것</span>
@@ -130,8 +112,8 @@ export default async function Home() {
       <section className="max-w-6xl mx-auto px-6 sm:px-10 mt-8 grid grid-cols-1 md:grid-cols-3 gap-5">
         <OutcomeCard
           n="01"
-          headline="14-영역 신호등"
-          desc="시장·제품·자금·팀·운영 어느 곳이 빨강인지 30초 안에. 한 영역이 빨강이면 다른 영역이 90점이어도 그 사실을 가립니다 — 평균이 아니라 치명타를 봅니다."
+          headline="12-영역 신호등"
+          desc="시장·제품·팀·운영 어느 곳이 빨강인지 30초 안에. 한 영역이 빨강이면 다른 영역이 90점이어도 그 사실을 가립니다 — 평균이 아니라 치명타를 봅니다."
         />
         <OutcomeCard
           n="02"
@@ -145,59 +127,7 @@ export default async function Home() {
         />
       </section>
 
-      {/* ============== TRUST ============== */}
-      <section className="max-w-6xl mx-auto px-6 sm:px-10 pt-20 pb-10">
-        <div className="dotted-rule mb-8" />
-        <div className="flex items-baseline gap-3 mb-3">
-          <span className="kicker">근거 · 추측이 아니라 통계</span>
-        </div>
-        <h2 className="font-display text-3xl leading-tight max-w-3xl">
-          14개 영역의 가중치와 실패 위험도는 외부 벤치마크에 매핑되어 있습니다.
-        </h2>
-        <ul className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3 label-mono">
-          <li className="metric-card">
-            <p>실패 원인 N=431</p>
-            <p className="font-display text-lg !text-ink mt-1">CB Insights</p>
-          </li>
-          <li className="metric-card">
-            <p>SaaS 단위경제</p>
-            <p className="font-display text-lg !text-ink mt-1">
-              Bessemer · OpenView
-            </p>
-          </li>
-          <li className="metric-card">
-            <p>한국 특수성</p>
-            <p className="font-display text-lg !text-ink mt-1">
-              누리과정 · KISA
-            </p>
-          </li>
-          <li className="metric-card">
-            <p>팀 건강도</p>
-            <p className="font-display text-lg !text-ink mt-1">
-              Lencioni · Westrum
-            </p>
-          </li>
-        </ul>
-      </section>
-
-      {/* ============== CONFIDENTIALITY ============== */}
-      <section className="bg-paper-soft border-y border-ink-soft/30">
-        <div className="max-w-6xl mx-auto px-6 sm:px-10 py-12 grid md:grid-cols-2 gap-8 items-start">
-          <div>
-            <p className="kicker mb-2">비밀 보장</p>
-            <h3 className="font-display text-2xl leading-tight">
-              팀의 답변은 외부에 공개되지 않습니다.
-            </h3>
-          </div>
-          <p className="text-ink-soft leading-relaxed">
-            응답은 익명이며, 개별 응답자의 답변이 아닌 합산 통계만 결과 화면에
-            나타납니다. 워크스페이스 ID를 아는 사람만 결과를 봅니다.
-            정직하게 답할수록 결과가 우리 팀에게 더 유용해집니다.
-          </p>
-        </div>
-      </section>
-
-      {/* ============== CTA ============== */}
+      {/* CTA */}
       <section className="max-w-6xl mx-auto px-6 sm:px-10 py-20 text-center">
         <p className="kicker mb-3">시작하기</p>
         <h2 className="font-display text-3xl sm:text-5xl leading-[1.05] tracking-tight break-keep">
@@ -211,19 +141,16 @@ export default async function Home() {
             진단 시작
             <span className="font-mono text-xs">→</span>
           </a>
-          {user ? (
-            <a href="/me" className="btn-secondary text-base">
-              <span className="font-mono text-xs">→</span>
-              내 워크스페이스 보기
-            </a>
-          ) : null}
+          <a href="/worklist" className="btn-secondary text-base">
+            <span className="font-mono text-xs">→</span>내 워크리스트
+          </a>
         </div>
         <p className="mt-6 label-mono">
           익명으로 시작 가능 · 회원가입 없이 응답 · ID만 기억하면 언제든 복귀
         </p>
       </section>
 
-      {/* ============== FOOTER ============== */}
+      {/* FOOTER */}
       <footer className="max-w-6xl mx-auto px-6 sm:px-10 pb-12 border-t border-ink-soft pt-6 flex flex-wrap items-baseline justify-between gap-4">
         <p className="label-mono">
           Set in Fraunces, Pretendard &amp; JetBrains Mono.
@@ -236,6 +163,15 @@ export default async function Home() {
         </div>
       </footer>
     </main>
+  );
+}
+
+function Q({ text }: { text: string }) {
+  return (
+    <li className="flex items-baseline gap-3">
+      <span className="font-display text-xl text-accent">·</span>
+      <span className="text-base leading-relaxed">“{text}”</span>
+    </li>
   );
 }
 

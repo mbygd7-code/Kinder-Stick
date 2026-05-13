@@ -61,7 +61,7 @@ domains:
   name_ko: "시장-문제 적합성"
   name_en: "Problem-Market Fit"
   tier: critical
-  weight: 9
+  weight: 11
   owner_role: ["Founder", "PM"]
   framework: "Christensen JTBD · Push of Situation · The Mom Test"
   thresholds: { red: 40, yellow: 60, green: 75 }
@@ -137,7 +137,7 @@ domains:
   name_ko: "제품-시장 적합성 (PMF)"
   name_en: "Product-Market Fit"
   tier: critical
-  weight: 13
+  weight: 17
   owner_role: ["Founder", "PM"]
   framework: "Sean Ellis 40% Rule · Balfour Four Fits · Vohra PMF Engine"
   thresholds: { red: 40, yellow: 60, green: 75 }
@@ -217,7 +217,7 @@ domains:
   name_ko: "결정자 ROI (교사)"
   name_en: "Teacher Buyer Economics"
   tier: critical
-  weight: 9
+  weight: 13
   owner_role: ["Founder", "PM", "CS"]
   framework: "교사 시간 절약 측정 · NPS · Continuation Intent · 누리과정 평가제 부합"
   thresholds: { red: 40, yellow: 60, green: 75 }
@@ -269,7 +269,7 @@ domains:
   name_ko: "사용자 활성화·유지"
   name_en: "User Activation & Retention"
   tier: critical
-  weight: 10
+  weight: 14
   owner_role: ["Product", "Growth"]
   framework: "Time-to-Value · Cohort Retention · Aha Moment"
   thresholds: { red: 40, yellow: 60, green: 75 }
@@ -302,7 +302,7 @@ domains:
       sub_items:
         - code: A4.HABIT.WAU_MAU
           tier: important
-          weight_within_group: 0.4
+          weight_within_group: 0.15
           belief:
             q: "WAU/MAU 비율이 우리 제품의 사용 습관을 보여준다."
           evidence:
@@ -319,6 +319,207 @@ domains:
           citation: "Sequoia 'WAU/MAU as engagement metric'"
           failure_trigger: "evidence.v <= 2"
           cadence: weekly
+    # ─────────────────────────────────────────────────────────────────
+    # UI/UX 그룹 (신규) — 교사가 매일 쓰는 인터페이스의 품질
+    # Nielsen 10 heuristics + WCAG 2.2 + Core Web Vitals + Design System
+    # 교사 UX 가 활성화·유지의 직접 선행 지표
+    # ─────────────────────────────────────────────────────────────────
+    - code: A4.USABILITY
+      name: "사용성 (Nielsen Heuristics)"
+      sub_items:
+        - code: A4.USABILITY.HEURISTIC_AUDIT
+          tier: important
+          weight_within_group: 0.10
+          belief:
+            q: "분기 1회 Nielsen 10 usability heuristics 기준으로 핵심 화면(교사 대시보드·알림장 작성·학급 관리) 을 audit 한다."
+          evidence:
+            q: "최근 audit 점수 (10개 원칙 × 5점 만점)"
+            type: choice
+            options:
+              - { v: 1, label: "audit 안 함 또는 < 25" }
+              - { v: 2, label: "25–34" }
+              - { v: 3, label: "35–39" }
+              - { v: 4, label: "40–44" }
+              - { v: 5, label: "≥ 45" }
+            refresh_period_days: 90
+          citation: "Nielsen Norman Group '10 Usability Heuristics for User Interface Design' (1994, 2024 업데이트)"
+          failure_trigger: "evidence.v <= 2"
+          cadence: quarterly
+        - code: A4.USABILITY.TEST_CADENCE
+          tier: important
+          weight_within_group: 0.08
+          belief:
+            q: "교사 5명 이상을 대상으로 한 사용성 테스트(think-aloud) 를 분기마다 진행하고 발견된 이슈를 다음 분기 백로그에 반영한다."
+          evidence:
+            q: "지난 90일 진행한 사용성 테스트 세션 수"
+            type: choice
+            options:
+              - { v: 1, label: "0건" }
+              - { v: 2, label: "1–2건" }
+              - { v: 3, label: "3–4건" }
+              - { v: 4, label: "5–7건" }
+              - { v: 5, label: "≥ 8건" }
+            refresh_period_days: 90
+          citation: "Krug *Don't Make Me Think*; NN/g 'Why You Only Need to Test with 5 Users'"
+          failure_trigger: "evidence.v <= 2"
+          cadence: quarterly
+        - code: A4.USABILITY.ERROR_RECOVERY
+          tier: important
+          weight_within_group: 0.07
+          belief:
+            q: "핵심 화면의 오류 메시지가 (a) 무엇이 잘못됐는지 (b) 어떻게 복구하는지 한 줄로 명확히 알려준다."
+          evidence:
+            q: "오류 화면 명확성 audit 결과 (전체 중 명확 비율)"
+            type: choice
+            options:
+              - { v: 1, label: "< 30% 또는 점검 안 함" }
+              - { v: 2, label: "30–49%" }
+              - { v: 3, label: "50–69%" }
+              - { v: 4, label: "70–89%" }
+              - { v: 5, label: "≥ 90%" }
+            refresh_period_days: 180
+          citation: "Nielsen Heuristic #9 'Help users recognize, diagnose, and recover from errors'"
+          failure_trigger: "evidence.v <= 2"
+          cadence: semi_annual
+    - code: A4.ACCESSIBILITY
+      name: "접근성 (WCAG 2.2 · KWCAG)"
+      sub_items:
+        - code: A4.ACCESSIBILITY.WCAG_AA
+          tier: important
+          weight_within_group: 0.10
+          belief:
+            q: "핵심 화면이 WCAG 2.2 AA 기준(색대비 4.5:1, 키보드 내비게이션, 타깃 크기 24×24px, focus 표시) 을 충족한다."
+          evidence:
+            q: "axe-core / Lighthouse 접근성 점수 평균"
+            type: choice
+            options:
+              - { v: 1, label: "< 70 또는 점검 안 함" }
+              - { v: 2, label: "70–79" }
+              - { v: 3, label: "80–89" }
+              - { v: 4, label: "90–94" }
+              - { v: 5, label: "≥ 95" }
+            kpi_source: "Lighthouse CI: accessibility score"
+            refresh_period_days: 30
+          citation: "W3C WCAG 2.2 (2023 Recommendation); deque axe-core"
+          failure_trigger: "evidence.v <= 2"
+          cadence: monthly
+        - code: A4.ACCESSIBILITY.KWCAG
+          tier: supporting
+          weight_within_group: 0.05
+          belief:
+            q: "공공·B2G 채널 진입 시 필요한 한국형 웹 접근성(KWCAG 2.2) 인증 또는 자체 점검을 6개월 이내 완료했다."
+          evidence:
+            q: "KWCAG 자체점검 결과 또는 인증 상태"
+            type: choice
+            options:
+              - { v: 1, label: "미점검" }
+              - { v: 2, label: "자체점검 50% 미만 통과" }
+              - { v: 3, label: "자체점검 50–84% 통과" }
+              - { v: 4, label: "자체점검 ≥ 85% 통과" }
+              - { v: 5, label: "WA 인증 또는 동등 등급 보유" }
+            refresh_period_days: 180
+          citation: "한국지능정보사회진흥원 KWCAG 2.2; 장애인차별금지법 21조"
+          failure_trigger: "evidence.v <= 2"
+          cadence: semi_annual
+    - code: A4.PERFORMANCE
+      name: "성능 (Core Web Vitals)"
+      sub_items:
+        - code: A4.PERFORMANCE.LCP
+          tier: important
+          weight_within_group: 0.08
+          belief:
+            q: "교사 핵심 페이지의 75%ile LCP (Largest Contentful Paint) 가 2.5초 이하다."
+          evidence:
+            q: "최근 28일 P75 LCP"
+            type: choice
+            options:
+              - { v: 1, label: "≥ 6.0s 또는 측정 안 함" }
+              - { v: 2, label: "4.0–5.9s" }
+              - { v: 3, label: "2.5–3.9s" }
+              - { v: 4, label: "1.5–2.4s" }
+              - { v: 5, label: "< 1.5s" }
+            kpi_source: "Google CrUX / Lighthouse CI: LCP"
+            refresh_period_days: 7
+          citation: "Google Core Web Vitals (LCP threshold 2.5s)"
+          failure_trigger: "evidence.v <= 2"
+          cadence: weekly
+        - code: A4.PERFORMANCE.INP
+          tier: important
+          weight_within_group: 0.08
+          belief:
+            q: "P75 INP (Interaction to Next Paint, 2024년부터 FID 대체) 가 200ms 이하다 — 클릭·입력·탭이 답답하지 않다."
+          evidence:
+            q: "최근 28일 P75 INP"
+            type: choice
+            options:
+              - { v: 1, label: "≥ 500ms 또는 측정 안 함" }
+              - { v: 2, label: "300–499ms" }
+              - { v: 3, label: "200–299ms" }
+              - { v: 4, label: "100–199ms" }
+              - { v: 5, label: "< 100ms" }
+            kpi_source: "Google CrUX / web-vitals JS: INP"
+            refresh_period_days: 7
+          citation: "Google INP (Interaction to Next Paint, 2024년 FID 대체 공식 Core Web Vital)"
+          failure_trigger: "evidence.v <= 2"
+          cadence: weekly
+        - code: A4.PERFORMANCE.CLS
+          tier: supporting
+          weight_within_group: 0.05
+          belief:
+            q: "P75 CLS (Cumulative Layout Shift) 가 0.1 이하다 — 화면이 갑자기 튀지 않는다."
+          evidence:
+            q: "최근 28일 P75 CLS"
+            type: choice
+            options:
+              - { v: 1, label: "≥ 0.5 또는 측정 안 함" }
+              - { v: 2, label: "0.25–0.49" }
+              - { v: 3, label: "0.10–0.24" }
+              - { v: 4, label: "0.05–0.09" }
+              - { v: 5, label: "< 0.05" }
+            kpi_source: "Google CrUX / web-vitals JS: CLS"
+            refresh_period_days: 7
+          citation: "Google Core Web Vitals (CLS threshold 0.1)"
+          failure_trigger: "evidence.v <= 2"
+          cadence: weekly
+    - code: A4.DESIGN_SYSTEM
+      name: "디자인 시스템·일관성"
+      sub_items:
+        - code: A4.DESIGN_SYSTEM.MATURITY
+          tier: supporting
+          weight_within_group: 0.06
+          belief:
+            q: "디자인 토큰(색·간격·타이포)·핵심 컴포넌트 라이브러리·다크모드/터치 사이즈 가이드가 한 곳에 문서화되어 있다."
+          evidence:
+            q: "디자인 시스템 성숙도 단계 (Brad Frost atomic design)"
+            type: choice
+            options:
+              - { v: 1, label: "1단계 — 토큰 미정의" }
+              - { v: 2, label: "2단계 — 토큰만" }
+              - { v: 3, label: "3단계 — 토큰 + 일부 컴포넌트" }
+              - { v: 4, label: "4단계 — 컴포넌트 라이브러리" }
+              - { v: 5, label: "5단계 — 완전 시스템 + 문서" }
+            refresh_period_days: 180
+          citation: "Brad Frost *Atomic Design*; Material 3; Apple HIG"
+          failure_trigger: "evidence.v <= 2"
+          cadence: semi_annual
+        - code: A4.DESIGN_SYSTEM.MOBILE_TOUCH
+          tier: important
+          weight_within_group: 0.05
+          belief:
+            q: "교사가 휴대폰으로 쓸 때 (a) 터치 타깃 최소 44×44px (b) 가로 스크롤 없음 (c) 입력 키보드 자연스러움 이 충족된다."
+          evidence:
+            q: "모바일 UX audit 통과 항목 비율"
+            type: choice
+            options:
+              - { v: 1, label: "< 50%" }
+              - { v: 2, label: "50–69%" }
+              - { v: 3, label: "70–84%" }
+              - { v: 4, label: "85–94%" }
+              - { v: 5, label: "≥ 95%" }
+            refresh_period_days: 90
+          citation: "Apple Human Interface Guidelines; Material Design 3; WCAG 2.5.5 Target Size"
+          failure_trigger: "evidence.v <= 2"
+          cadence: quarterly
 
 # ---------------------------------------------------------------------
 # A5 (자금·단위경제·수익성) 도메인은 본 서비스 범위 밖이라 제거됨.
@@ -360,21 +561,21 @@ domains:
 
 # ---------------------------------------------------------------------
 - code: A7
-  name_ko: "신뢰·안전·규제"
-  name_en: "Trust, Safety & Compliance"
+  name_ko: "신뢰·안전·규제·교육과정"
+  name_en: "Trust, Safety, Compliance & Curriculum Fit"
   tier: critical
   weight: 8
-  owner_role: ["CTO", "CPO", "법무"]
-  framework: "KISA ISMS-P · 개인정보보호법 22조의2 · 누리과정 2019 개정 · 어린이집 평가제"
+  owner_role: ["CTO", "CPO", "법무", "교육과정 자문"]
+  framework: "KISA ISMS-P · 개인정보보호법 22조의2 · 2019 개정 누리과정 · 제4차 표준보육과정 (보복부 고시 2020-75호) · 어린이집 평가제 4영역 18지표 (2024)"
   thresholds: { red: 40, yellow: 65, green: 80 }
-  notes: "EdTech에서 한 번의 사고가 회사를 죽인다. 한국 영유아 데이터는 일반보다 강한 보호 의무."
+  notes: "EdTech에서 한 번의 사고가 회사를 죽인다. 한국 영유아 데이터는 일반보다 강한 보호 의무. 만 0–2세 표준보육과정(6영역)과 만 3–5세 누리과정(5영역)이 다른 체계임에 유의."
   groups:
     - code: A7.KISA
       name: "KISA / 개인정보 자기점검"
       sub_items:
         - code: A7.KISA.SELFCHECK
           tier: critical
-          weight_within_group: 0.4
+          weight_within_group: 0.15
           belief:
             q: "KISA 정보보호 자기점검을 6개월 이내에 완료하고 미흡 항목을 패치했다."
           evidence:
@@ -392,32 +593,80 @@ domains:
           cadence: semi_annual
         - code: A7.PII.INCIDENT
           tier: critical
-          weight_within_group: 0.3
+          weight_within_group: 0.10
           belief:
             q: "최근 12개월 동안 개인정보 사고(유출·오남용·미동의 처리)가 없었다."
           evidence:
             q: "최근 12개월 개인정보 사고 건수"
             type: choice
             options:
-              - { v: 1, label: "0건" }   # v=1이 좋은 케이스로 의도 — 점수 산출 시 reverse
+              - { v: 1, label: "0건" }
               - { v: 2, label: "1건 (경미)" }
               - { v: 3, label: "1건 (중요)" }
               - { v: 4, label: "2건 이상" }
               - { v: 5, label: "현재 진행 중인 사고/조사" }
           citation: "방통위·KISA 개인정보 침해 사고 대응 가이드"
-          failure_trigger: "evidence.v >= 2"     # 1건만 있어도 빨강
+          failure_trigger: "evidence.v >= 2"
           cadence: monthly
-          reverse_scoring: true     # 1=best, 5=worst
-    - code: A7.NURI
-      name: "누리과정 적합성"
+          reverse_scoring: true
+    # ─────────────────────────────────────────────────────────────────
+    # 만 0–2세 영아 — 제4차 어린이집 표준보육과정 (보복부 고시 2020-75호)
+    # 6영역: 기본생활 / 신체운동 / 의사소통 / 사회관계 / 예술경험 / 자연탐구
+    # ─────────────────────────────────────────────────────────────────
+    - code: A7.STANDARD_CARE
+      name: "표준보육과정 적합성 (만 0–2세)"
       sub_items:
-        - code: A7.NURI.FIT
+        - code: A7.STANDARD_CARE.AREA_MAP
           tier: important
-          weight_within_group: 0.5
+          weight_within_group: 0.15
           belief:
-            q: "콘텐츠가 2019 개정 누리과정 5개 영역(신체운동·건강 / 의사소통 / 사회관계 / 예술경험 / 자연탐구)에 매핑돼 있다."
+            q: "만 0–2세 대상 콘텐츠가 제4차 표준보육과정 6영역(기본생활·신체운동·의사소통·사회관계·예술경험·자연탐구)에 매핑돼 있다."
           evidence:
-            q: "전체 콘텐츠 중 5영역 매핑 완료된 비율"
+            q: "전체 만 0–2세 콘텐츠 중 6영역 매핑 완료 비율"
+            type: choice
+            options:
+              - { v: 1, label: "매핑 안 함 또는 < 20%" }
+              - { v: 2, label: "20–39%" }
+              - { v: 3, label: "40–59%" }
+              - { v: 4, label: "60–79%" }
+              - { v: 5, label: "≥ 80%" }
+            refresh_period_days: 90
+          citation: "보건복지부 고시 2020-75호 제4차 어린이집 표준보육과정 (2020.4.9 고시, 2020.9 시행)"
+          failure_trigger: "evidence.v <= 2"
+          cadence: quarterly
+        - code: A7.STANDARD_CARE.AGE_SPLIT
+          tier: important
+          weight_within_group: 0.10
+          belief:
+            q: "콘텐츠가 0세 / 1세 / 2세 연령별로 구분되어 발달 단계에 맞춰 제시된다."
+          evidence:
+            q: "0세·1세·2세 연령별 구분 명시된 콘텐츠 비율"
+            type: choice
+            options:
+              - { v: 1, label: "연령 구분 없음" }
+              - { v: 2, label: "통합 (0–2세 묶음)" }
+              - { v: 3, label: "절반 정도 분리" }
+              - { v: 4, label: "대부분 분리" }
+              - { v: 5, label: "모든 콘텐츠 연령별 명시" }
+            refresh_period_days: 90
+          citation: "제4차 어린이집 표준보육과정 해설서 — 영아 발달 특성"
+          failure_trigger: "evidence.v <= 2"
+          cadence: quarterly
+    # ─────────────────────────────────────────────────────────────────
+    # 만 3–5세 유아 — 2019 개정 누리과정
+    # 5영역: 신체운동·건강 / 의사소통 / 사회관계 / 예술경험 / 자연탐구
+    # 핵심: 유아·놀이 중심, 교사의 자율성
+    # ─────────────────────────────────────────────────────────────────
+    - code: A7.NURI
+      name: "누리과정 적합성 (만 3–5세)"
+      sub_items:
+        - code: A7.NURI.AREA_MAP
+          tier: critical
+          weight_within_group: 0.15
+          belief:
+            q: "만 3–5세 콘텐츠가 2019 개정 누리과정 5영역(신체운동·건강 / 의사소통 / 사회관계 / 예술경험 / 자연탐구)에 매핑돼 있다."
+          evidence:
+            q: "전체 만 3–5세 콘텐츠 중 5영역 매핑 완료 비율"
             type: choice
             options:
               - { v: 1, label: "< 20%" }
@@ -426,7 +675,110 @@ domains:
               - { v: 4, label: "60–79%" }
               - { v: 5, label: "≥ 80%" }
             refresh_period_days: 90
-          citation: "교육부 2019 개정 누리과정 고시; 어린이집 평가제 평가지표 (2023 개정)"
+          citation: "교육부·보건복지부 2019 개정 누리과정 고시"
+          failure_trigger: "evidence.v <= 2"
+          cadence: quarterly
+        - code: A7.NURI.PLAY_CENTERED
+          tier: important
+          weight_within_group: 0.10
+          belief:
+            q: "콘텐츠가 '유아·놀이 중심' 원칙을 따른다 — 정답 강요·일방 주입·과도한 학습지 형태가 아님."
+          evidence:
+            q: "교사·외부 자문이 평가한 '놀이 중심성' 점수 (0–5)"
+            type: choice
+            options:
+              - { v: 1, label: "주입식·학습지 위주" }
+              - { v: 2, label: "혼합" }
+              - { v: 3, label: "절반 정도 놀이형" }
+              - { v: 4, label: "대부분 놀이형" }
+              - { v: 5, label: "모든 활동이 유아 주도 놀이" }
+            refresh_period_days: 180
+          citation: "2019 개정 누리과정 총론 — '유아·놀이 중심' 원칙"
+          failure_trigger: "evidence.v <= 2"
+          cadence: semi_annual
+        - code: A7.NURI.AGE_FIT
+          tier: important
+          weight_within_group: 0.08
+          belief:
+            q: "콘텐츠가 3세 / 4세 / 5세 연령별 발달 적합성을 명시한다."
+          evidence:
+            q: "3·4·5세 연령별 구분된 콘텐츠 비율"
+            type: choice
+            options:
+              - { v: 1, label: "연령 구분 없음" }
+              - { v: 2, label: "3–5세 통합" }
+              - { v: 3, label: "절반 분리" }
+              - { v: 4, label: "대부분 분리" }
+              - { v: 5, label: "전부 연령별 명시" }
+            refresh_period_days: 90
+          citation: "2019 개정 누리과정 해설서; 유아 발달이정표"
+          failure_trigger: "evidence.v <= 2"
+          cadence: quarterly
+    # ─────────────────────────────────────────────────────────────────
+    # 어린이집 평가제 — 보복부 / 한국보육진흥원, 4년 주기
+    # 2024 개정: 4영역 18지표 59항목, 영유아 권리 존중·급간식 위생·안전 필수지표 확대
+    # ─────────────────────────────────────────────────────────────────
+    - code: A7.CHILDCARE_EVAL
+      name: "어린이집 평가제 대비 (4영역 18지표)"
+      sub_items:
+        - code: A7.CHILDCARE_EVAL.READY
+          tier: important
+          weight_within_group: 0.07
+          belief:
+            q: "어린이집 평가제 4영역(보육과정 및 상호작용 / 보육환경 및 운영관리 / 건강·안전 / 교직원) 18지표에 대해 자체평가를 분기마다 수행한다."
+          evidence:
+            q: "최근 자체평가 평균 점수 (1–5)"
+            type: choice
+            options:
+              - { v: 1, label: "자체평가 안 함 또는 < 2.0" }
+              - { v: 2, label: "2.0–2.9" }
+              - { v: 3, label: "3.0–3.4" }
+              - { v: 4, label: "3.5–4.2" }
+              - { v: 5, label: "≥ 4.3" }
+            refresh_period_days: 90
+          citation: "보건복지부·한국보육진흥원 2024 어린이집 평가 매뉴얼"
+          failure_trigger: "evidence.v <= 2"
+          cadence: quarterly
+        - code: A7.CHILDCARE_EVAL.RIGHTS
+          tier: critical
+          weight_within_group: 0.05
+          belief:
+            q: "콘텐츠·인터페이스에서 영유아 권리 존중(존엄·표현·참여) 필수지표를 충족한다."
+          evidence:
+            q: "권리 존중 필수지표 충족 항목 비율"
+            type: choice
+            options:
+              - { v: 1, label: "< 50%" }
+              - { v: 2, label: "50–69%" }
+              - { v: 3, label: "70–84%" }
+              - { v: 4, label: "85–94%" }
+              - { v: 5, label: "≥ 95%" }
+            refresh_period_days: 180
+          citation: "2024 어린이집 평가제 영역1(보육과정 및 상호작용) 영유아 권리 존중 필수지표"
+          failure_trigger: "evidence.v <= 2"
+          cadence: semi_annual
+    # ─────────────────────────────────────────────────────────────────
+    # 디지털 노출 가이드 — WHO, 미국 소아과학회(AAP), 한국 보건복지부 권고
+    # ─────────────────────────────────────────────────────────────────
+    - code: A7.SCREEN_TIME
+      name: "영유아 디지털 노출 가이드"
+      sub_items:
+        - code: A7.SCREEN_TIME.GUIDELINE
+          tier: important
+          weight_within_group: 0.05
+          belief:
+            q: "콘텐츠가 WHO·AAP·보복부 영유아 디지털 노출 가이드를 따른다 — 만 0–2세는 영상 노출 권장 안 함, 3–5세는 하루 1시간 이내, 교사·보호자 동반 시청 권장."
+          evidence:
+            q: "가이드 준수 검증 상태"
+            type: choice
+            options:
+              - { v: 1, label: "가이드 미인지 또는 위배" }
+              - { v: 2, label: "인지하지만 검토 안 함" }
+              - { v: 3, label: "일부 콘텐츠만 점검" }
+              - { v: 4, label: "분기 점검 + 가이드 명시" }
+              - { v: 5, label: "콘텐츠마다 권장 노출 시간 라벨링" }
+            refresh_period_days: 90
+          citation: "WHO 'Guidelines on physical activity, sedentary behaviour and sleep for children under 5' (2019); AAP Media Use 2016; 한국 보건복지부 영유아 미디어 가이드"
           failure_trigger: "evidence.v <= 2"
           cadence: quarterly
 
@@ -623,7 +975,7 @@ domains:
   name_ko: "CS·NPS·고객성공"
   name_en: "Customer Success / NPS"
   tier: important
-  weight: 2
+  weight: 4
   owner_role: ["CS Lead"]
   framework: "Bain NPS · Bessemer NRR · Gainsight Health Score"
   thresholds: { red: 35, yellow: 55, green: 75 }

@@ -53,6 +53,13 @@ export type AutoRule =
   | { kind: "diagnosis_complete" }
   | { kind: "domain_responded"; code: string }
   | { kind: "evidence_recorded_for"; code: string }
+  /**
+   * C4 — sub-item 단위 정밀도 룰.
+   * 특정 sub-item 의 evidence v 가 min_v 이상이면 done.
+   * 도메인 롤업 (.split(".")[0]) 으로 인한 정보 손실 방지.
+   * 예: { kind: "evidence_v_for_sub_item", code: "A2.SE.40", min_v: 3 }
+   */
+  | { kind: "evidence_v_for_sub_item"; code: string; min_v: number }
   | { kind: "any_action_with_owner_for_critical_red" }
   | { kind: "all_red_critical_have_action" }
   | { kind: "no_overdue_actions" }
@@ -277,10 +284,12 @@ export const TASKS: Task[] = [
     team: "director",
     phase: "growth",
     title: "월간 매출·CAC·NRR 대시보드 점검",
-    why: "이 3개 지표 동시 점검 안 하면 ‘성장’과 ‘밑 빠진 독’ 구분 불가.",
+    why: "이 3개 지표 동시 점검 안 하면 ‘성장’과 ‘밑 빠진 독’ 구분 불가. 특히 NRR(기존 고객 매출 유지율) 은 교사 continuation 의 매출 측면 신호.",
     cadence: "monthly",
     tier: "must",
-    domain: "A5",
+    // A5(단위경제) 도메인 제거 후 A13(CS·NPS·NRR) 로 재매핑.
+    // NRR 은 A13 의 핵심 지표이고, CAC payback 은 A6 별도 task 에서 추적.
+    domain: "A13",
     auto: { kind: "manual_only" },
     escalation_hint: "월 목표 300명+ 시 격주 점검으로 가속 권장",
   },
@@ -865,9 +874,9 @@ export const TASKS: Task[] = [
     team: "engineering",
     phase: "foundation",
     title: "DB 접근 권한 정책(RLS) 셋업 + 분기 검증",
-    why: "워크스페이스 A의 사용자가 워크스페이스 B 데이터를 볼 수 있으면 — EdTech에선 회사 종료 사유 (PIPA·KISA 위반).",
+    why: "진단 카드 A의 사용자가 진단 카드 B 데이터를 볼 수 있으면 — EdTech에선 회사 종료 사유 (PIPA·KISA 위반).",
     description:
-      "ⓘ 용어 풀이\nRLS = Row-Level Security. ‘이 사용자가 이 행(row)을 읽을 수 있는가’를 DB 자체가 판정하게 하는 정책. 애플리케이션 코드의 버그가 있어도 DB가 막아주는 안전망.\n\n⚙ 어떻게 하는가\nSupabase·Postgres에서 각 테이블마다 ‘USING’ 절로 정책 작성. 예: `org_id = current_org_id()`. ‘service_role’ 키는 RLS 우회 — 서버 사이드 코드에서만 사용. 분기마다 ‘다른 워크스페이스 ID로 위장 후 쿼리 시도 → 0 row 반환되는지’ 회귀 테스트.\n\n✔ 완료 기준\n전 테이블에 RLS 활성화 + 정책 작성 + 자동 회귀 테스트 통과 + 분기 1회 수동 침투 테스트.",
+      "ⓘ 용어 풀이\nRLS = Row-Level Security. ‘이 사용자가 이 행(row)을 읽을 수 있는가’를 DB 자체가 판정하게 하는 정책. 애플리케이션 코드의 버그가 있어도 DB가 막아주는 안전망.\n\n⚙ 어떻게 하는가\nSupabase·Postgres에서 각 테이블마다 ‘USING’ 절로 정책 작성. 예: `org_id = current_org_id()`. ‘service_role’ 키는 RLS 우회 — 서버 사이드 코드에서만 사용. 분기마다 ‘다른 진단 카드 ID로 위장 후 쿼리 시도 → 0 row 반환되는지’ 회귀 테스트.\n\n✔ 완료 기준\n전 테이블에 RLS 활성화 + 정책 작성 + 자동 회귀 테스트 통과 + 분기 1회 수동 침투 테스트.",
     cadence: "quarterly",
     tier: "must",
     domain: "A7",
@@ -893,12 +902,14 @@ export const TASKS: Task[] = [
     team: "engineering",
     phase: "launch",
     title: "결제 시스템(Stripe·Toss) webhook 연동",
-    why: "결제 데이터를 수동으로 정리하면 분기마다 한 번 본다는 뜻 — 그 동안 새는 매출은 못 잡습니다. webhook 자동 연동이 매출·CAC payback 자동 측정의 출발점.",
+    why: "결제 데이터를 수동으로 정리하면 분기마다 한 번 본다는 뜻 — 그 동안 새는 매출은 못 잡습니다. webhook 자동 연동이 매출·교사 continuation·CAC payback 자동 측정의 출발점.",
     description:
       "ⓘ 용어 풀이\nWebhook = 결제 이벤트(가입·결제·환불·해지)가 발생할 때 결제사가 우리 서버에 자동으로 HTTP POST 알림을 보내는 구조.\nStripe = 글로벌 결제 (USD·KRW 모두 처리)\nToss Payments = 한국 결제 (간편결제·계좌이체)\n\n⚙ 어떻게 하는가\n결제사 대시보드에서 webhook URL 등록 (예: `/api/webhooks/stripe`). 처리해야 할 이벤트: ① `payment_intent.succeeded` ② `customer.subscription.created` ③ `customer.subscription.deleted` ④ `invoice.payment_failed`. 각 이벤트마다 우리 DB의 `kpi_snapshots`에 자동 기록.\n\n✔ 완료 기준\n실제 결제 1건이 발생했을 때 5분 안에 우리 대시보드에 자동 반영. 환불·해지도 같이 추적.",
     cadence: "once",
     tier: "must",
-    domain: "A5",
+    // A5 제거 후 A6(GTM 측정 인프라) 로 재매핑. 결제 webhook 은 채널별
+    // 전환 측정의 기반이라 A6 의 boost target 으로 자연스러움.
+    domain: "A6",
     auto: { kind: "kpi_source_connected", source: "stripe" },
   },
   {
@@ -1018,7 +1029,7 @@ export const TASKS: Task[] = [
     title: "KISA(한국 인터넷 진흥원) ISMS-P 보안 자기점검 (반기)",
     why: "한국 EdTech가 영업정지 당하는 가장 흔한 사유 = 보안·개인정보보호 위반. 인증 받기 전에도 자기점검은 의무에 가까운 안전망.",
     description:
-      "ⓘ 용어 풀이\nKISA = 한국 인터넷 진흥원. 국내 정보보호 인증 운영 기관.\nISMS-P = ‘정보보호 및 개인정보보호 관리체계’ — 102개 통제항목으로 구성된 한국 표준 보안 체크리스트. 학원·EdTech·핀테크 등은 일정 매출 이상이면 의무 인증.\n\n⚙ 어떻게 하는가\nKISA 공식 ISMS-P 가이드라인 다운로드 → 102개 항목 체크리스트 작성 → 항목별 ‘준수 / 미준수 / 부분 준수 / 해당 없음’ 판정 → 미준수 항목은 액션 플랜과 담당자 지정. 6개월마다 재검토.\n\n✔ 완료 기준\n102개 항목 모두 판정 완료된 자기점검 보고서 + 미준수 항목별 액션 플랜 + 다음 분기 점검 일정 등록.",
+      "ⓘ 용어 풀이\nKISA = 한국 인터넷 진흥원. 국내 정보보호 인증 운영 기관.\nISMS-P = ‘정보보호 및 개인정보보호 관리체계’ — 102개 통제항목으로 구성된 한국 표준 보안 체크리스트. 어린이집·유치원 EdTech·아동 콘텐츠 플랫폼·핀테크 등 개인정보(특히 영유아 정보)를 다루면 일정 매출 이상 시 의무 인증.\n\n⚙ 어떻게 하는가\nKISA 공식 ISMS-P 가이드라인 다운로드 → 102개 항목 체크리스트 작성 → 항목별 ‘준수 / 미준수 / 부분 준수 / 해당 없음’ 판정 → 미준수 항목은 액션 플랜과 담당자 지정. 6개월마다 재검토.\n\n✔ 완료 기준\n102개 항목 모두 판정 완료된 자기점검 보고서 + 미준수 항목별 액션 플랜 + 다음 분기 점검 일정 등록.",
     cadence: "semi_annual",
     tier: "must",
     domain: "A7",
@@ -1139,7 +1150,7 @@ export const TASKS: Task[] = [
     title: "교사 개인 가입자 B2C 온보딩 자동화 (이메일·인앱)",
     why: "교사 개인은 자비로 결제하므로 기관 1:1 콜 같은 고비용 핸들링이 안 됩니다. 1:N 자동화 시퀀스(이메일·인앱 푸시)로 가입 → 첫 가치 → 7일 retention 흐름을 만들어야 합니다.",
     description:
-      "B2C 자동 시퀀스 5단계: ① D0: 환영 이메일 + 5분 첫 가치 가이드 ② D1: 학급에서 바로 쓸 수 있는 활동 1개 추천 ③ D3: 비슷한 학년 교사들의 사례 ④ D7: 첫 진단 결과 리포트 ⑤ D14: 무료 → 유료 전환 제안. 각 단계별 open rate·click rate·conversion 측정. ‘완료’ 기준: 5단계 시퀀스 라이브 + 가입 → 유료 전환 funnel 측정 시작.",
+      "B2C 자동 시퀀스 5단계: ① D0: 환영 이메일 + 5분 첫 가치 가이드 ② D1: 우리 반에서 바로 쓸 수 있는 영유아 활동 1개 추천 ③ D3: 같은 연령 반(만 N세) 담임 교사들의 사례 ④ D7: 첫 진단 결과 리포트 ⑤ D14: 무료 → 유료 전환 제안. 각 단계별 open rate·click rate·conversion 측정. ‘완료’ 기준: 5단계 시퀀스 라이브 + 가입 → 유료 전환 funnel 측정 시작.",
     cadence: "once",
     tier: "must",
     domain: "A4",
@@ -1324,9 +1335,9 @@ export const TASKS: Task[] = [
     team: "marketing",
     phase: "foundation",
     title: "교사 개인 결제자(B2C) 마케팅 채널 매핑",
-    why: "교사 개인이 자비로 월 1–3만원 결제하는 구매 흐름은 기관 영업과 채널이 완전히 다릅니다. 인디스쿨·키즈비즈·교사 인스타그램·유튜브·카카오 오픈채팅 — 각 채널의 진입 비용·CAC를 따로 측정해야 합니다.",
+    why: "유아 교사 개인이 자비로 월 1–3만원 결제하는 구매 흐름은 기관 영업과 채널이 완전히 다릅니다. 키더 매트·보육교사 카페·키즈비즈·교사 인스타그램·유튜브·카카오 오픈채팅 — 각 채널의 진입 비용·CAC를 따로 측정해야 합니다.",
     description:
-      "교사 개인 구매자에게 닿는 채널 우선순위: ① 인디스쿨·키즈비즈 (커뮤니티 가입형) ② 교사 인스타그램·유튜브 인플루언서 (협찬형) ③ 카카오 오픈채팅 학년/지역 모임 ④ 전국 교원 연수 부스 ⑤ 학교/유치원 단체 메일링. 채널별 CAC·전환율 시트를 만들어 매월 업데이트. ‘완료’ 기준: 5개 채널 중 최소 2개에서 첫 유료 가입 발생 + 채널별 CAC 지표 수집 시작.",
+      "유아 교사 개인 구매자에게 닿는 채널 우선순위: ① 키더 매트·보육교사 카페·키즈비즈 (유아 교사 커뮤니티 가입형) ② 교사 인스타그램·유튜브 인플루언서 (협찬형) ③ 카카오 오픈채팅 연령반/지역 모임 (예: 만 3세반 담임 모임) ④ 보육교사·유아교사 연수 부스 ⑤ 어린이집·유치원 단체 메일링. 채널별 CAC·전환율 시트를 만들어 매월 업데이트. ‘완료’ 기준: 5개 채널 중 최소 2개에서 첫 유료 가입 발생 + 채널별 CAC 지표 수집 시작.",
     cadence: "once",
     tier: "must",
     domain: "A6",
@@ -1381,7 +1392,7 @@ export const TASKS: Task[] = [
     title: "반복 가능한 획득 채널 2개 이상 확보",
     why: "단일 채널 의존(예: 인스타그램 광고만)은 알고리즘·정책 변경 한 번이면 매출이 즉시 0. 채널 2개+가 안전망입니다.",
     description:
-      "ⓘ 용어 풀이\n반복 가능한 채널 = ‘예측 가능한 비용·전환율로 사용자를 데려올 수 있는 경로’. 예측 안 되는 입소문이나 이벤트 한 번은 ‘반복 가능’이 아님.\n채널 후보: ① 검색 광고 (Google·네이버) ② SNS 광고 (Instagram·Facebook·YouTube) ③ 콘텐츠 SEO (블로그·유튜브) ④ 커뮤니티 (인디스쿨·맘카페) ⑤ 리퍼럴 ⑥ 컨퍼런스/이벤트.\n\n⚙ 어떻게 하는가\n분기별 채널 실험 — 각 채널에 5–10만원 부담 가능한 예산으로 2주 시도 → 결과 기록 (CAC, 전환율, payback). ‘반복 가능’ 기준: ① 같은 비용 투입 시 비슷한 결과가 다음 주에도 재현 ② 예측 가능한 전환 funnel ③ 확장 가능한 비용 한도가 명확.\n\n✔ 완료 기준\n반복 가능 기준 통과한 채널 2개+ 확보 + 채널별 CAC·LTV 시계열 시트.",
+      "ⓘ 용어 풀이\n반복 가능한 채널 = ‘예측 가능한 비용·전환율로 사용자를 데려올 수 있는 경로’. 예측 안 되는 입소문이나 이벤트 한 번은 ‘반복 가능’이 아님.\n채널 후보: ① 검색 광고 (Google·네이버) ② SNS 광고 (Instagram·Facebook·YouTube) ③ 콘텐츠 SEO (블로그·유튜브) ④ 유아 교사 커뮤니티 (키더 매트·보육교사 카페·키즈비즈) + 학부모 맘카페 ⑤ 리퍼럴 ⑥ 보육·유아교사 연수·컨퍼런스.\n\n⚙ 어떻게 하는가\n분기별 채널 실험 — 각 채널에 5–10만원 부담 가능한 예산으로 2주 시도 → 결과 기록 (CAC, 전환율, payback). ‘반복 가능’ 기준: ① 같은 비용 투입 시 비슷한 결과가 다음 주에도 재현 ② 예측 가능한 전환 funnel ③ 확장 가능한 비용 한도가 명확.\n\n✔ 완료 기준\n반복 가능 기준 통과한 채널 2개+ 확보 + 채널별 CAC·LTV 시계열 시트.",
     cadence: "as_needed",
     tier: "must",
     domain: "A6",
@@ -1404,7 +1415,7 @@ export const TASKS: Task[] = [
     team: "marketing",
     phase: "launch",
     title: "교사 커뮤니티 신호 청취 (주간)",
-    why: "한국 영유아 EdTech 입소문은 교사 커뮤니티에서 결정됩니다. 교사 카페(예: 인디스쿨, 키더 매트, 보육교사 카페) 의 신호를 매주 읽어야 광고보다 강한 진짜 평판이 보입니다.",
+    why: "한국 영유아 EdTech 입소문은 유아 교사 커뮤니티에서 결정됩니다. 보육·유아 교사 카페(예: 키더 매트, 보육교사 카페, 키즈비즈, 유치원 교사 모임) 의 신호를 매주 읽어야 광고보다 강한 진짜 평판이 보입니다.",
     cadence: "weekly",
     tier: "recurring",
     auto: { kind: "manual_only" },
@@ -1432,8 +1443,9 @@ export const TASKS: Task[] = [
       "공식: CAC payback (개월) = (월 광고비 ÷ 그 달 신규 유료 고객 수) ÷ (유료 고객 1인의 월 평균 매출 × Gross Margin). 채널별로도 분리해서 봐야 평균 뒤에 숨은 ‘새는 채널’이 보입니다. ‘완료’ 기준: 매월 1일 전체 + 채널별 CAC payback 자동 산출되는 시트/대시보드 + 24개월 초과 시 마케팅팀 알림.",
     cadence: "monthly",
     tier: "must",
-    domain: "A5",
-    auto: { kind: "evidence_recorded_for", code: "A5" },
+    // A5 제거 후 A6(획득 채널 GTM) 으로 재매핑 — CAC payback 은 GTM 효율의 핵심.
+    domain: "A6",
+    auto: { kind: "manual_only" },
     escalation_hint: "월 목표 500명+ 시 격주 점검",
   },
   {
@@ -1802,6 +1814,528 @@ export const TASKS: Task[] = [
     auto: { kind: "manual_only" },
     ai_leverage: "Claude + 헤드라인·증거·CTA 페르소나 변형",
   },
+  // ===========================================================
+  // C1 — 약한 도메인 보강 (Appendix E 결합 감사 결과)
+  // A8 (학습 속도) · A9 (AI 고도화) · A10 (마케팅·메시지) ·
+  // A11 (팀 critical, 1 task→7) · A13 (CS·NPS)
+  // ===========================================================
+
+  // --- A11: 팀·리더십·문화 (critical, 가중치 9% — 가장 시급) ---
+  {
+    id: "dir.f.founders_alignment_workshop",
+    team: "director",
+    phase: "foundation",
+    funnel_stage: "internal",
+    title: "공동의사결정자 정렬 워크숍 (반기)",
+    why: "리더십 정렬이 4점(5점 만점) 미만이면 다음 분기 결정마다 마찰. 정기 워크숍으로 비전·역할·equity·이탈 시나리오 합의.",
+    cadence: "semi_annual",
+    tier: "must",
+    domain: "A11",
+    boost_domains: ["A11"],
+    auto: { kind: "evidence_recorded_for", code: "A11" },
+    description:
+      "1) 반기마다 4–6시간 오프사이트 미팅. 2) 비전·역할·equity·exit 시점 한 페이지로 합의 문서화. 3) 다음 90일 핵심 의사결정 3개를 사전에 합의. 산출물: 정렬 합의문 + 결정 매트릭스.",
+    hint: "Wasserman *Founder's Dilemmas*; Dharmesh Shah Founders Agreement template",
+  },
+  {
+    id: "dir.g.stay_interview",
+    team: "director",
+    phase: "growth",
+    funnel_stage: "internal",
+    title: "핵심 인재 stay-interview 분기 1회",
+    why: "이직 후 출구면담은 늦다. 분기 stay-interview 로 stay-intent 가 4 이하로 떨어진 시점에 미리 잡아낸다.",
+    cadence: "quarterly",
+    tier: "must",
+    domain: "A11",
+    boost_domains: ["A11"],
+    stage_relevance: ["ga_early", "ga_growth", "ga_scale"],
+    auto: { kind: "evidence_recorded_for", code: "A11" },
+    description:
+      "1) 핵심 인재 5명에게 분기마다 30분 1on1. 2) 질문: '다음 12개월 우리 팀에서 일할 의향은?' (1–5). 3) 답이 3 이하면 retention plan 즉시 작성. 산출물: stay-intent 점수표 + retention plan.",
+    hint: "Beverly Kaye *Love 'Em or Lose 'Em*; First Round Stay Interview Guide",
+  },
+  {
+    id: "ops.q.westrum_survey",
+    team: "operations",
+    phase: "ops",
+    funnel_stage: "internal",
+    title: "Westrum 문화 설문 분기 측정",
+    why: "정보 흐름·실패 학습·새 아이디어 환영도가 분기 60점 미만이면 운영 사고가 늘어남. 정량 추적이 첫 단계.",
+    cadence: "quarterly",
+    tier: "recurring",
+    domain: "A11",
+    boost_domains: ["A11"],
+    stage_relevance: ["ga_growth", "ga_scale"],
+    auto: { kind: "evidence_recorded_for", code: "A11" },
+    description:
+      "1) 5문항 Westrum 설문 (Google Form 5분). 2) 응답률 80%+ 목표. 3) 점수 60점 미만이면 다음 분기 1개 항목 집중 개선. 산출물: 분기 Westrum 점수 + 1개 개선 actions.",
+    hint: "Westrum 'A typology of organisational cultures' (BMJ Quality 2004); DORA 2024",
+  },
+  {
+    id: "dir.g.decision_rights",
+    team: "director",
+    phase: "growth",
+    funnel_stage: "internal",
+    title: "의사결정 권한(Decision Rights) 매트릭스 분기 갱신",
+    why: "같은 사안을 두 사람이 다르게 결정하면 신뢰 붕괴. RACI/DACI 명시로 분기마다 누가 무엇을 결정하는지 합의.",
+    cadence: "quarterly",
+    tier: "must",
+    domain: "A11",
+    boost_domains: ["A11"],
+    auto: { kind: "manual_only" },
+    description:
+      "1) 주요 결정 카테고리 8–12개 나열 (제품 우선순위·채용·예산·외부 협업 등). 2) 각 결정마다 owner / contributor / approver / informed 명시. 3) 분기 미팅에서 정렬 점검.",
+    hint: "Bain RAPID; Atlassian DACI; HBR 'Who Has the D?'",
+  },
+  {
+    id: "ops.o.psych_safety_check",
+    team: "operations",
+    phase: "ops",
+    funnel_stage: "internal",
+    title: "심리적 안전감 5문항 짧은 측정 (월 1회)",
+    why: "Edmondson 5문항 평균이 4점 이상이면 실험·실패 학습이 활성화. 3점 미만이면 즉시 1on1 늘려야 함.",
+    cadence: "monthly",
+    tier: "recurring",
+    domain: "A11",
+    boost_domains: ["A11"],
+    auto: { kind: "manual_only" },
+    hint: "Edmondson *The Fearless Organization*; Project Aristotle (Google 2015)",
+  },
+  {
+    id: "dir.o.exec_offsite",
+    team: "director",
+    phase: "ops",
+    funnel_stage: "internal",
+    title: "분기 임원진 오프사이트 (반나절)",
+    why: "운영에 매몰되면 시야가 좁아짐. 분기 한 번은 전략·문화·다음 분기 우선순위를 멀리서 본다.",
+    cadence: "quarterly",
+    tier: "recurring",
+    domain: "A11",
+    boost_domains: ["A11"],
+    auto: { kind: "manual_only" },
+  },
+
+  // --- A8: 학습·실행 속도 (supporting, 가중치 4%) ---
+  {
+    id: "plan.g.hypothesis_log",
+    team: "planning",
+    phase: "growth",
+    funnel_stage: "internal",
+    title: "가설 검증 로그 분기 3건 이상",
+    why: "Lean Startup Build-Measure-Learn 사이클이 분기 3회 미만이면 학습 속도 정체. 가설·실험·결정·교훈을 단일 노트북에 누적.",
+    cadence: "quarterly",
+    tier: "must",
+    domain: "A8",
+    boost_domains: ["A8"],
+    auto: { kind: "evidence_recorded_for", code: "A8" },
+    description:
+      "1) Notion/Linear에 'Hypothesis Log' 테이블. 2) 각 행: 가설 / 실험 설계 / 결과 / decided(보류·채택·기각) / 다음 행동. 3) 분기 검토 미팅으로 채택률·기각률 추적. 산출물: 분기 3건+ decided 가설.",
+    hint: "Ries *Lean Startup*; Shape Up 'Betting Table'",
+  },
+  {
+    id: "eng.g.cycle_time",
+    team: "engineering",
+    phase: "growth",
+    funnel_stage: "internal",
+    title: "엔지니어링 cycle time 주간 측정 (DORA)",
+    why: "PR 생성 → 머지 → 배포까지의 cycle time 이 4일 이상이면 학습 루프가 막힘. DORA 4 metric 추적.",
+    cadence: "weekly",
+    tier: "recurring",
+    domain: "A8",
+    boost_domains: ["A8"],
+    auto: { kind: "manual_only" },
+    description:
+      "1) GitHub Insights 또는 LinearB 로 weekly cycle time. 2) lead time / deploy frequency / change failure rate / MTTR 4개 지표. 3) 4일 초과 PR은 매주 회고에 안건.",
+    hint: "DORA 2024 State of DevOps; Forsgren *Accelerate*",
+  },
+  {
+    id: "ops.o.retrospective",
+    team: "operations",
+    phase: "ops",
+    funnel_stage: "internal",
+    title: "격주 운영 회고 (sprint retro)",
+    why: "사고·실수가 반복되면 학습이 안 되는 신호. 격주 30분 회고로 actionable 1–2개 추출.",
+    cadence: "weekly",
+    tier: "recurring",
+    domain: "A8",
+    boost_domains: ["A8"],
+    auto: { kind: "manual_only" },
+    hint: "Heart of Agile 'Reflect'; Atlassian Retrospective playbook",
+  },
+
+  // --- A9: AI 시대 서비스 고도화 (important, 가중치 7%) ---
+  {
+    id: "eng.f.ai_eval_seed",
+    team: "engineering",
+    phase: "foundation",
+    funnel_stage: "internal",
+    title: "AI Eval set 초기 50개 작성",
+    why: "Eval set 없이 prompt 변경하면 회귀를 감지 못함. 영유아 EdTech 도메인 50개 케이스(누리과정·표준보육·교사 시나리오)를 우선 구축.",
+    cadence: "once",
+    tier: "must",
+    domain: "A9",
+    boost_domains: ["A9"],
+    auto: { kind: "evidence_recorded_for", code: "A9" },
+    description:
+      "1) 카테고리별 10개씩: 누리과정 5영역 / 표준보육 6영역 / 교사 일상 시나리오 / 학부모 소통 / 안전·규제. 2) input + expected_behavior + grading_rubric. 3) GitHub repo evals/seed-v1.jsonl 에 저장.",
+    hint: "Hamel Husain 'Your AI Product Needs Evals'; Anthropic 'Building effective agents'",
+  },
+  {
+    id: "eng.o.prompt_regression",
+    team: "engineering",
+    phase: "ops",
+    funnel_stage: "internal",
+    title: "Prompt 변경마다 회귀 테스트 (eval-as-CI)",
+    why: "prompt 1줄 수정으로 다른 케이스 망가지는 silent regression 빈번. 모든 prompt 변경에 Eval set 자동 실행이 안전망.",
+    cadence: "as_needed",
+    tier: "must",
+    domain: "A9",
+    boost_domains: ["A9"],
+    auto: { kind: "manual_only" },
+    hint: "Promptfoo; Braintrust; Anthropic Workbench evals",
+  },
+  {
+    id: "eng.q.ai_grounding_audit",
+    team: "engineering",
+    phase: "growth",
+    funnel_stage: "internal",
+    title: "AI 응답 근거(citation) 인용률 분기 audit",
+    why: "AI 가 누리과정·평가제 같은 도메인 정보를 답할 때 인용 없으면 환각 위험. 분기 100건 audit으로 citation 80%+ 유지.",
+    cadence: "quarterly",
+    tier: "recurring",
+    domain: "A9",
+    boost_domains: ["A9"],
+    auto: { kind: "evidence_recorded_for", code: "A9" },
+    hint: "Lewis et al. *RAG* (NeurIPS 2020); Anthropic citations beta",
+  },
+
+  // --- A10: 마케팅·영업 실행력 (important, 가중치 5%) ---
+  {
+    id: "mkt.g.headline_ab",
+    team: "marketing",
+    phase: "growth",
+    funnel_stage: "acquisition",
+    title: "랜딩 헤드라인 A/B 월 1회 이상",
+    why: "ICP 가 가장 잘 반응하는 헤드라인은 분기마다 바뀜. 월 A/B 1회 누적이 가장 큰 acquisition lift.",
+    cadence: "monthly",
+    tier: "must",
+    domain: "A10",
+    boost_domains: ["A10", "A6"],
+    auto: { kind: "manual_only" },
+    description:
+      "1) 헤드라인 후보 3–4개 (사용자 인터뷰 인용 기반). 2) Vercel/Splitbee A/B. 3) 통계적 유의(P<0.05, n≥500) 도달 시 winner 적용. 4) 결과를 Notion 'Message Test Log' 에 누적.",
+    hint: "April Dunford *Sales Pitch*; Peep Laja Wynter messaging tests; Optimizely",
+  },
+  {
+    id: "mkt.l.sales_deck_audit",
+    team: "marketing",
+    phase: "launch",
+    funnel_stage: "acquisition",
+    title: "세일즈 데크 분기 audit (Dunford 9 step)",
+    why: "교사·기관 결제 담당자 미팅에서 같은 데크를 쓰면 conversion 둔화. 분기마다 9 step Dunford 점검으로 정렬.",
+    cadence: "quarterly",
+    tier: "recurring",
+    domain: "A10",
+    boost_domains: ["A10", "A3"],
+    auto: { kind: "manual_only" },
+    hint: "April Dunford *Sales Pitch* 9-step framework",
+  },
+  {
+    id: "mkt.o.icp_message_library",
+    team: "marketing",
+    phase: "ops",
+    funnel_stage: "acquisition",
+    title: "ICP별 메시지 라이브러리 운영",
+    why: "교사·원장·기관 결제 담당자 각각 다른 단어로 가치 전달. 페르소나별 메시지 키트가 마케팅·세일즈·CS 공용.",
+    cadence: "quarterly",
+    tier: "recurring",
+    domain: "A10",
+    boost_domains: ["A10"],
+    auto: { kind: "manual_only" },
+    hint: "Wynter messaging research; Reforge Marketing playbooks",
+  },
+
+  // --- A13: CS·NPS·고객성공 (important, 가중치 2 → 4%) ---
+  {
+    id: "ops.q.teacher_nps_drill",
+    team: "operations",
+    phase: "growth",
+    funnel_stage: "retention",
+    title: "교사 NPS detractor 분기 follow-up",
+    why: "NPS 0–6 점 응답자 (detractor) 가 다음 학기 이탈의 70%. 분기마다 detractor 5명에게 30분 인터뷰가 가장 큰 retention lift.",
+    cadence: "quarterly",
+    tier: "must",
+    domain: "A13",
+    boost_domains: ["A13", "A4"],
+    auto: { kind: "evidence_recorded_for", code: "A13" },
+    description:
+      "1) 분기 NPS 설문 후 detractor 자동 리스트. 2) 5명에게 '왜 점수가 낮나' 30분 1on1. 3) Top 3 이유를 다음 분기 백로그에 반영. 4) 60일 후 follow-up NPS 재측정.",
+    hint: "Reichheld 'The One Number You Need to Grow' (HBR 2003); Bain Net Promoter System",
+  },
+  {
+    id: "ops.o.churn_interview",
+    team: "operations",
+    phase: "ops",
+    funnel_stage: "retention",
+    title: "이탈 교사 인터뷰 (월 5건)",
+    why: "이탈 후 inferred 사유는 부정확. 월 5건 직접 인터뷰 누적이 churn 원인 1순위 파악의 유일한 방법.",
+    cadence: "monthly",
+    tier: "recurring",
+    domain: "A13",
+    boost_domains: ["A13", "A2"],
+    auto: { kind: "evidence_recorded_for", code: "A13" },
+    hint: "Andrew Chen 'leaky bucket'; Lenny's Newsletter on churn interviews",
+  },
+  {
+    id: "ops.q.continuation_intent",
+    team: "operations",
+    phase: "growth",
+    funnel_stage: "expansion",
+    title: "다음 학기 continuation intent 조사",
+    why: "교사가 다음 학기에도 쓰겠다고 답한 비율이 우리 회사 stay-intent. 학기 종료 60일 전 측정이 사전 개입 골든타임.",
+    cadence: "quarterly",
+    tier: "must",
+    domain: "A13",
+    boost_domains: ["A13", "A3"],
+    auto: { kind: "evidence_recorded_for", code: "A13" },
+    description:
+      "1) 학기 종료 60일 전 전체 활성 교사 짧은 설문. 2) Q: '다음 학기에도 우리를 쓰시겠어요?' 5점 척도. 3) 3 이하 응답자에게 즉시 CS 1on1. 4) 결과를 NRR forecast 에 반영.",
+    hint: "Beverly Kaye Stay Interview; Bain NPS continuation intent variant",
+  },
+  // ===========================================================
+  // 밸런스 재조정 — 서비스 운영(A13·A4 운영측면) + 마케팅(A10·A6) 비중↑
+  // ===========================================================
+
+  // --- 마케팅 강화: A10 (메시지·세일즈·캠페인) ---
+  {
+    id: "mkt.l.cold_outreach",
+    team: "marketing",
+    phase: "launch",
+    funnel_stage: "acquisition",
+    title: "교사 콜드 아웃리치 시퀀스 운영 (주 50건)",
+    why: "초기 단계에서 가장 빠른 acquisition 채널. 주 50건 메일·DM 시퀀스를 분기 3종으로 A/B.",
+    cadence: "weekly",
+    tier: "must",
+    domain: "A10",
+    boost_domains: ["A10", "A6"],
+    stage_relevance: ["closed_beta", "open_beta", "ga_early"],
+    auto: { kind: "manual_only" },
+    description:
+      "1) ICP 교사 리스트 50건 / 주. 2) 3-touch sequence (값 제공·소셜 증거·CTA). 3) 응답률·미팅 전환률 추적. 4) 분기마다 sequence A/B.",
+    hint: "Mark Roberge *Sales Acceleration Formula*; Lavender outreach playbook",
+  },
+  {
+    id: "mkt.g.email_sequence",
+    team: "marketing",
+    phase: "growth",
+    funnel_stage: "activation",
+    title: "교사 onboarding 이메일 시퀀스 5-touch",
+    why: "가입 후 첫 14일에 가치 전달 못 하면 D14 retention 50% 떨어짐. 자동 이메일 시퀀스가 가장 비용 효율.",
+    cadence: "quarterly",
+    tier: "must",
+    domain: "A10",
+    boost_domains: ["A10", "A4"],
+    stage_relevance: ["ga_early", "ga_growth", "ga_scale"],
+    auto: { kind: "manual_only" },
+    description:
+      "1) D0 환영 + 첫 가치 안내. 2) D2 사용 팁. 3) D5 사례 스토리. 4) D9 다음 단계. 5) D14 첫 NPS / feedback. open rate·CTR·activation 영향 측정.",
+    hint: "Reforge Activation course; Lenny's onboarding emails playbook",
+  },
+  {
+    id: "mkt.g.influencer_partnership",
+    team: "marketing",
+    phase: "growth",
+    funnel_stage: "awareness",
+    title: "교사 인플루언서·전문가 협업 (분기 2건)",
+    why: "교사 ICP 가 신뢰하는 인플루언서·전문가 협업이 일반 광고보다 conversion 3–5배. 분기 2건 누적.",
+    cadence: "quarterly",
+    tier: "recurring",
+    domain: "A10",
+    boost_domains: ["A10", "A6"],
+    stage_relevance: ["ga_growth", "ga_scale"],
+    auto: { kind: "manual_only" },
+    hint: "First Round 'How to Find Influencers'; ICP-fit 인플루언서 매핑",
+  },
+  {
+    id: "mkt.o.pr_pitch",
+    team: "marketing",
+    phase: "ops",
+    funnel_stage: "awareness",
+    title: "분기 PR·미디어 노출 1건 이상",
+    why: "신뢰·권위 신호 (교사·학부모 모두). 분기 1건 미디어 노출이 SEO·organic 채널 양쪽에 누적 효과.",
+    cadence: "quarterly",
+    tier: "recurring",
+    domain: "A10",
+    boost_domains: ["A10", "A6"],
+    stage_relevance: ["ga_growth", "ga_scale"],
+    auto: { kind: "manual_only" },
+    hint: "Demand Curve PR playbook; ABC tier 미디어 매핑",
+  },
+
+  // --- 마케팅 강화: A6 (채널·콘텐츠) ---
+  {
+    id: "mkt.g.teacher_community",
+    team: "marketing",
+    phase: "growth",
+    funnel_stage: "retention",
+    title: "교사 커뮤니티 운영 (월간 활성도 추적)",
+    why: "교사가 모이는 커뮤니티(슬랙·네이버 카페·디스코드) 운영이 acquisition·retention 양쪽 가장 강한 비용 효율 채널.",
+    cadence: "monthly",
+    tier: "must",
+    domain: "A6",
+    boost_domains: ["A6", "A13"],
+    stage_relevance: ["open_beta", "ga_early", "ga_growth"],
+    auto: { kind: "manual_only" },
+    description:
+      "1) 운영 채널 선정 (슬랙 추천). 2) 매주 1건 큐레이션 콘텐츠. 3) 월간 활성 멤버 수 / 게시글 수 추적. 4) 교사 리더 5명을 모더레이터로.",
+    hint: "Reforge 'Growth Loops'; CMX Community Playbook",
+  },
+  {
+    id: "mkt.g.youtube_channel",
+    team: "marketing",
+    phase: "growth",
+    funnel_stage: "awareness",
+    title: "유튜브 채널 운영 (월 2건)",
+    why: "교사 검색 행동의 30% 가 유튜브. 월 2건 (튜토리얼·사례) 누적이 6개월 후 organic acquisition top 채널.",
+    cadence: "monthly",
+    tier: "recurring",
+    domain: "A6",
+    boost_domains: ["A6", "A10"],
+    stage_relevance: ["ga_growth", "ga_scale"],
+    auto: { kind: "manual_only" },
+    hint: "Think with Google 교사 검색 행동 분석",
+  },
+  {
+    id: "mkt.q.local_meetup",
+    team: "marketing",
+    phase: "growth",
+    funnel_stage: "awareness",
+    title: "지역 교사 모임·세미나 후원 (분기 2건)",
+    why: "오프라인 모임이 교사 ICP 에서는 인터넷 광고보다 의사결정 영향력 2배. 후원·발표 분기 2건이 적정.",
+    cadence: "quarterly",
+    tier: "recurring",
+    domain: "A6",
+    boost_domains: ["A6", "A10"],
+    stage_relevance: ["ga_growth", "ga_scale"],
+    auto: { kind: "manual_only" },
+    hint: "한국유아교육학회·전국유아교사연합 행사 캘린더",
+  },
+
+  // --- 운영 강화: A13 (CS·NPS·고객성공) ---
+  {
+    id: "ops.g.cs_ticket_volume",
+    team: "operations",
+    phase: "growth",
+    funnel_stage: "retention",
+    title: "CS 티켓 응답 시간 SLA 주간 모니터",
+    why: "교사 만족도 1순위 결정 요인이 응답 속도. 24h 미응답 비율 5% 미만 유지가 NPS·재가입의 임계점.",
+    cadence: "weekly",
+    tier: "must",
+    domain: "A13",
+    boost_domains: ["A13", "A4"],
+    stage_relevance: ["ga_early", "ga_growth", "ga_scale"],
+    auto: { kind: "manual_only" },
+    description:
+      "1) ChannelTalk/Intercom 대시보드. 2) 첫 응답 < 2h, 해결 < 24h 목표. 3) 24h 초과 티켓 매주 회고. 4) 응답 시간 - NPS 상관관계 분기 분석.",
+    hint: "Gainsight CS playbook; Bain '응답 시간이 만족도 1위 결정 요인'",
+  },
+  {
+    id: "ops.q.health_score",
+    team: "operations",
+    phase: "growth",
+    funnel_stage: "retention",
+    title: "교사 health score 분기 산출 + 위험군 자동 알림",
+    why: "(가입 후 기간 × 활성도 × NPS) 합산 health score 가 churn 60일 전 예측 정확도 80%. 위험군 자동 알림이 retention 핵심.",
+    cadence: "quarterly",
+    tier: "must",
+    domain: "A13",
+    boost_domains: ["A13", "A4"],
+    stage_relevance: ["ga_growth", "ga_scale"],
+    auto: { kind: "evidence_recorded_for", code: "A13" },
+    description:
+      "1) health score 공식 정의 (활성도 40% + NPS 30% + 사용 빈도 30%). 2) 분기 산출 + 위험군 (score < 50) 자동 Slack 알림. 3) 위험군 즉시 CS 1on1. 4) 사전 개입 효과 추적.",
+    hint: "Gainsight Customer Health Score; Bessemer 'Customer Success Maturity Model'",
+  },
+  {
+    id: "ops.o.cs_response_lib",
+    team: "operations",
+    phase: "ops",
+    funnel_stage: "retention",
+    title: "CS 응답 템플릿 라이브러리 월간 갱신",
+    why: "반복 문의의 80% 가 동일 카테고리 20개. 템플릿 라이브러리가 응답 시간을 50% 단축 + 일관성 확보.",
+    cadence: "monthly",
+    tier: "recurring",
+    domain: "A13",
+    boost_domains: ["A13"],
+    auto: { kind: "manual_only" },
+    hint: "Intercom *Intercom on Customer Support*",
+  },
+  {
+    id: "ops.q.qbr_top_accounts",
+    team: "operations",
+    phase: "ops",
+    funnel_stage: "expansion",
+    title: "Top 10 기관 QBR (분기 비즈니스 리뷰) 운영",
+    why: "B2B 기관 매출의 70% 가 top 10 에서 나옴. 분기 QBR 로 expansion·이탈 위험 사전 감지.",
+    cadence: "quarterly",
+    tier: "must",
+    domain: "A13",
+    boost_domains: ["A13", "A3"],
+    stage_relevance: ["ga_growth", "ga_scale"],
+    auto: { kind: "evidence_recorded_for", code: "A13" },
+    description:
+      "1) 매출 기여도 top 10 기관 분기 1회 30분 미팅. 2) 사용 현황·만족도·확장 가능성·이슈 점검. 3) 다음 분기 행동 합의. 4) 결과를 NRR·expansion forecast 에 반영.",
+    hint: "Gainsight QBR template; Bessemer NRR playbook",
+  },
+
+  // --- 운영 강화: A4 운영측면 (활성화·UX 개선 루프) ---
+  {
+    id: "ops.q.aha_moment_audit",
+    team: "operations",
+    phase: "growth",
+    funnel_stage: "activation",
+    title: "Aha moment 정의·측정 분기 audit",
+    why: "사용자가 가치를 처음 체감하는 순간(예: 알림장 첫 발송 5분 안에) 을 안 정의하면 onboarding 최적화 불가. 분기마다 재정의·재측정.",
+    cadence: "quarterly",
+    tier: "must",
+    domain: "A4",
+    boost_domains: ["A4", "A2"],
+    stage_relevance: ["open_beta", "ga_early", "ga_growth"],
+    auto: { kind: "evidence_recorded_for", code: "A4" },
+    description:
+      "1) 코호트 분석 — D1 activation 한 사용자 vs 안 한 사용자의 첫 30분 행동 차이. 2) Aha 후보 행동 3개 식별. 3) 다음 분기 onboarding A/B 로 검증.",
+    hint: "Reforge Activation; Andrew Chen 'Activation Magic Moment'",
+  },
+  {
+    id: "ops.m.activation_funnel_review",
+    team: "operations",
+    phase: "growth",
+    funnel_stage: "activation",
+    title: "Activation funnel 단계별 drop-off 월간 리뷰",
+    why: "가입 → 첫 핵심 액션까지 5단계 funnel 의 가장 큰 drop-off 가 다음 달 우선순위. 월간 리뷰가 가장 큰 retention lever.",
+    cadence: "monthly",
+    tier: "must",
+    domain: "A4",
+    boost_domains: ["A4", "A13"],
+    stage_relevance: ["ga_early", "ga_growth", "ga_scale"],
+    auto: { kind: "manual_only" },
+    hint: "Mixpanel/Amplitude funnel; Reforge Retention course",
+  },
+  {
+    id: "ops.q.power_user_interview",
+    team: "operations",
+    phase: "growth",
+    funnel_stage: "retention",
+    title: "Power user 분기 인터뷰 5건",
+    why: "Power user 가 우리 제품을 어떻게 쓰는지 안 알면 onboarding·feature roadmap 모두 추측. 분기 5건이 적정 표본.",
+    cadence: "quarterly",
+    tier: "recurring",
+    domain: "A4",
+    boost_domains: ["A4", "A2"],
+    stage_relevance: ["ga_early", "ga_growth", "ga_scale"],
+    auto: { kind: "manual_only" },
+    hint: "Lenny's Newsletter 'Power User Curve'; Sarah Tavel 'hierarchy of engagement'",
+  },
 ];
 
 // ============================================================
@@ -2037,14 +2571,149 @@ export const STATUS_ORDER: Status[] = [
 
 /**
  * 한 업무가 영향 주는 도메인 코드 목록.
- * task.boost_domains가 명시되어 있으면 그 목록, 없으면 task.domain (단일 항목),
- * 도메인도 없으면 빈 배열.
+ *
+ * 우선순위:
+ *   1. task.boost_domains 명시 (가장 강함)
+ *   2. task.domain 단일 필드
+ *   3. INFERRED_TASK_DOMAINS 표에서 id 기반 추론
+ *   4. 빈 배열 (어디에도 boost 안 됨)
+ *
+ * INFERRED_TASK_DOMAINS 는 Appendix E C2 개선 — 92개 미매핑 task 에
+ * title·team·funnel_stage 분석 기반으로 부여한 도메인 매핑이다.
+ * task 본문 수정 없이 결합도 회복.
  */
 export function getBoostDomains(t: Task): string[] {
   if (t.boost_domains && t.boost_domains.length > 0) return t.boost_domains;
   if (t.domain) return [t.domain];
+  const inferred = INFERRED_TASK_DOMAINS[t.id];
+  if (inferred && inferred.length > 0) return inferred;
   return [];
 }
+
+/**
+ * Task ID → 추론된 boost domains.
+ *
+ * 매핑 근거:
+ *   - 팀 미션·정렬·문화·리더십 → A11
+ *   - 사용자 인터뷰·ICP·페르소나 → A1
+ *   - PMF·retention 분석 → A2
+ *   - 구매·가격·결제 → A3
+ *   - UI/UX·디자인 시스템·접근성·모바일 → A4
+ *   - 채널·콘텐츠·SEO·커뮤니티·뉴스레터 → A6
+ *   - 보안·PII·SLO → A7
+ *   - 운영 속도·CI/CD·회고·KPI 파이프라인 → A8
+ *   - AI 도구·prompt·eval → A9
+ *   - 마케팅 메시지·브랜드·카피·세일즈 데크 → A10
+ *   - CS·NPS·SLA·디지스트·헬프센터 → A13
+ *   - 경쟁 모니터·TAM → A14
+ */
+export const INFERRED_TASK_DOMAINS: Record<string, string[]> = {
+  // Director (정렬·문화·결정) — 일부 dual 로 A10/A13 확장
+  "dir.f.mission": ["A11"],
+  "dir.f.annual_targets": ["A11", "A10"],            // 매출/회원 목표는 마케팅에도
+  "dir.f.plc_business_model": ["A3", "A10"],         // PLC 사업모델은 가격+마케팅
+  "dir.l.assign_owners": ["A11"],
+  "dir.l.weekly_priority": ["A8", "A11"],
+  "dir.l.go_to_market_thesis": ["A10", "A6"],        // GTM 은 마케팅·채널 양쪽
+  "dir.g.external_expert": ["A11"],
+  "dir.o.monthly_report": ["A11", "A13"],            // 월간 보고는 CS 도 포함
+  "dir.o.year_review": ["A11"],
+  "dir.o.target_review": ["A11", "A10"],             // 목표 점검은 마케팅 KPI 포함
+
+  // Planning — 인터뷰·페르소나는 마케팅 인사이트로 확장
+  "plan.f.icp_one_liner": ["A1", "A10"],             // ICP 정의는 마케팅 메시지의 시작
+  "plan.f.mom_test_script": ["A1"],
+  "plan.f.plc_persona": ["A6", "A10"],
+  "plan.f.plc_playbook": ["A6", "A13"],              // PLC 운영은 CS 측면도
+  "plan.l.user_interviews": ["A1", "A13"],           // 인터뷰는 CS 인사이트
+  "plan.l.smart_action_24h": ["A8"],
+  "plan.l.plc_data_schema": ["A8"],
+  "plan.g.tradeoff_log": ["A8"],
+  "plan.g.feature_dead_pool": ["A8"],
+  "plan.g.plc_insight_review": ["A2", "A13"],
+  "plan.o.roadmap_retro": ["A8"],
+  "plan.o.tam_refresh": ["A14", "A10"],              // TAM 갱신은 마케팅 전략
+  "plan.o.north_star_review": ["A2"],
+
+  // Design (UI/UX) — design.o 운영성 task 는 운영 dual 로
+  "design.f.system": ["A4", "A10"],                  // 디자인 시스템은 브랜드 일관성
+  "design.f.a11y": ["A4"],
+  "design.f.empty_states": ["A4", "A13"],            // empty state 가 CS 1차 응대
+  "design.f.plc_pages": ["A4"],
+  "design.l.icp_onboarding": ["A4", "A13"],
+  "design.l.plc_activity_view": ["A4"],
+  "design.g.heatmap_review": ["A4", "A13"],          // 히트맵 분석은 CS 인사이트
+  "design.g.teacher_share_page": ["A4", "A10"],      // 공유 페이지는 referral 마케팅
+  "design.g.paid_upgrade_ux": ["A3", "A4", "A10"],
+  "design.o.cs_pattern": ["A13", "A4"],
+  "design.o.power_user_loop": ["A4", "A13"],
+  "design.o.responsive_audit": ["A4"],
+  "design.o.ab_report": ["A4", "A10"],
+
+  // Engineering — KPI 인프라는 마케팅 측정에도
+  "eng.f.cicd": ["A8"],
+  "eng.l.kpi_ga4": ["A4", "A10", "A6"],               // GA4 는 마케팅 attribution 핵심
+  "eng.l.kpi_mixpanel": ["A4", "A13"],
+  "eng.l.pii_redaction_test": ["A7"],
+  "eng.l.plc_group_feature": ["A6"],
+  "eng.g.plc_kpi_pipeline": ["A8", "A13"],
+  "eng.o.handoff_monitor": ["A9"],
+  "eng.o.slo_alerts": ["A7", "A13"],                  // SLO 는 CS 응답 신뢰성
+
+  // Operations — 모두 A13 강조 + 일부 마케팅·UX dual
+  "ops.f.runbook": ["A8", "A13"],
+  "ops.f.help_center": ["A13", "A4"],
+  "ops.f.teacher_leader_recruit": ["A6", "A13"],
+  "ops.l.action_owner_24h": ["A8", "A13"],
+  "ops.l.first30_call": ["A4", "A13"],
+  "ops.l.plc_first_meeting": ["A6", "A13"],
+  "ops.g.action_d_minus_3": ["A8", "A13"],
+  "ops.g.qbr": ["A13", "A3"],
+  "ops.g.upsell_signals": ["A13", "A3"],
+  "ops.g.plc_monthly_review": ["A6", "A13"],
+  "ops.g.paid_conversion_monitor": ["A3", "A13"],
+  "ops.o.weekly_digest": ["A8", "A13"],
+  "ops.o.cs_categorize": ["A13"],
+  "ops.o.sla_monitor": ["A13"],
+  "ops.o.help_center_refresh": ["A13"],
+
+  // Marketing — 대부분 dual 로 A6/A10 양쪽 강화
+  "mkt.f.brand_guideline": ["A10", "A6"],
+  "mkt.f.persona": ["A1", "A10"],
+  "mkt.l.brand_landing_ab": ["A10", "A6"],
+  "mkt.l.community_listen": ["A6", "A10"],
+  "mkt.l.teacher_leader_marketing": ["A6", "A10"],
+  "mkt.g.content_calendar": ["A6", "A10"],
+  "mkt.g.case_study": ["A10", "A6"],
+  "mkt.g.creative_refresh": ["A10", "A6"],
+  "mkt.g.plc_case_content": ["A10", "A6"],
+  "mkt.o.seo_audit": ["A6", "A10"],
+  "mkt.o.newsletter": ["A6", "A10"],
+  "mkt.o.utm_audit": ["A6", "A10"],
+  "mkt.o.persona_refresh": ["A1", "A10"],
+  "mkt.o.event_quarterly": ["A6", "A10"],
+  "mkt.o.referral_program": ["A13", "A6", "A10"],
+
+  // AI tasks — 마케팅·운영 dual 확장
+  "ai.dir.f.guideline": ["A7"],
+  "ai.dir.o.tool_audit": ["A9"],
+  "ai.plan.g.transcript": ["A9", "A1", "A13"],
+  "ai.plan.g.competitor_monitor": ["A14", "A10"],
+  "ai.plan.f.persona_sim": ["A9", "A10"],
+  "ai.design.f.image_workflow": ["A9", "A10"],
+  "ai.design.g.copy_ab": ["A10", "A6"],
+  "ai.design.g.ux_eval": ["A4", "A13"],
+  "ai.eng.f.copilot_guideline": ["A8"],
+  "ai.eng.g.test_gen": ["A8"],
+  "ai.eng.o.regression": ["A8"],
+  "ai.ops.l.cs_chatbot": ["A13"],
+  "ai.ops.o.ticket_classify": ["A13"],
+  "ai.ops.o.digest": ["A8", "A13"],
+  "ai.mkt.g.content_scale": ["A6", "A10"],
+  "ai.mkt.g.ad_creatives": ["A10", "A6"],
+  "ai.mkt.o.seo_keywords": ["A6", "A10"],
+  "ai.mkt.g.persona_landing": ["A10", "A6"],
+};
 
 /**
  * 1개 업무 완료 시 boost_domains 각 도메인에 더해질 점수.

@@ -733,7 +733,7 @@ function NoWorkspaceView({ workspace }: { workspace: string }) {
       <div className="max-w-md text-center">
         <p className="kicker mb-2">No workspace</p>
         <h1 className="font-display text-3xl">
-          이 워크스페이스에 audit 데이터가 없습니다
+          이 진단 카드에 audit 데이터가 없습니다
         </h1>
         <a href={`/diag/${workspace}`} className="btn-primary mt-6 inline-flex">
           진단 시작 <span className="font-mono text-xs">→</span>

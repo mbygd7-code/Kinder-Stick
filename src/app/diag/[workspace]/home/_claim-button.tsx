@@ -46,15 +46,10 @@ export function ClaimButton({
     });
   }
 
+  // [TODO PRODUCTION] 개발 모드: 로그인 안 한 사용자에게 Claim 버튼 자체를 숨김.
+  // 인증 복원 시 아래 if(!authed) 블록을 원래 "로그인하고 워크스페이스 저장" 링크로 되돌릴 것.
   if (!authed) {
-    return (
-      <a
-        href={`/auth/login?next=${encodeURIComponent(`/diag/${workspace}/home`)}`}
-        className="tag tag-filled hover:bg-accent hover:border-accent transition-colors"
-      >
-        로그인하고 워크스페이스 저장
-      </a>
-    );
+    return null;
   }
 
   if (alreadyMember) {
@@ -76,7 +71,7 @@ export function ClaimButton({
       className="tag tag-accent disabled:opacity-50"
       title={`Claim ${workspace} as your workspace`}
     >
-      {pending ? "저장 중…" : "내 워크스페이스로 저장"}
+      {pending ? "저장 중…" : "내 진단 카드로 저장"}
       {msg ? ` · ${msg}` : ""}
       {err ? ` · 오류: ${err}` : ""}
     </button>

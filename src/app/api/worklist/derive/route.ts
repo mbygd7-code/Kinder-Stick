@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { deriveWorklistChanges } from "@/lib/agents/worklist-deriver";
+import { supabaseAdmin } from "@/lib/supabase/server";
+import { resolveOrgWithBackfill } from "@/lib/org";
+import { syncMetricsToSubItems } from "@/lib/kpi/sync";
 
 interface Body {
   text?: string;
@@ -73,7 +76,27 @@ export async function POST(req: Request) {
       period: period as "weekly" | "monthly" | "quarterly",
       workspace,
     });
-    return NextResponse.json(result);
+
+    // C6 — 추출된 메트릭이 있으면 sub_item_responses 에 자동 upsert
+    // (실패해도 워크리스트 결과는 정상 반환 — best-effort)
+    let kpiSync: { matched: number; upserted: number; skipped: number } | null =
+      null;
+    if (result.metrics && result.metrics.length > 0) {
+      try {
+        const sb = supabaseAdmin();
+        const org = await resolveOrgWithBackfill(sb, workspace);
+        if (org) {
+          kpiSync = await syncMetricsToSubItems(sb, org.id, result.metrics);
+        }
+      } catch (e) {
+        console.warn(
+          "[worklist/derive] KPI sync failed:",
+          e instanceof Error ? e.message : e,
+        );
+      }
+    }
+
+    return NextResponse.json({ ...result, kpi_sync: kpiSync });
   } catch (e) {
     return NextResponse.json(
       {

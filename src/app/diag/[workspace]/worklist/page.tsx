@@ -11,7 +11,6 @@ import {
   CADENCE_LABEL,
   TIER_LABEL,
   FUNNEL_LABEL,
-  FUNNEL_ORDER,
   getFunnelStage,
   getAiLeverage,
   type FunnelStage,
@@ -25,21 +24,23 @@ import {
   type AutoStatus,
 } from "@/lib/worklist/derive";
 import { loadFramework } from "@/lib/framework/loader";
+import type { Stage, DomainDef, SubItemDef } from "@/lib/scoring";
 import {
-  DEFAULT_PRIORS,
-  DEFAULT_LIKELIHOOD_RATIOS,
-} from "@/lib/scoring";
-import type { Stage } from "@/lib/scoring";
-import type { DomainBaseline } from "@/lib/worklist/impact";
+  aggregateRespondents,
+  type DiagRowMin,
+} from "@/lib/diagnosis-aggregate";
+import type {
+  DiagnosisBaseline,
+  SerializedSubItemResponse,
+} from "@/lib/worklist/impact";
 import { StatusPill } from "./_status-pill";
 import { ProgressStrip } from "./_progress-strip";
-import { FilterBar } from "./_filter-bar";
-import { GoalsPanel } from "./_goals-panel";
+import { SearchFilterBar } from "./_search-filter-bar";
+// GoalsPanel·DataIngestPanel 은 진단 시작 단계로 이동 → 워크리스트 페이지에서 제거.
 import { FunnelRibbon } from "./_funnel-ribbon";
 import { TaskTitle, TaskEditButton } from "./_task-customizer";
 import { TaskDescriptionPopover } from "./_task-description";
 import { ImpactPanel } from "./_impact-panel";
-import { DataIngestPanel } from "./_data-ingest-panel";
 import { DataDrivenExtras } from "./_data-driven-extras";
 import { Emphasize } from "./_emphasize";
 import { TaskKpiChecklist } from "./_task-kpi-checklist";
@@ -63,47 +64,83 @@ export default async function WorklistPage({ params }: Props) {
   const autoMap: Record<string, AutoStatus> = {};
   for (const [k, v] of autoStatuses) autoMap[k] = v;
 
-  // ── Compute baselines for live impact panel ──────────────────────────
-  // 진단 결과(diagnosis_responses.result)의 도메인 점수를 그대로 baseline으로 사용.
-  // 응답이 여러 명이면 평균. 응답이 없으면 빈 배열 → ImpactPanel은 placeholder 표시.
+  // ── Compute baseline for live impact panel ──────────────────────────
+  // 홈/결과 페이지와 동일한 점수가 나오도록 aggregateRespondents 로 재집계.
+  // (이전엔 stored snapshot 평균 + 단일-LR Bayesian 을 썼고, 홈은 raw 응답 +
+  //  8-factor log-LR 모델을 써서 두 페이지 숫자가 달랐음.)
   const framework = loadFramework();
   const { data: diagRows } = await sb
     .from("diagnosis_responses")
-    .select("stage, result")
+    .select("stage, respondent_num, responses")
     .eq("workspace_id", workspace);
-  const diagList = (diagRows ?? []) as Array<{
+  const diagListRaw = (diagRows ?? []) as Array<{
     stage: string | null;
-    result: { domain_scores?: Array<{ code: string; score: number | null }> } | null;
+    respondent_num: number;
+    responses: DiagRowMin["responses"];
   }>;
 
-  const baselines: DomainBaseline[] = [];
-  let stage: Stage = "open_beta";
-  if (diagList.length > 0) {
-    // average per-domain score across respondents
-    const sums = new Map<string, { sum: number; n: number }>();
-    for (const r of diagList) {
-      for (const ds of r.result?.domain_scores ?? []) {
-        if (ds.score === null || ds.score === undefined) continue;
-        const cur = sums.get(ds.code) ?? { sum: 0, n: 0 };
-        cur.sum += ds.score;
-        cur.n += 1;
-        sums.set(ds.code, cur);
+  let baseline: DiagnosisBaseline | null = null;
+  if (diagListRaw.length > 0) {
+    // 동일 helper 로 도메인 점수·stage 산출
+    const agg = aggregateRespondents(framework, diagListRaw);
+
+    // sub-item defs + domain defs (computeFailureProbability 입력)
+    const subDefs: SubItemDef[] = framework.domains.flatMap((d) =>
+      d.groups.flatMap((g) =>
+        g.sub_items.map((s) => ({
+          code: s.code,
+          domain: d.code,
+          group: g.code,
+          tier: s.tier,
+          weight_within_group: s.weight_within_group,
+          data_quality_required: (s.data_quality_required ?? 1) as 1 | 2 | 3,
+          reverse_scoring: s.reverse_scoring,
+        })),
+      ),
+    );
+    const subDefMap = new Map(subDefs.map((s) => [s.code, s]));
+    const domainDefs: DomainDef[] = framework.domains.map((d) => ({
+      code: d.code,
+      weight: d.weight,
+      tier: d.tier,
+    }));
+
+    // 직렬화된 응답 모음 (Date → ISO string)
+    const serialized: SerializedSubItemResponse[] = [];
+    for (const row of diagListRaw) {
+      if (!row.responses) continue;
+      for (const [code, r] of Object.entries(row.responses)) {
+        if (!subDefMap.has(code)) continue;
+        if (!r.belief) continue;
+        serialized.push({
+          sub_item_code: code,
+          respondent_id: `r${row.respondent_num}`,
+          belief: r.belief,
+          evidence:
+            r.na || r.evidence === null || r.evidence === undefined
+              ? null
+              : r.evidence,
+          evidence_recorded_at: r.evidence_recorded_at,
+        });
       }
     }
-    stage = ((diagList[diagList.length - 1].stage as Stage) ?? "open_beta") as Stage;
-    for (const d of framework.domains) {
-      const agg = sums.get(d.code);
-      baselines.push({
-        code: d.code,
-        weight: d.weight,
-        score: agg && agg.n > 0 ? agg.sum / agg.n : null,
-        thresholds: d.thresholds,
-        is_critical: d.tier === "critical",
-        likelihood_ratio: DEFAULT_LIKELIHOOD_RATIOS[d.code],
-      });
-    }
+
+    baseline = {
+      domainScores: agg.domain_scores,
+      domainDefs,
+      subDefs,
+      responses: serialized,
+      stage: agg.stage,
+      respondentCount: diagListRaw.length,
+      // YAML SoT — client 측 computeImpact 가 buildScoringConfig 로 컴파일
+      scoringSource: {
+        priors: framework.priors,
+        likelihood_ratios: framework.likelihood_ratios,
+        critical_caps: framework.critical_caps,
+      },
+    };
   }
-  const stagePriors = DEFAULT_PRIORS[stage] ?? DEFAULT_PRIORS.open_beta;
+  const stage: Stage = baseline?.stage ?? "open_beta";
 
   // group by team -> phase -> tasks (sorted by priority within each phase)
   const grouped: Record<Team, Record<Phase, Task[]>> = {
@@ -138,91 +175,73 @@ export default async function WorklistPage({ params }: Props) {
 
   return (
     <main className="min-h-dvh w-full pb-20">
-      {/* HERO */}
-      <section className="border-b-2 border-ink">
-        <div className="max-w-6xl mx-auto px-6 sm:px-10 py-10 sm:py-14">
-          <div className="flex items-baseline gap-3 mb-3 flex-wrap">
-            <span className="kicker">팀별 실행 체크리스트</span>
-            <span className="label-mono">·</span>
-            <span className="label-mono">{workspace}</span>
-            <span className="label-mono">·</span>
-            <span className="label-mono">
-              {TASKS.length}개 업무 · 4단계 라이프사이클
+      {/* COMPACT HEADER — 진단 카드 hub로 돌아가는 link + 카드 ID + 한 줄 설명 */}
+      <section className="border-b border-ink-soft">
+        <div className="max-w-6xl mx-auto px-6 sm:px-10 py-5 sm:py-6 flex flex-wrap items-baseline justify-between gap-3">
+          <div className="flex items-baseline gap-3 flex-wrap min-w-0">
+            <a href="/worklist" className="label-mono hover:text-ink shrink-0">
+              ← 진단 카드 목록
+            </a>
+            <span className="label-mono opacity-40">·</span>
+            <span className="font-mono text-sm font-medium text-ink break-all">
+              {workspace}
             </span>
+            <span className="label-mono opacity-40">·</span>
+            <span className="label-mono">{TASKS.length}개 업무 · 6팀 · 4단계</span>
           </div>
-          <h1 className="font-display text-4xl sm:text-6xl leading-[1.05] tracking-tight break-keep">
-            누구도{" "}
-            <span className="italic font-light">놓치지 않게,</span>
-            <br />
-            <span className="text-accent">팀별 워크리스트</span>
-          </h1>
-          <p className="mt-5 max-w-3xl text-base sm:text-lg leading-relaxed text-ink-soft">
-            글로벌 SaaS·EdTech 운영 베스트 프랙티스를 기준으로,{" "}
-            <strong className="font-medium text-ink">
-              사전 준비 → 시장 진입 → 성장 → 운영 안정화
-            </strong>
-            의 4단계 라이프사이클에서 6개 팀이 수행해야 할 핵심 업무를 체계적으로
-            정리했습니다. 진단 결과·코칭 데이터로 자동 채워지고, 상태 칩을 눌러
-            수동으로 조정할 수 있습니다.
-          </p>
-          <ul className="mt-5 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs label-mono">
-            {PHASE_ORDER.map((p) => (
-              <li key={p} className="border border-ink-soft/40 px-3 py-2 bg-paper-soft">
-                <p className="font-mono uppercase tracking-widest mb-1">
-                  {p}
-                </p>
-                <p className="font-display text-base font-medium text-ink leading-tight">
-                  {PHASE_LABEL[p]}
-                </p>
-                <p className="mt-1 leading-snug">{PHASE_DESC[p]}</p>
-              </li>
-            ))}
-          </ul>
+          <a
+            href={`/diag/${workspace}/home`}
+            className="label-mono hover:text-ink"
+          >
+            카드 홈 →
+          </a>
         </div>
       </section>
 
-      {/* GOALS PANEL */}
+      {/* HERO — 실시간 실패확률 변화. 페이지 헤더 + 히어로 결합 */}
+      <ImpactPanel
+        workspace={workspace}
+        baseline={baseline}
+        workspaceMeta={{
+          totalTasks: TASKS.length,
+          teamsLabel: "6팀 · 4단계",
+        }}
+      />
+
+      {/* FUNNEL RIBBON — 고객여정 단계별 분포. 항상 노출 (예전엔 collapsible) */}
       <section className="max-w-6xl mx-auto px-6 sm:px-10 mt-8">
-        <GoalsPanel workspace={workspace} />
-      </section>
-
-      {/* DATA INGEST — 외부 분석 데이터로 워크리스트 변형 */}
-      <section className="max-w-6xl mx-auto px-6 sm:px-10 mt-5">
-        <DataIngestPanel workspace={workspace} />
-      </section>
-
-      {/* FUNNEL RIBBON — Customer Journey */}
-      <section className="max-w-6xl mx-auto px-6 sm:px-10 mt-5">
         <FunnelRibbon workspace={workspace} counts={funnelCounts} />
       </section>
 
-      {/* LIVE IMPACT — 워크리스트 완료 → 실패확률 변화 */}
-      <section className="max-w-6xl mx-auto px-6 sm:px-10 mt-5">
-        <ImpactPanel
-          workspace={workspace}
-          baselines={baselines}
-          prior_fp_6m={stagePriors.failure_6m}
-          prior_fp_12m={stagePriors.failure_12m}
-          hasDiagnosis={baselines.length > 0}
-        />
+      {/* PROGRESS STRIP — slim, 단독 */}
+      <section className="max-w-6xl mx-auto px-6 sm:px-10 mt-6">
+        <ProgressStrip workspace={workspace} tasks={TASKS} autoMap={autoMap} />
       </section>
 
-      {/* PROGRESS + FILTER */}
-      <section className="max-w-6xl mx-auto px-6 sm:px-10 mt-5 grid grid-cols-1 lg:grid-cols-3 gap-5">
-        <div className="lg:col-span-2">
-          <ProgressStrip
-            workspace={workspace}
-            tasks={TASKS}
-            autoMap={autoMap}
-          />
+      {/* TEAM SECTIONS HEADER + SEARCH·FILTER — 업무 리스트 바로 위에 배치 */}
+      <div className="max-w-6xl mx-auto px-6 sm:px-10 mt-12 mb-3">
+        <div className="flex items-baseline justify-between gap-3 flex-wrap mb-4">
+          <div>
+            <p className="kicker mb-1">
+              <span className="section-num">No. </span>02
+            </p>
+            <h2 className="font-display text-2xl sm:text-3xl leading-tight tracking-tight">
+              팀별 업무 리스트
+            </h2>
+          </div>
+          <p className="label-mono">
+            P01 = 팀-단계 내 우선순위 1번 · 위에서 아래로 중요도 순
+          </p>
         </div>
-        <FilterBar workspace={workspace} tasks={TASKS} autoMap={autoMap} />
-      </section>
-
-      {/* TEAM SECTIONS */}
+        <SearchFilterBar
+          workspace={workspace}
+          tasks={TASKS}
+          autoMap={autoMap}
+        />
+      </div>
       <section
         id="team-sections"
-        className="max-w-6xl mx-auto px-6 sm:px-10 mt-12 space-y-12 scroll-mt-20"
+        className="max-w-6xl mx-auto px-6 sm:px-10 space-y-12 scroll-mt-20"
       >
         {TEAM_ORDER.map((team, ti) => {
           const phaseMap = grouped[team];
@@ -417,7 +436,7 @@ export default async function WorklistPage({ params }: Props) {
       {/* BULK PLAYBOOK GENERATOR — 진단 완료 후 모든 카드 실무 자료 자동 생성 */}
       <BulkPlaybookGenerator
         workspace={workspace}
-        hasDiagnosis={baselines.length > 0}
+        hasDiagnosis={baseline !== null}
       />
 
       {/* FOOTER */}

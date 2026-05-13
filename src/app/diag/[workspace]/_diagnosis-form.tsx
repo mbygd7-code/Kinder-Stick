@@ -14,6 +14,8 @@ import type {
   FrameworkConfig,
   SubItem,
 } from "@/lib/framework/loader";
+import { EvidenceInputPanel } from "./_evidence-input";
+import { SubItemHelpPopover } from "./_sub-item-help";
 
 type Tab = "context" | "critical" | "optional";
 
@@ -24,10 +26,45 @@ type Tab = "context" | "critical" | "optional";
 type Belief = 1 | 2 | 3 | 4 | 5;
 type Evidence = 1 | 2 | 3 | 4 | 5;
 
+/**
+ * 업로드된 증거 파일 메타.
+ * Supabase Storage 의 public URL 만 보관 (실제 파일은 storage bucket).
+ */
+export interface EvidenceFile {
+  url: string;        // Supabase Storage public URL
+  name: string;       // 원본 파일명
+  size: number;       // bytes
+  mime: string;       // image/png, application/pdf, ...
+  uploaded_at: string; // ISO
+}
+
+/**
+ * AI 분석 결과 — 입력된 actual_value · notes · 업로드된 파일을
+ * Claude 가 검토한 뒤 산출하는 구조화 요약.
+ */
+export interface EvidenceAIAnalysis {
+  summary: string;            // 1-3문장 한국어 요약
+  suggested_bucket: number | null; // 1-5, 측정값에서 AI 가 추론한 1-5
+  confidence: number;         // 0..1
+  flags: string[];            // ["data_mismatch", "no_proof", "vague_text"] 등
+  analyzed_at: string;        // ISO
+  model: string;              // "claude-haiku-4-5-20251001"
+}
+
 interface Response {
   belief?: Belief;
   evidence?: Evidence;
   na?: boolean; // "측정 안 함" 명시 — evidence 자동으로 1로 맵핑되어 점수 계산되지만 UI에선 별도 표시
+
+  // ── 증거 강화 (Evidence-Based Diagnosis) ──
+  /** 실제 측정값 (e.g., "38" for Sean Ellis 38%). 자유 텍스트 — 숫자/단위 자체 입력 */
+  actual_value?: string;
+  /** 컨텍스트 노트 — 어디서 측정했나, 표본 크기, 시점 등 */
+  notes?: string;
+  /** 업로드된 증거 파일들 (스크린샷·CSV·PDF) */
+  evidence_files?: EvidenceFile[];
+  /** AI 가 위 정보를 분석한 결과 — 요약 + 추론 bucket + flags */
+  ai_analysis?: EvidenceAIAnalysis;
 }
 
 type ResponsesMap = Record<string, Response>;
@@ -58,12 +95,26 @@ const STORAGE_VERSION = 1;
 // Component
 // ============================================================
 
+export interface DiagnosisSubmitResult {
+  ok: boolean;
+  session_id?: string;
+  respondent_num?: number;
+  result?: Record<string, unknown>;
+  message?: string;
+}
+
 export function DiagnosisForm({
   workspace,
   framework,
+  onSubmitted,
+  redirectAfterSubmit = true,
 }: {
   workspace: string;
   framework: FrameworkConfig;
+  /** 제출 성공 시 콜백 — 통합 페이지에서 결과를 같은 페이지 인라인 표시할 때 사용 */
+  onSubmitted?: (result: DiagnosisSubmitResult) => void;
+  /** false 이면 제출 후 router.push 하지 않음 (callback 만 호출) */
+  redirectAfterSubmit?: boolean;
 }) {
   const router = useRouter();
   const storageKey = `kso-diag-${workspace}`;
@@ -192,6 +243,14 @@ export function DiagnosisForm({
                 evidence: v.na ? null : v.evidence,
                 na: !!v.na,
                 evidence_recorded_at: recordedAt,
+                // ── 증거 강화 필드 ──
+                actual_value: v.actual_value?.trim() || undefined,
+                notes: v.notes?.trim() || undefined,
+                evidence_files:
+                  v.evidence_files && v.evidence_files.length > 0
+                    ? v.evidence_files
+                    : undefined,
+                ai_analysis: v.ai_analysis,
               },
             ]),
         ),
@@ -206,12 +265,26 @@ export function DiagnosisForm({
         const json = await res.json();
         if (!res.ok || !json.ok) {
           setError(json.message ?? "제출 실패");
+          if (onSubmitted) {
+            onSubmitted({ ok: false, message: json.message });
+          }
           return;
         }
-        // localStorage 보존 (이력 보기용). 통합 홈으로 이동 (진단→운영 자연 흐름)
-        router.push(
-          `/diag/${workspace}/home?session=${encodeURIComponent(json.session_id ?? "")}&respondent=${json.respondent_num ?? ""}`,
-        );
+        // 콜백 우선 — 통합 페이지에서 같은 자리에 결과 인라인 노출용
+        if (onSubmitted) {
+          onSubmitted({
+            ok: true,
+            session_id: json.session_id,
+            respondent_num: json.respondent_num,
+            result: json.result,
+          });
+        }
+        if (redirectAfterSubmit) {
+          // localStorage 보존 (이력 보기용). 통합 홈으로 이동 (진단→운영 자연 흐름)
+          router.push(
+            `/diag/${workspace}/home?session=${encodeURIComponent(json.session_id ?? "")}&respondent=${json.respondent_num ?? ""}`,
+          );
+        }
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       }
@@ -219,7 +292,7 @@ export function DiagnosisForm({
   }
 
   function clearAll() {
-    if (!confirm("이 워크스페이스의 모든 응답을 지웁니다. 계속할까요?")) return;
+    if (!confirm("이 진단 카드의 모든 응답을 지웁니다. 계속할까요?")) return;
     setContext(DEFAULT_CONTEXT);
     setResponses({});
     localStorage.removeItem(storageKey);
@@ -307,6 +380,7 @@ export function DiagnosisForm({
 
       {tab === "critical" ? (
         <DomainStage
+          workspace={workspace}
           title="Critical Domains"
           subtitle="실패 확률에 가장 강하게 기여하는 8개 영역. 모두 답할 것을 권장."
           domains={criticalDomains}
@@ -319,6 +393,7 @@ export function DiagnosisForm({
 
       {tab === "optional" ? (
         <DomainStage
+          workspace={workspace}
           title="Important + Supporting"
           subtitle="가중치는 낮지만 운영 OS의 균형을 잡는 6개 영역. 시간이 없으면 건너뛰어도 좋습니다."
           domains={optionalDomains}
@@ -528,6 +603,7 @@ function ContextStage({
 }
 
 function DomainStage({
+  workspace,
   title,
   subtitle,
   domains,
@@ -536,6 +612,7 @@ function DomainStage({
   onContinue,
   continueLabel,
 }: {
+  workspace: string;
   title: string;
   subtitle: string;
   domains: Domain[];
@@ -555,6 +632,7 @@ function DomainStage({
         {domains.map((d) => (
           <DomainSection
             key={d.code}
+            workspace={workspace}
             domain={d}
             responses={responses}
             setResponse={setResponse}
@@ -582,10 +660,12 @@ function tierTagClass(tier: SubItem["tier"]): string {
 }
 
 function DomainSection({
+  workspace,
   domain,
   responses,
   setResponse,
 }: {
+  workspace: string;
   domain: Domain;
   responses: ResponsesMap;
   setResponse: (code: string, patch: Partial<Response>) => void;
@@ -632,7 +712,9 @@ function DomainSection({
           {subs.map((s) => (
             <SubItemForm
               key={s.code}
+              workspace={workspace}
               sub={s}
+              domain={domain}
               response={responses[s.code]}
               onChange={(patch) => setResponse(s.code, patch)}
             />
@@ -644,11 +726,15 @@ function DomainSection({
 }
 
 function SubItemForm({
+  workspace,
   sub,
+  domain,
   response,
   onChange,
 }: {
+  workspace: string;
   sub: SubItem;
+  domain: Domain;
   response: Response | undefined;
   onChange: (patch: Partial<Response>) => void;
 }) {
@@ -660,9 +746,12 @@ function SubItemForm({
     <article className="area-card">
       <header className="flex items-baseline justify-between gap-3 flex-wrap">
         <span className="font-mono text-xs text-ink-soft">{sub.code}</span>
-        <span className={`tag ${tierTagClass(sub.tier)}`}>
-          {sub.tier.toUpperCase()}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className={`tag ${tierTagClass(sub.tier)}`}>
+            {sub.tier.toUpperCase()}
+          </span>
+          <SubItemHelpPopover sub={sub} domain={domain} />
+        </div>
       </header>
 
       {/* BELIEF */}
@@ -733,6 +822,22 @@ function SubItemForm({
             : "측정/기록 없음으로 표시"}
         </button>
       </div>
+
+      {/* EVIDENCE INPUT — 실측 값/문서로 조작 방지 + AI 자동 분석 */}
+      {!na ? (
+        <EvidenceInputPanel
+          workspace={workspace}
+          sub={sub}
+          state={{
+            actual_value: response?.actual_value,
+            notes: response?.notes,
+            evidence_files: response?.evidence_files,
+            ai_analysis: response?.ai_analysis,
+          }}
+          onChange={(patch) => onChange(patch)}
+          selectedBucket={evidenceVal}
+        />
+      ) : null}
 
       {/* CITATION */}
       <p className="mt-4 dotted-rule pt-3 label-mono">

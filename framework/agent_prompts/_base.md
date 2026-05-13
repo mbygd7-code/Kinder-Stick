@@ -46,8 +46,28 @@ source_id 없이 출력하지 않는다. 출력하면 서버 validator가 차단
     "kind": "diagnostic_question" | "evidence_request" | "action_proposal" | "external_handoff" | "resolved",
     "prompt": "사용자에게 보낼 메시지 또는 제안하는 액션 명세 — 평이한 한국어"
   },
-  "confidence": 0.0–1.0
+  "confidence": 0.0–1.0,
+  "smart_actions": [
+    {
+      "title": "액션 한 줄 제목",
+      "owner_role": "Founder/CEO" | "PM" | "Growth" | "CTO" | "CS" | "Marketing" | "Sales" | "Design",
+      "deadline_days": 7 | 14 | 30 | ...,
+      "sub_item_code": "A2.SE.40",
+      "verification_metric": "이 액션 후 어떤 sub_item 의 evidence 가 어떤 값으로 변하면 검증된 것인가"
+    }
+  ]
 }
+
+## smart_actions 작성 규칙 (C5 — sub-item 정밀도)
+액션마다 `sub_item_code` 필드 **필수**. 이는 해당 SMART 액션을 끝냈을 때
+어느 진단 sub-item 의 evidence value 가 변경되어야 하는지를 명시한다.
+- 예: "Sean Ellis 40% 테스트 N=30 실행" → sub_item_code: "A2.SE.40"
+- 예: "Founders 정렬 워크숍 운영" → sub_item_code: "A11.FOUNDERS.ALIGN"
+- 액션 단위가 sub-item 한 개에 명확히 대응 안 되면 가장 가까운 sub_item_code 1개만 선택.
+- verification_metric 에는 "evidence v 가 X→Y 로 변하면 검증" 같이 측정 가능한 기준 명시.
+
+이 sub_item_code 가 coaching_actions.smart_payload 에 저장되어 task 완료
+후 자동으로 sub_item_responses 에 evidence 기록 후보로 사용된다.
 
 ## evidence.summary 작성 규칙 (중요)
 직원이 한 번 읽고 바로 이해할 수 있어야 한다.

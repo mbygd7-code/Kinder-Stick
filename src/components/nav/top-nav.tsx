@@ -17,29 +17,11 @@ interface NavItem {
 const GLOBAL_NAV: NavItem[] = [
   { href: "/", label: "홈", short: "홈" },
   { href: "/diag", label: "진단", short: "진단" },
-  { href: "/me", label: "내 워크스페이스", short: "내 워크스페이스" },
+  { href: "/worklist", label: "내 워크리스트", short: "내 워크리스트" },
 ];
 
-/** 일상 흐름 — 4개로 압축. 진단→홈→실행→타임라인의 자연 순서. */
-function workspacePrimaryNav(ws: string): NavItem[] {
-  return [
-    { href: `/diag/${ws}/home`, label: "홈", short: "홈" },
-    { href: `/diag/${ws}/worklist`, label: "워크리스트", short: "워크리스트" },
-    { href: `/diag/${ws}/actions`, label: "액션", short: "액션" },
-    { href: `/diag/${ws}/timeline`, label: "타임라인", short: "타임라인" },
-  ];
-}
-
-/** 가끔 보는 운영·관리 — 드롭다운. 깊이 보기 + 설정. */
-function workspaceSecondaryNav(ws: string): NavItem[] {
-  return [
-    { href: `/diag/${ws}/result`, label: "결과 상세 — 요인 분해·breakdown" },
-    { href: `/diag/${ws}/signals`, label: "시그널 피드 — KPI 자동 측정" },
-    { href: `/diag/${ws}/members`, label: "멤버 관리" },
-    { href: `/diag/${ws}/integrations`, label: "외부 연동" },
-    { href: `/diag/${ws}/audit`, label: "감사 — 응답·코칭 로그" },
-  ];
-}
+// 워크스페이스별 진입점들 (홈·액션·타임라인·결과·시그널·멤버·연동·감사) 는
+// /diag 페이지의 워크스페이스 카드에 통합됨. 별도 secondary nav 불필요.
 
 /**
  * 어떤 워크스페이스든 bulk AI 자동 생성이 진행 중인지 확인.
@@ -68,11 +50,6 @@ export function TopNav({ userEmail }: Props) {
   // Detect workspace context (/diag/[ws]/...)
   const wsMatch = pathname.match(/^\/diag\/([a-zA-Z0-9_-]{3,50})(\/|$)/);
   const ws = wsMatch ? wsMatch[1] : null;
-  const primaryItems: NavItem[] = ws ? workspacePrimaryNav(ws) : [];
-  const secondaryItems: NavItem[] = ws ? workspaceSecondaryNav(ws) : [];
-
-  // Manage state
-  const [adminOpen, setAdminOpen] = useState(false);
 
   // Bulk AI 자동 생성 진행 상태 — 워크리스트 GNB 링크에 로딩 바 표시
   const [bulkActive, setBulkActive] = useState(false);
@@ -99,19 +76,19 @@ export function TopNav({ userEmail }: Props) {
   // Close menus on route change
   useEffect(() => {
     setOpen(false);
-    setAdminOpen(false);
   }, [pathname]);
 
-  // Close admin dropdown on outside click
+  // 마지막 진입 워크스페이스를 localStorage 에 저장 → "내 워크리스트" 진입 시 사용
   useEffect(() => {
-    if (!adminOpen) return;
-    function handler(e: MouseEvent) {
-      const target = e.target as HTMLElement;
-      if (!target.closest("[data-admin-dropdown]")) setAdminOpen(false);
+    if (typeof window === "undefined") return;
+    if (ws) {
+      try {
+        window.localStorage.setItem("kso:last-workspace", ws);
+      } catch {
+        // ignore
+      }
     }
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [adminOpen]);
+  }, [ws]);
 
   if (hideNav) return null;
 
@@ -172,23 +149,24 @@ export function TopNav({ userEmail }: Props) {
         <div className="flex items-center gap-2 shrink-0">
           {userEmail ? (
             <div className="hidden md:flex items-center gap-2">
-              <Link
-                href="/me"
-                className="label-mono hover:text-ink truncate max-w-[140px]"
-              >
+              <span className="label-mono truncate max-w-[140px]">
                 {userEmail.split("@")[0]}
-              </Link>
+              </span>
               <span className="label-mono opacity-40">·</span>
               <Link href="/auth/logout" className="label-mono hover:text-ink">
                 logout
               </Link>
             </div>
           ) : (
+            // 개발 모드: 로그인 강조 안 함, 익명 진입 안내만
+            // [TODO PRODUCTION] 인증 복원 시 이 영역을 Sign in 버튼으로 되돌리고
+            // /auth/login 으로 강제 redirect 하는 미들웨어를 추가할 것.
             <Link
-              href="/auth/login"
-              className="hidden md:inline-flex items-center px-3 py-1.5 text-sm font-semibold border-2 border-ink hover:bg-ink hover:text-paper transition-colors"
+              href="/diag"
+              className="hidden md:inline-flex items-center px-3 py-1.5 text-sm font-medium label-mono hover:text-ink"
+              title="개발 모드 — 로그인 없이 진단 카드 진입"
             >
-              Sign in
+              익명 모드
             </Link>
           )}
 
@@ -218,116 +196,8 @@ export function TopNav({ userEmail }: Props) {
         </div>
       </div>
 
-      {/* ============== ROW 2 — Workspace tools (only in workspace) ============== */}
-      {ws ? (
-        <div className="border-t border-ink-soft/30 bg-paper-soft hidden md:block">
-          <div className="max-w-7xl mx-auto px-6 sm:px-10 h-11 flex items-center gap-4">
-            {/* WS chip */}
-            <Link
-              href={`/diag/${ws}/home`}
-              className="flex items-baseline gap-1.5 px-2 py-1 border border-ink-soft hover:border-ink hover:bg-paper-deep transition-colors min-w-0 shrink-0"
-              title={`Workspace: ${ws}`}
-            >
-              <span className="label-mono">WS</span>
-              <span className="font-mono text-xs truncate max-w-[180px]">
-                {ws}
-              </span>
-            </Link>
-
-            {/* Workspace primary nav (5 items) */}
-            <nav
-              className="flex items-center gap-0.5 flex-1 overflow-x-auto"
-              aria-label="Workspace"
-            >
-              {primaryItems.map((item) => {
-                const active = isActive(pathname, item.href, ws);
-                const isWorklist = item.href.endsWith("/worklist");
-                const showLoader = isWorklist && bulkActive;
-                return (
-                  <span
-                    key={item.href}
-                    className="relative inline-flex flex-col items-stretch"
-                  >
-                    <Link
-                      href={item.href}
-                      className={`px-2.5 py-1 text-sm font-medium tracking-tight transition-colors border-b-2 -mb-[1px] whitespace-nowrap ${
-                        active
-                          ? "border-accent text-ink"
-                          : "border-transparent text-ink-soft hover:text-ink hover:border-ink-soft"
-                      }`}
-                      title={showLoader ? "AI 자동 생성 진행 중" : undefined}
-                    >
-                      {item.short ?? item.label}
-                    </Link>
-                    {showLoader ? (
-                      <span
-                        aria-hidden="true"
-                        className="pointer-events-none absolute left-0 right-0 bottom-[-1px] h-0.5 bg-accent origin-left"
-                        style={{
-                          animation:
-                            "nav-loader-fill 1.4s ease-in-out infinite",
-                        }}
-                      />
-                    ) : null}
-                  </span>
-                );
-              })}
-            </nav>
-
-            {/* Admin/관리 dropdown — secondary tools */}
-            <div data-admin-dropdown className="relative shrink-0">
-              <button
-                type="button"
-                onClick={() => setAdminOpen((v) => !v)}
-                className={`px-2.5 py-1 text-sm font-medium tracking-tight transition-colors border-b-2 -mb-[1px] whitespace-nowrap flex items-center gap-1 ${
-                  adminOpen ||
-                  secondaryItems.some((i) => isActive(pathname, i.href, ws))
-                    ? "border-accent text-ink"
-                    : "border-transparent text-ink-soft hover:text-ink hover:border-ink-soft"
-                }`}
-                aria-expanded={adminOpen}
-                aria-haspopup="menu"
-              >
-                관리
-                <span className="font-mono text-[9px]">▾</span>
-              </button>
-              {adminOpen ? (
-                <div
-                  role="menu"
-                  className="absolute right-0 top-8 z-30 w-64 bg-paper border-2 border-ink shadow-lg py-1"
-                >
-                  {secondaryItems.map((item) => {
-                    const active = isActive(pathname, item.href, ws);
-                    return (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        role="menuitem"
-                        className={`block px-3 py-2 text-sm transition-colors ${
-                          active
-                            ? "bg-paper-deep text-ink font-medium"
-                            : "text-ink-soft hover:bg-paper-deep hover:text-ink"
-                        }`}
-                      >
-                        {item.label}
-                      </Link>
-                    );
-                  })}
-                </div>
-              ) : null}
-            </div>
-
-            {/* Switch */}
-            <Link
-              href="/diag"
-              className="label-mono hover:text-ink shrink-0"
-              title="다른 워크스페이스로 전환"
-            >
-              ⇆ switch
-            </Link>
-          </div>
-        </div>
-      ) : null}
+      {/* Row 2 (Workspace secondary nav) 통째 제거.
+          워크스페이스 진입점들은 /diag 페이지의 워크스페이스 카드에 통합됨. */}
 
       {/* ============== Mobile dropdown ============== */}
       {open ? (
@@ -353,59 +223,24 @@ export function TopNav({ userEmail }: Props) {
             })}
 
             {ws ? (
-              <>
-                <div className="mt-3 mb-1 flex items-baseline gap-2">
-                  <span className="label-mono">WORKSPACE</span>
-                  <span className="font-mono text-xs">{ws}</span>
-                  <Link
-                    href="/diag"
-                    className="ml-auto label-mono hover:text-ink"
-                  >
-                    ⇆ switch
-                  </Link>
-                </div>
-                {primaryItems.map((item) => {
-                  const active = isActive(pathname, item.href, ws);
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={`px-2 py-2 text-sm font-medium border-l-2 ${
-                        active
-                          ? "border-accent text-ink bg-paper-deep"
-                          : "border-transparent text-ink-soft hover:text-ink hover:border-ink-soft"
-                      }`}
-                    >
-                      {item.label}
-                    </Link>
-                  );
-                })}
-                <p className="label-mono mt-3 mb-1">관리</p>
-                {secondaryItems.map((item) => {
-                  const active = isActive(pathname, item.href, ws);
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={`px-2 py-2 text-xs border-l-2 ${
-                        active
-                          ? "border-accent text-ink bg-paper-deep"
-                          : "border-transparent text-ink-soft hover:text-ink"
-                      }`}
-                    >
-                      {item.label}
-                    </Link>
-                  );
-                })}
-              </>
+              <div className="mt-3 mb-1 flex items-baseline gap-2">
+                <span className="label-mono">현재 카드</span>
+                <span className="font-mono text-xs">{ws}</span>
+                <Link
+                  href="/diag"
+                  className="ml-auto label-mono hover:text-ink"
+                >
+                  ⇆ 다른 카드
+                </Link>
+              </div>
             ) : null}
 
             <div className="mt-3 pt-2 border-t border-ink-soft/40 flex items-center gap-3">
               {userEmail ? (
                 <>
-                  <Link href="/me" className="label-mono hover:text-ink">
+                  <span className="label-mono">
                     {userEmail.split("@")[0]}
-                  </Link>
+                  </span>
                   <Link
                     href="/auth/logout"
                     className="label-mono hover:text-ink ml-auto"
@@ -414,12 +249,8 @@ export function TopNav({ userEmail }: Props) {
                   </Link>
                 </>
               ) : (
-                <Link
-                  href="/auth/login"
-                  className="label-mono hover:text-ink"
-                >
-                  Sign in →
-                </Link>
+                // [TODO PRODUCTION] 개발 모드: 모바일 Sign in 도 안내 라벨로 대체
+                <span className="label-mono opacity-60">익명 모드</span>
               )}
             </div>
           </div>
@@ -437,14 +268,10 @@ function isActive(
   if (href === "/") return pathname === "/";
   // 진단 시작: highlighted on /diag landing only (workspaces have their own row)
   if (href === "/diag") return pathname === "/diag";
-  // 내 워크스페이스: highlighted on /me OR inside any workspace
-  // (워크리스트 글로벌 라우트는 제거됨 — 워크스페이스 컨텍스트의 primary nav에서만 접근)
-  if (href === "/me") {
-    if (pathname === "/me") return true;
-    // 워크스페이스 내부 어느 페이지든 "내 워크스페이스" 메뉴를 active로 표시
-    if (ws !== null && pathname.startsWith("/diag/")) {
-      return true;
-    }
+  // 내 워크리스트: 글로벌 /worklist OR 어느 워크스페이스든 /diag/{ws}/worklist 에 있을 때
+  if (href === "/worklist") {
+    if (pathname === "/worklist") return true;
+    if (ws !== null && pathname === `/diag/${ws}/worklist`) return true;
     return false;
   }
   // For /diag/[ws] (the diagnosis form root), active only when exactly on it

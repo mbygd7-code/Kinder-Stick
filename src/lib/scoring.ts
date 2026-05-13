@@ -122,6 +122,115 @@ export const DEFAULT_LIKELIHOOD_RATIOS: Record<string, number> = {
 const HORIZON_12M_MULT = 1.6;
 
 // ============================================================
+// 0b. ScoringConfig builder — YAML → runtime config
+// ============================================================
+
+/**
+ * YAML 의 critical_caps 원시 형식.
+ * condition 은 small DSL 문자열 (`evidence.v <= 2 AND stage IN [open_beta, ga_early]` 등).
+ */
+export interface CriticalCapRawInput {
+  sub_item: string;
+  condition: string;
+  min_p_6m: number;
+}
+
+/**
+ * YAML framework 에서 ScoringConfig 를 빌드한다.
+ *
+ * 사용 이유: `question_bank.yaml` 이 priors·LR·critical_caps 의 SoT (Single source of truth)
+ * 이지만 이전 코드는 모두 `computeFailureProbability(..., config: undefined, ...)` 로 호출해
+ * hardcoded DEFAULT_PRIORS 만 사용했음 (Appendix H-1.1, H-1.2). 이 helper 로 YAML 값이
+ * 진단 실제 계산에 흘러들어가게 된다.
+ */
+export function buildScoringConfig(framework: {
+  priors?: Record<Stage, { failure_6m: number; failure_12m: number }>;
+  likelihood_ratios?: Record<string, number>;
+  critical_caps?: CriticalCapRawInput[];
+}): ScoringConfig {
+  return {
+    priors: framework.priors ?? DEFAULT_PRIORS,
+    likelihood_ratios:
+      framework.likelihood_ratios ?? DEFAULT_LIKELIHOOD_RATIOS,
+    critical_caps: (framework.critical_caps ?? []).map(compileCriticalCap),
+  };
+}
+
+/**
+ * condition 문자열 → predicate 함수 컴파일.
+ *
+ * 지원 문법 (AND 으로 결합):
+ *   - `evidence.v <op> <n>`   (op: == != < <= > >=)
+ *   - `stage IN [a, b, c]`     (stage 이름 콤마 구분)
+ *   - `has_<flag>`             (시스템에 flag 가 없으면 false 로 평가 — 보수적)
+ *
+ * 모든 알 수 없는 절은 false 로 평가해 cap 이 잘못 발동하지 않게 한다 (fail-safe).
+ * 결과 predicate: 해당 sub_item 에 응답한 응답자 중 *어느 한 명이라도* 조건을
+ * 만족하면 true. PII 사고 같은 cap 은 "한 명만 보고해도 발동" 의미.
+ */
+export function compileCriticalCap(raw: CriticalCapRawInput): CriticalCap {
+  const clauses = raw.condition.split(/\s+AND\s+/i).map((c) => c.trim());
+  type Clause = (ctx: CapContext) => boolean;
+  const compiled: Clause[] = [];
+
+  for (const clause of clauses) {
+    // evidence.v <op> N
+    const mEv = clause.match(/^evidence\.v\s*(==|!=|<=|>=|<|>)\s*(\d+)$/);
+    if (mEv) {
+      const op = mEv[1];
+      const n = parseInt(mEv[2], 10);
+      compiled.push((ctx) => {
+        const rs = ctx.responses.get(raw.sub_item) ?? [];
+        for (const r of rs) {
+          if (r.evidence === null) continue;
+          const v = r.evidence;
+          let ok = false;
+          switch (op) {
+            case "==": ok = v === n; break;
+            case "!=": ok = v !== n; break;
+            case "<":  ok = v < n; break;
+            case "<=": ok = v <= n; break;
+            case ">":  ok = v > n; break;
+            case ">=": ok = v >= n; break;
+          }
+          if (ok) return true;
+        }
+        return false;
+      });
+      continue;
+    }
+
+    // stage IN [a, b, c]
+    const mStage = clause.match(/^stage\s+IN\s+\[(.+)\]$/i);
+    if (mStage) {
+      const stages = mStage[1].split(",").map((s) => s.trim());
+      compiled.push((ctx) => stages.includes(ctx.stage));
+      continue;
+    }
+
+    // bare flag (예: has_active_competitive_deals) — 시스템에 미추적이라 false
+    if (/^has_[a-z_]+$/i.test(clause)) {
+      compiled.push(() => false);
+      continue;
+    }
+
+    // 알 수 없는 절 — fail-safe false
+    if (process.env.NODE_ENV !== "production") {
+      console.warn(
+        `[scoring] Unknown critical-cap clause for ${raw.sub_item}: "${clause}"`,
+      );
+    }
+    compiled.push(() => false);
+  }
+
+  return {
+    sub_item: raw.sub_item,
+    predicate: (ctx) => compiled.every((c) => c(ctx)),
+    min_p_6m: raw.min_p_6m,
+  };
+}
+
+// ============================================================
 // 1. Sub-item score (0..100)
 // ============================================================
 

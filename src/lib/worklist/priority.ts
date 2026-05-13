@@ -50,12 +50,24 @@ export interface PriorityInput {
 
 /**
  * 우선순위 점수 산정. 높을수록 1순위.
+ *
+ * C8: stage_relevance 가 명시되어 있고 현재 stage 가 거기 미포함이면
+ * tier 한 단계 강등 (must→conditional, conditional→recurring) — 동적 tier.
  */
 export function priorityScore(
   item: PriorityInput,
   currentStage: Stage,
 ): number {
-  const tw = tierWeight(item.tier);
+  let effective = item.tier;
+  if (
+    item.stage_relevance &&
+    item.stage_relevance.length > 0 &&
+    !item.stage_relevance.includes(currentStage)
+  ) {
+    if (effective === "must") effective = "conditional";
+    else if (effective === "conditional") effective = "recurring";
+  }
+  const tw = tierWeight(effective);
   const lr = item.domain
     ? (DEFAULT_LIKELIHOOD_RATIOS[item.domain] ?? 0)
     : 0;
@@ -100,4 +112,31 @@ export function priorityLabel(rank: number): string {
 export function isRelevantForStage(task: Task, stage: Stage): boolean {
   if (!task.stage_relevance || task.stage_relevance.length === 0) return true;
   return task.stage_relevance.includes(stage);
+}
+
+/**
+ * C8 — Stage 기반 동적 tier 강등.
+ *
+ * 모든 task 가 must 라서 "필수" 톤이 평탄해진 문제 해결.
+ * task.stage_relevance 가 명시되어 있고 현재 stage 가 거기 없으면 한 단계 강등:
+ *   must → conditional
+ *   conditional → recurring
+ *   recurring → recurring (그대로)
+ *
+ * 즉 같은 task 라도 베타 단계에선 conditional 이고 정식 출시 단계에선 must.
+ * 우선순위 강조를 stage 별로 자연스럽게 분리.
+ */
+export function effectiveTier(task: Task, stage: Stage): WorklistTier {
+  // stage_relevance 미설정이면 모든 stage 에서 원래 tier 그대로
+  if (!task.stage_relevance || task.stage_relevance.length === 0) {
+    return task.tier;
+  }
+  // 현재 stage 가 포함되면 원래 tier
+  if (task.stage_relevance.includes(stage)) {
+    return task.tier;
+  }
+  // 미포함이면 한 단계 강등
+  if (task.tier === "must") return "conditional";
+  if (task.tier === "conditional") return "recurring";
+  return "recurring";
 }

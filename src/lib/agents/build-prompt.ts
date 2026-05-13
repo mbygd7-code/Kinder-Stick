@@ -413,7 +413,7 @@ export function formatTimeline(
 
 export function formatActions(actions: RetrievedAction[]): string {
   if (actions.length === 0) {
-    return "(이 워크스페이스에서 채택된 액션 없음 — 첫 코칭 세션)";
+    return "(이 진단 카드에서 채택된 액션 없음 — 첫 코칭 세션)";
   }
   // Group by status; surface overdue first
   const overdue = actions.filter((a) => a.is_overdue);

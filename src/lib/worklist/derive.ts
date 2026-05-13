@@ -19,6 +19,15 @@ export interface WorkspaceFacts {
   latestDiagnosisAt: string | null;
   respondedDomains: Set<string>; // domain codes that have at least one response
   recentEvidenceDomains: Set<string>; // domain codes with evidence within 90d
+  /**
+   * C4 — sub-item 레벨 정밀도.
+   * sub_item_code → 가장 최근 evidence v (1–5), recorded_at.
+   * `evidence_v_for_sub_item` AutoRule 이 이 맵을 참조해 task done 여부를 판정.
+   */
+  latestEvidenceForSubItem: Map<
+    string,
+    { v: number; recorded_at: string }
+  >;
   // actions
   hasOverdue: boolean;
   verifiedActionsCount: number;
@@ -58,6 +67,7 @@ interface MinResponse {
   sub_item_code: string;
   evidence_recorded_at: string | null;
   data_source: string | null;
+  evidence_value: number | null;
 }
 
 interface MinKpiMapping {
@@ -100,7 +110,9 @@ export async function loadWorkspaceFacts(
       .eq("workspace_id", workspaceId),
     sb
       .from("sub_item_responses")
-      .select("sub_item_code, evidence_recorded_at, data_source")
+      .select(
+        "sub_item_code, evidence_recorded_at, data_source, evidence_value",
+      )
       .eq("org_id", orgId),
     sb
       .from("coaching_actions")
@@ -154,6 +166,28 @@ export async function loadWorkspaceFacts(
       )
       .map((r) => r.sub_item_code.split(".")[0]),
   );
+
+  // C4 — sub-item 레벨 evidence 최신값 누적
+  // 같은 sub_item 에 여러 응답자 답이 있으면 가장 최근 응답 채택
+  const latestEvidenceForSubItem = new Map<
+    string,
+    { v: number; recorded_at: string }
+  >();
+  for (const r of responses) {
+    if (r.evidence_value === null || r.evidence_value === undefined) continue;
+    if (!r.evidence_recorded_at) continue;
+    const cur = latestEvidenceForSubItem.get(r.sub_item_code);
+    if (
+      !cur ||
+      new Date(r.evidence_recorded_at).getTime() >
+        new Date(cur.recorded_at).getTime()
+    ) {
+      latestEvidenceForSubItem.set(r.sub_item_code, {
+        v: r.evidence_value,
+        recorded_at: r.evidence_recorded_at,
+      });
+    }
+  }
 
   const actions = (actionsRes.data ?? []) as MinAction[];
   const now = Date.now();
@@ -216,6 +250,7 @@ export async function loadWorkspaceFacts(
     latestDiagnosisAt,
     respondedDomains,
     recentEvidenceDomains,
+    latestEvidenceForSubItem,
     hasOverdue,
     verifiedActionsCount,
     redCriticalAllHaveOwner,
@@ -238,6 +273,7 @@ function emptyFacts(workspaceId: string): WorkspaceFacts {
     latestDiagnosisAt: null,
     respondedDomains: new Set(),
     recentEvidenceDomains: new Set(),
+    latestEvidenceForSubItem: new Map(),
     hasOverdue: false,
     verifiedActionsCount: 0,
     redCriticalAllHaveOwner: false,
@@ -275,6 +311,15 @@ export function deriveAutoStatus(
 
     case "domain_responded":
       return facts.respondedDomains.has(rule.code) ? "done" : "not_started";
+
+    case "evidence_v_for_sub_item": {
+      // C4 — sub-item 정밀도. evidence v 가 min_v 이상이면 done.
+      const ev = facts.latestEvidenceForSubItem.get(rule.code);
+      if (!ev) return "not_started";
+      if (ev.v >= rule.min_v) return "done";
+      // 응답은 있지만 임계 미달 — 진행 중 (재측정 필요)
+      return "in_progress";
+    }
 
     case "evidence_recorded_for":
       return facts.recentEvidenceDomains.has(rule.code)

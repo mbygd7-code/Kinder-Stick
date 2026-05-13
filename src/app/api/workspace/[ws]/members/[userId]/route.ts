@@ -37,7 +37,7 @@ async function ensureAuth(req: Request, ws: string) {
     .eq("name", ws)
     .maybeSingle();
   if (!org) {
-    return { error: NextResponse.json({ ok: false, message: "워크스페이스 없음" }, { status: 404 }) };
+    return { error: NextResponse.json({ ok: false, message: "진단 카드 없음" }, { status: 404 }) };
   }
   const { data: caller } = await sb
     .from("org_members")

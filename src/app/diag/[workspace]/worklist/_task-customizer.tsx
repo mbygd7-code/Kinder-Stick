@@ -91,7 +91,10 @@ export function TaskTitle({
   const hasCustom = mounted && custom !== null && custom !== task.title;
 
   return (
-    <p className="t-display-3 sm:t-display-2 text-ink break-keep">
+    <p
+      data-task-title
+      className="t-display-3 sm:t-display-2 text-ink break-keep"
+    >
       {displayTitle}
       {hasCustom ? (
         <span className="ml-2 align-middle inline-block tag tag-gold">
@@ -357,7 +360,7 @@ export function TaskEditButton({
           </div>
 
           <p className="label-mono pt-2 border-t border-ink-soft/30">
-            저장된 수정 제목은 이 워크스페이스에만 적용됩니다 (localStorage).
+            저장된 수정 제목은 이 진단 카드에만 적용됩니다 (localStorage).
           </p>
         </div>
       ) : null}

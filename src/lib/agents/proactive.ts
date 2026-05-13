@@ -105,7 +105,7 @@ export async function triggerProactiveCoach(
   // 3. Construct proactive user message
   const userMessage = [
     "[PROACTIVE TRIGGER — 자동 알림]",
-    `방금 발생한 시그널을 진단해 주세요. 사용자가 워크스페이스에 들어오기 전에 미리 finding을 준비합니다.`,
+    `방금 발생한 시그널을 진단해 주세요. 사용자가 진단 카드에 들어오기 전에 미리 finding을 준비합니다.`,
     "",
     `signal kind: ${signal_kind}`,
     `severity: ${signal_severity}`,

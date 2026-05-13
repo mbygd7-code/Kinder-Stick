@@ -106,9 +106,9 @@ export default async function MembersPage({ params }: Props) {
             </span>
           </div>
           <div className="flex items-center gap-3">
-            <a href="/me" className="label-mono hover:text-ink">
-              /me ({currentUser.email?.split("@")[0]})
-            </a>
+            <span className="label-mono">
+              {currentUser.email?.split("@")[0]}
+            </span>
             <span className="label-mono">MEMBERS · {callerRole.toUpperCase()}</span>
           </div>
         </div>
@@ -147,18 +147,24 @@ export default async function MembersPage({ params }: Props) {
 }
 
 function UnauthedView({ workspace }: { workspace: string }) {
+  // [TODO PRODUCTION] 개발 모드: 로그인 강제 대신 안내 + 홈으로 돌아가기.
+  // 인증 복원 시 원래 "Sign in" CTA 로 되돌릴 것.
   return (
     <main className="min-h-dvh flex items-center justify-center p-8">
       <div className="max-w-md text-center">
-        <p className="kicker mb-2">Sign in required</p>
-        <h1 className="font-display text-3xl">
-          멤버 페이지는 로그인 후 접근할 수 있습니다
+        <p className="kicker mb-2">개발 모드</p>
+        <h1 className="font-display text-3xl leading-tight">
+          멤버 관리는 인증 복원 후 사용 가능
         </h1>
+        <p className="mt-3 text-sm text-ink-soft">
+          현재는 로그인 없이 모든 진단 카드에 접근 가능한 개발 모드입니다.
+          멤버 초대·권한 관리 기능은 인증 시스템 복원 후 활성화됩니다.
+        </p>
         <a
-          href={`/auth/login?next=${encodeURIComponent(`/diag/${workspace}/members`)}`}
+          href={`/diag/${workspace}/home`}
           className="btn-primary mt-6 inline-flex"
         >
-          Sign in <span className="font-mono text-xs">→</span>
+          ← 홈으로 돌아가기
         </a>
       </div>
     </main>
@@ -171,7 +177,7 @@ function NotMemberView({ workspace }: { workspace: string }) {
       <div className="max-w-md text-center">
         <p className="kicker mb-2 !text-signal-amber">Not a member</p>
         <h1 className="font-display text-3xl">
-          이 워크스페이스 멤버가 아닙니다
+          이 진단 카드 멤버가 아닙니다
         </h1>
         <p className="mt-3 text-ink-soft text-sm">
           홈 페이지에서 "Claim ownership" 으로 가입할 수 있습니다.
@@ -193,7 +199,7 @@ function UnknownWorkspaceView({ workspace }: { workspace: string }) {
       <div className="max-w-md text-center">
         <p className="kicker mb-2">Workspace not found</p>
         <h1 className="font-display text-3xl">
-          <span className="font-mono">{workspace}</span> 워크스페이스가 없습니다
+          <span className="font-mono">{workspace}</span> 진단 카드가 없습니다
         </h1>
         <a href="/diag" className="btn-secondary mt-6 inline-flex">
           ← Domain Map

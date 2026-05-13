@@ -7,6 +7,7 @@ import {
   computeDomainScore,
   computeOverallScore,
   computeFailureProbability,
+  buildScoringConfig,
   type Stage,
   type SubItemDef,
   type SubItemResponse,
@@ -534,7 +535,7 @@ function aggregateRespondents(
     domainDefs,
     responses,
     stage,
-    undefined,
+    buildScoringConfig(framework),
     {
       subDefs,
       now,
@@ -787,7 +788,7 @@ function EmptyView({ workspace }: { workspace: string }) {
       <div className="max-w-md text-center">
         <p className="kicker mb-2">No diagnosis history</p>
         <h1 className="font-display text-3xl">
-          이 워크스페이스에 진단 기록이 없습니다
+          이 진단 카드에 진단 기록이 없습니다
         </h1>
         <a
           href={`/diag/${workspace}`}

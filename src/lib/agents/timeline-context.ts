@@ -11,6 +11,7 @@ import {
   computeDomainScore,
   computeOverallScore,
   computeFailureProbability,
+  buildScoringConfig,
   type Stage,
   type SubItemDef,
   type SubItemResponse,
@@ -252,7 +253,7 @@ function aggregateQuarter(
     domainDefs,
     responses,
     stage,
-    undefined,
+    buildScoringConfig(framework),
     {
       subDefs,
       now,

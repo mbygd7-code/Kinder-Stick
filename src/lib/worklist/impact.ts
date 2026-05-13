@@ -2,10 +2,14 @@
  * Worklist live-impact calculator.
  *
  * 워크리스트의 task 완료 상태를 진단 결과(domain 점수)에 더해 다시 합산하여
- * “지금 이대로 → 워크리스트 100% 완료 시” 실패확률 변화를 계산.
+ * "지금 이대로 → 워크리스트 100% 완료 시" 실패확률 변화를 계산.
  *
  * 클라이언트 측에서 task 상태를 토글할 때마다 즉시 재계산 → 직원이
- * “내가 이걸 완료하면 실패확률이 X% 떨어진다”를 실시간으로 본다.
+ * "내가 이걸 완료하면 실패확률이 X% 떨어진다"를 실시간으로 본다.
+ *
+ * 중요: 홈 페이지·결과 페이지의 실패확률과 정확히 일치하도록
+ * scoring.ts 의 `computeFailureProbability` (8-factor log-LR 모델) 을 그대로 사용.
+ * 단순 단일-LR 모델을 쓰면 사용자가 두 페이지에서 다른 숫자를 보게 됨.
  */
 
 import {
@@ -15,31 +19,57 @@ import {
   type Status,
   type Task,
 } from "./catalog";
+import {
+  computeFailureProbability,
+  computeOverallScore,
+  buildScoringConfig,
+  type CriticalCapRawInput,
+  type DomainScoreResult,
+  type DomainDef,
+  type SubItemDef,
+  type SubItemResponse,
+  type Stage,
+} from "@/lib/scoring";
 
-export interface DomainBaseline {
-  code: string;
-  weight: number;
-  /** 진단 결과 점수 0..100, 미응답이면 null */
-  score: number | null;
-  /** 도메인 임계 (red/yellow/green) */
-  thresholds: { red: number; yellow: number; green: number };
-  /** critical 여부 — likelihood ratio 적용 대상 */
-  is_critical: boolean;
-  /** failure probability 계산용 likelihood ratio */
-  likelihood_ratio?: number;
+/** Serializable 버전 — Date 를 ISO string 으로. */
+export interface SerializedSubItemResponse {
+  sub_item_code: string;
+  respondent_id: string;
+  belief: number;
+  evidence: number | null;
+  evidence_recorded_at: string; // ISO
+}
+
+/** server → client 로 넘기는 진단 baseline 묶음. */
+export interface DiagnosisBaseline {
+  /** aggregateRespondents 가 반환한 도메인 점수 (snapshot 아님, 실시간 재집계) */
+  domainScores: DomainScoreResult[];
+  /** 도메인 정의 (weight, tier) */
+  domainDefs: DomainDef[];
+  /** sub-item 정의 (critical 결측·data quality 평가용) */
+  subDefs: SubItemDef[];
+  /** 직렬화된 raw 응답 — Date → string */
+  responses: SerializedSubItemResponse[];
+  /** stage */
+  stage: Stage;
+  /** 응답자 수 — 저표본 페널티용 */
+  respondentCount: number;
+  /** YAML SoT 의 priors·LRs·critical_caps (serializable). client 측에서 buildScoringConfig 로 컴파일.  */
+  scoringSource: {
+    priors?: Record<Stage, { failure_6m: number; failure_12m: number }>;
+    likelihood_ratios?: Record<string, number>;
+    critical_caps?: CriticalCapRawInput[];
+  };
 }
 
 export interface ImpactInputs {
-  baselines: DomainBaseline[];
-  /** prior 6m / 12m (stage별) */
-  prior_fp_6m: number;
-  prior_fp_12m: number;
+  baseline: DiagnosisBaseline;
   /** 워크리스트 상태 (taskId → Status). 미명시 = "not_started" */
   taskStatuses: Record<string, Status>;
 }
 
 export interface ImpactResult {
-  /** 현재 진단 점수 + 완료 task boost를 반영한 도메인 점수 (0..100) */
+  /** boost 적용된 도메인 점수 (0..100) */
   adjustedDomainScores: { code: string; score: number; capped100: boolean }[];
   /** 보정된 overall (0..100) — domain weighted average */
   adjustedOverall: number;
@@ -48,14 +78,14 @@ export interface ImpactResult {
   /** 보정된 6/12개월 실패확률 (0..1) */
   adjustedFp6m: number;
   adjustedFp12m: number;
-  /** baseline 실패확률 (boost 없음) */
+  /** baseline 실패확률 (boost 없음) — 홈/결과 페이지와 동일 */
   baselineFp6m: number;
   baselineFp12m: number;
   /** 워크리스트 완료 진행도 (필수만) 0..1 */
   mustCompletionRatio: number;
   /** 워크리스트 완료 진행도 (전체) 0..1 */
   totalCompletionRatio: number;
-  /** 100% 완료 시 예상 실패확률 (0..1) — 비교용 ‘잠재 가능성’ */
+  /** 100% 완료 시 예상 실패확률 (0..1) — 비교용 '잠재 가능성' */
   potentialFp6mIfAllDone: number;
   potentialFp12mIfAllDone: number;
 }
@@ -70,20 +100,18 @@ const STATUS_WEIGHT: Record<Status, number> = {
 /**
  * 도메인별 boost 누적치 (점수 가산).
  * 완료된 task만큼 도메인 점수에 + boost_points * status_weight.
- * `unitFraction`이 0..1이면 가산 비율이 그만큼 적용 (잠재치 계산용).
  */
 function computeDomainBoosts(
   taskStatuses: Record<string, Status>,
-  unitFraction: number = 1,
+  allDone: boolean = false,
 ): Map<string, number> {
   const boosts = new Map<string, number>();
   for (const t of TASKS) {
-    const status = taskStatuses[t.id] ?? "not_started";
-    const weight = STATUS_WEIGHT[status];
-    if (weight === 0 && unitFraction === 1) continue;
-    const effective = unitFraction === 1 ? weight : 1; // 100% scenario
-    if (effective === 0) continue;
-    const points = getBoostPoints(t) * effective;
+    const weight = allDone
+      ? 1
+      : STATUS_WEIGHT[taskStatuses[t.id] ?? "not_started"];
+    if (weight === 0) continue;
+    const points = getBoostPoints(t) * weight;
     for (const dom of getBoostDomains(t)) {
       boosts.set(dom, (boosts.get(dom) ?? 0) + points);
     }
@@ -91,86 +119,101 @@ function computeDomainBoosts(
   return boosts;
 }
 
-function applyBoosts(
-  baselines: DomainBaseline[],
+/** baseline 도메인 점수에 boost 가산 → 새 DomainScoreResult[] 반환. */
+function applyBoostsToDomainScores(
+  baseline: DomainScoreResult[],
   boosts: Map<string, number>,
-): { code: string; score: number; capped100: boolean }[] {
-  return baselines.map((d) => {
-    const base = d.score ?? 0;
-    const add = boosts.get(d.code) ?? 0;
-    const raw = base + add;
-    const capped = raw > 100;
+): DomainScoreResult[] {
+  return baseline.map((d) => {
+    const baseScore = d.score ?? 0;
+    const add = boosts.get(d.domain) ?? 0;
+    const rawScore = baseScore + add;
+    const capped100 = rawScore > 100;
+    const newScore = d.score === null ? null : Math.min(100, Math.max(0, rawScore));
+    // tier_label 도 새 점수에 맞춰 갱신할 수 있으나 FP 계산엔 영향 없으므로 유지.
     return {
-      code: d.code,
-      score: Math.min(100, Math.max(0, raw)),
-      capped100: capped,
+      ...d,
+      score: newScore,
+      capped: d.capped || capped100,
     };
   });
 }
 
-function weightedAverage(
-  baselines: DomainBaseline[],
-  scores: { code: string; score: number }[],
-): number {
-  let sum = 0;
-  let total = 0;
-  for (const d of baselines) {
-    const s = scores.find((x) => x.code === d.code)?.score ?? 0;
-    sum += s * d.weight;
-    total += d.weight;
-  }
-  return total > 0 ? sum / total : 0;
-}
-
-/**
- * 단순 베이지안 모델: 빨강 critical 도메인이 있으면 likelihood ratio를 곱한다.
- * 보정 점수가 도메인 임계 red 이하면 빨강으로 판정.
- */
-function computeFp(
-  baselines: DomainBaseline[],
-  scores: { code: string; score: number }[],
-  prior: number,
-): number {
-  let posteriorOdds = prior / (1 - prior);
-  for (const d of baselines) {
-    if (!d.is_critical) continue;
-    const s = scores.find((x) => x.code === d.code)?.score ?? 0;
-    if (s <= d.thresholds.red && d.likelihood_ratio) {
-      posteriorOdds *= d.likelihood_ratio;
-    }
-  }
-  const fp = posteriorOdds / (1 + posteriorOdds);
-  return Math.max(0.02, Math.min(0.95, fp));
+/** SerializedSubItemResponse → SubItemResponse (Date 복원). */
+function deserializeResponses(
+  rows: SerializedSubItemResponse[],
+): SubItemResponse[] {
+  return rows.map((r) => ({
+    sub_item_code: r.sub_item_code,
+    respondent_id: r.respondent_id,
+    belief: r.belief as 1 | 2 | 3 | 4 | 5,
+    evidence:
+      r.evidence === null ? null : (r.evidence as 1 | 2 | 3 | 4 | 5),
+    evidence_recorded_at: new Date(r.evidence_recorded_at),
+  }));
 }
 
 export function computeImpact(input: ImpactInputs): ImpactResult {
-  const { baselines, prior_fp_6m, prior_fp_12m, taskStatuses } = input;
+  const { baseline, taskStatuses } = input;
+  const responses = deserializeResponses(baseline.responses);
+  const now = new Date();
+  const fpOptions = {
+    subDefs: baseline.subDefs,
+    now,
+    respondentCount: baseline.respondentCount,
+  };
+  // YAML SoT 의 priors·caps 를 ScoringConfig 로 컴파일 (홈 페이지와 동일 모델 보장)
+  const scoringConfig = buildScoringConfig(baseline.scoringSource);
 
-  // baseline (boost 없음)
-  const baselineScores = baselines.map((d) => ({
-    code: d.code,
-    score: d.score ?? 0,
-  }));
-  const baselineOverall = weightedAverage(baselines, baselineScores);
-  const baselineFp6m = computeFp(baselines, baselineScores, prior_fp_6m);
-  const baselineFp12m = computeFp(baselines, baselineScores, prior_fp_12m);
+  // ── Baseline (boost 없음) — 홈 페이지·결과 페이지와 동일한 8-factor 모델 ──
+  const baselineFp = computeFailureProbability(
+    baseline.domainScores,
+    baseline.domainDefs,
+    responses,
+    baseline.stage,
+    scoringConfig,
+    fpOptions,
+  );
+  const baselineOverall = computeOverallScore(
+    baseline.domainScores,
+    baseline.domainDefs,
+  );
 
-  // adjusted (현재 task 상태 반영)
-  const boosts = computeDomainBoosts(taskStatuses, 1);
-  const adjusted = applyBoosts(baselines, boosts);
-  const adjustedOverall = weightedAverage(baselines, adjusted);
-  const adjustedFp6m = computeFp(baselines, adjusted, prior_fp_6m);
-  const adjustedFp12m = computeFp(baselines, adjusted, prior_fp_12m);
+  // ── Adjusted (현재 task 진행 상태 반영) ──
+  const adjustedBoosts = computeDomainBoosts(taskStatuses, false);
+  const adjustedDomains = applyBoostsToDomainScores(
+    baseline.domainScores,
+    adjustedBoosts,
+  );
+  const adjustedFp = computeFailureProbability(
+    adjustedDomains,
+    baseline.domainDefs,
+    responses,
+    baseline.stage,
+    scoringConfig,
+    fpOptions,
+  );
+  const adjustedOverall = computeOverallScore(
+    adjustedDomains,
+    baseline.domainDefs,
+  );
 
-  // potential (모든 task 완료 시)
-  const allDoneStatuses: Record<string, Status> = {};
-  for (const t of TASKS) allDoneStatuses[t.id] = "done";
-  const potentialBoosts = computeDomainBoosts(allDoneStatuses, 1);
-  const potential = applyBoosts(baselines, potentialBoosts);
-  const potentialFp6m = computeFp(baselines, potential, prior_fp_6m);
-  const potentialFp12m = computeFp(baselines, potential, prior_fp_12m);
+  // ── Potential (모든 task 완료 시) ──
+  const potentialBoosts = computeDomainBoosts({}, true);
+  const potentialDomains = applyBoostsToDomainScores(
+    baseline.domainScores,
+    potentialBoosts,
+  );
+  const potentialFp = computeFailureProbability(
+    potentialDomains,
+    baseline.domainDefs,
+    responses,
+    baseline.stage,
+    scoringConfig,
+    fpOptions,
+  );
 
-  // completion ratios
+  // ── Completion ratios ──
   const must = TASKS.filter((t) => t.tier === "must");
   const mustDone = must.filter(
     (t) => (taskStatuses[t.id] ?? "not_started") === "done",
@@ -180,17 +223,21 @@ export function computeImpact(input: ImpactInputs): ImpactResult {
   ).length;
 
   return {
-    adjustedDomainScores: adjusted,
-    adjustedOverall,
-    baselineOverall,
-    adjustedFp6m,
-    adjustedFp12m,
-    baselineFp6m,
-    baselineFp12m,
+    adjustedDomainScores: adjustedDomains.map((d) => ({
+      code: d.domain,
+      score: d.score ?? 0,
+      capped100: d.capped,
+    })),
+    adjustedOverall: adjustedOverall ?? 0,
+    baselineOverall: baselineOverall ?? 0,
+    adjustedFp6m: adjustedFp["6m"].final,
+    adjustedFp12m: adjustedFp["12m"].final,
+    baselineFp6m: baselineFp["6m"].final,
+    baselineFp12m: baselineFp["12m"].final,
     mustCompletionRatio: must.length > 0 ? mustDone / must.length : 0,
     totalCompletionRatio: TASKS.length > 0 ? totalDone / TASKS.length : 0,
-    potentialFp6mIfAllDone: potentialFp6m,
-    potentialFp12mIfAllDone: potentialFp12m,
+    potentialFp6mIfAllDone: potentialFp["6m"].final,
+    potentialFp12mIfAllDone: potentialFp["12m"].final,
   };
 }
 
@@ -210,8 +257,18 @@ export function readTaskStatuses(workspace: string): Record<string, Status> {
   return out;
 }
 
+/** 백워드 호환을 위한 deprecated alias — 새 코드는 DiagnosisBaseline 사용. */
+export interface DomainBaseline {
+  code: string;
+  weight: number;
+  score: number | null;
+  thresholds: { red: number; yellow: number; green: number };
+  is_critical: boolean;
+  likelihood_ratio?: number;
+}
+
 // Used by the lightweight default fallback in <ImpactPanel> when the page
-// can’t deliver real diagnosis baselines (e.g. no responses yet).
+// can't deliver real diagnosis baselines (e.g. no responses yet).
 export function defaultZeroBaselines(): DomainBaseline[] {
   return [];
 }

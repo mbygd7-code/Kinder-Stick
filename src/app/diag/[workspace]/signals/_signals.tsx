@@ -453,7 +453,7 @@ export function SignalsClient({
         </p>
         {!orgFound ? (
           <div className="mt-4 note-box">
-            이 워크스페이스는 아직 진단이 없습니다. 먼저 진단을 한 번 제출하면 시그널 수집이
+            이 진단 카드는 아직 진단 응답이 없습니다. 먼저 진단을 한 번 제출하면 시그널 수집이
             시작됩니다.
           </div>
         ) : null}

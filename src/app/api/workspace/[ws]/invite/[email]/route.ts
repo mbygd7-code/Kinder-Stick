@@ -40,7 +40,7 @@ export async function DELETE(
     .maybeSingle();
   if (!org) {
     return NextResponse.json(
-      { ok: false, message: "워크스페이스 없음" },
+      { ok: false, message: "진단 카드 없음" },
       { status: 404 },
     );
   }

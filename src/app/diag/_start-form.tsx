@@ -20,14 +20,16 @@ export default function StartDiagnosisForm() {
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        if (valid) router.push(`/diag/${ws}/home`);
+        // "시작하기" 버튼은 통합 진단 페이지(/diag/{ws}) 로 — 회사 정보 입력 + 진단 응답 + 결과 한 페이지에서.
+        // (홈/결과만 보려면 위 워크스페이스 카드 목록에서 클릭)
+        if (valid) router.push(`/diag/${ws}`);
       }}
     >
       <label
         className="label-mono mb-2 block"
         htmlFor="workspace-input"
       >
-        진단 ID (워크스페이스)
+        진단 카드 ID
       </label>
       <div className="flex flex-col sm:flex-row sm:gap-0 gap-2">
         <input
