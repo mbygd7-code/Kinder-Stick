@@ -403,6 +403,17 @@ function buildQuarterlyAggregates(
   });
 }
 
+/**
+ * 로컬 aggregateRespondents (timeline 전용).
+ *
+ * canonical (src/lib/diagnosis-aggregate.ts) 와의 의도된 차이:
+ *   - surveyInjections 파라미터 없음 — timeline 은 과거 분기 단위 시계열을
+ *     그리므로, 현재 active 설문 결과를 모든 과거 점에 inject 하면 왜곡됨
+ *   - 분기별 grouped rows 각각 독립적으로 계산
+ *
+ * 단, 미래에 "현재 분기" 점에만 survey injection 을 적용하고 싶다면
+ * surveyInjections 를 optional 로 추가하고 마지막 그룹에만 전달.
+ */
 function aggregateRespondents(
   framework: ReturnType<typeof loadFramework>,
   rows: DiagnosisRow[],

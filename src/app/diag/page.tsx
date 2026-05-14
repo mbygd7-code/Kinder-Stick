@@ -8,6 +8,8 @@ import StartDiagnosisForm from "./_start-form";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { aggregateRespondents, type DiagRowMin } from "@/lib/diagnosis-aggregate";
+import { getStageLabel } from "@/lib/stage-labels";
+import { relativeKo as daysAgo } from "@/lib/date-utils";
 
 // 새 진단 제출 직후 워크스페이스 카드 목록이 즉시 보여야 함 → 캐시 비활성화.
 export const dynamic = "force-dynamic";
@@ -128,27 +130,6 @@ async function fetchAllWorkspaces(): Promise<WorkspaceSummary[]> {
   );
 }
 
-const STAGE_LABEL: Record<string, string> = {
-  closed_beta: "비공개 베타",
-  open_beta: "공개 베타",
-  ga_early: "정식 출시",
-  ga_growth: "성장기",
-  ga_scale: "확장기",
-  pre_seed: "비공개 베타",
-  seed: "공개 베타",
-  series_a: "정식 출시",
-  series_b: "성장기",
-  series_c_plus: "확장기",
-};
-
-function daysAgo(iso: string): string {
-  const diff = (Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60 * 24);
-  if (diff < 1) return "오늘";
-  if (diff < 2) return "어제";
-  if (diff < 30) return `${Math.floor(diff)}일 전`;
-  if (diff < 365) return `${Math.floor(diff / 30)}달 전`;
-  return `${Math.floor(diff / 365)}년 전`;
-}
 
 // ============================================================
 // 14-domain → 4-group mapping for first-time users.
@@ -321,7 +302,7 @@ export default async function DiagLandingPage() {
                   <p className="mt-2 label-mono">
                     응답자 {ws.respondents}명 · {daysAgo(ws.latest_completed_at)}
                     {ws.latest_stage
-                      ? ` · ${STAGE_LABEL[ws.latest_stage] ?? ws.latest_stage}`
+                      ? ` · ${getStageLabel(ws.latest_stage)}`
                       : ""}
                     {ws.fp_6m !== null ? ` · 6m 위험 ${ws.fp_6m}%` : ""}
                   </p>

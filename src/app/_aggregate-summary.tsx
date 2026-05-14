@@ -15,14 +15,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { loadFramework } from "@/lib/framework/loader";
 import { aggregateCrossCard } from "@/lib/cross-card-aggregate";
 import { TEAM_LABEL } from "@/lib/auth/pin";
-
-const STAGE_LABEL: Record<string, string> = {
-  closed_beta: "비공개 베타",
-  open_beta: "공개 베타",
-  ga_early: "정식 출시",
-  ga_growth: "성장기",
-  ga_scale: "확장기",
-};
+import { STAGE_LABEL } from "@/lib/stage-labels";
 
 export async function AggregateSummary() {
   const me = await getCurrentProfile().catch(() => null);

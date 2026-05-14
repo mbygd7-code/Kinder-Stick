@@ -6,6 +6,7 @@ import {
   readTaskStatuses,
   type DiagnosisBaseline,
 } from "@/lib/worklist/impact";
+import { getStageLabel } from "@/lib/stage-labels";
 
 interface Props {
   workspace: string;
@@ -18,18 +19,6 @@ interface Props {
   };
 }
 
-const STAGE_LABEL: Record<string, string> = {
-  closed_beta: "비공개 베타",
-  open_beta: "공개 베타",
-  ga_early: "정식 출시",
-  ga_growth: "성장기",
-  ga_scale: "확장기",
-  pre_seed: "비공개 베타",
-  seed: "공개 베타",
-  series_a: "정식 출시",
-  series_b: "성장기",
-  series_c_plus: "확장기",
-};
 
 /**
  * 실시간 실패확률 변화 — 페이지 상단 HERO.
@@ -130,7 +119,7 @@ export function ImpactPanel({ workspace, baseline, workspaceMeta }: Props) {
           ),
         );
 
-  const stageLabel = STAGE_LABEL[baseline.stage] ?? baseline.stage;
+  const stageLabel = getStageLabel(baseline.stage);
 
   return (
     <section className="border-b border-ink-soft/40">

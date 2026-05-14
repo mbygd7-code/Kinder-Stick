@@ -13,6 +13,7 @@ import { notFound } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { resolveOrgWithBackfill } from "@/lib/org";
 import { loadFramework } from "@/lib/framework/loader";
+import { STAGE_LABEL_SHORT } from "@/lib/stage-labels";
 import { fetchWorkspaceTimeline } from "@/lib/agents/timeline-context";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import { ClaimButton } from "./_claim-button";
@@ -890,19 +891,8 @@ export default async function HomePage({ params, searchParams }: Props) {
 // Helpers
 // ============================================================
 
-const STAGE_LABELS: Record<string, string> = {
-  closed_beta: "비공개 베타",
-  open_beta: "공개 베타",
-  ga_early: "정식 출시 (0–6개월)",
-  ga_growth: "성장기 (6–24개월)",
-  ga_scale: "확장기 (24개월+)",
-  // legacy fallback
-  pre_seed: "비공개 베타",
-  seed: "공개 베타",
-  series_a: "정식 출시 (0–6개월)",
-  series_b: "성장기 (6–24개월)",
-  series_c_plus: "확장기 (24개월+)",
-};
+// STAGE_LABELS — uses shared STAGE_LABEL_SHORT (with period suffix).
+const STAGE_LABELS: Record<string, string> = STAGE_LABEL_SHORT;
 
 function computeStatus({
   fp_6m,

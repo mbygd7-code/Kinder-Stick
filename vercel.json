@@ -11,6 +11,14 @@
     {
       "path": "/api/cron/proactive-coach",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/quarterly-reminder",
+      "schedule": "0 0 * * 1"
+    },
+    {
+      "path": "/api/cron/sessions-cleanup",
+      "schedule": "0 3 * * *"
     }
   ]
 }

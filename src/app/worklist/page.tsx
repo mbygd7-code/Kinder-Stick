@@ -11,6 +11,8 @@
 
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { loadFramework } from "@/lib/framework/loader";
+import { getStageLabel } from "@/lib/stage-labels";
+import { relativeKo as daysAgo } from "@/lib/date-utils";
 import {
   aggregateRespondents,
   type DiagRowMin,
@@ -35,27 +37,6 @@ interface CardData {
   pending_findings: number;
 }
 
-const STAGE_LABEL: Record<string, string> = {
-  closed_beta: "비공개 베타",
-  open_beta: "공개 베타",
-  ga_early: "정식 출시",
-  ga_growth: "성장기",
-  ga_scale: "확장기",
-  pre_seed: "비공개 베타",
-  seed: "공개 베타",
-  series_a: "정식 출시",
-  series_b: "성장기",
-  series_c_plus: "확장기",
-};
-
-function daysAgo(iso: string): string {
-  const diff = (Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60 * 24);
-  if (diff < 1) return "오늘";
-  if (diff < 2) return "어제";
-  if (diff < 30) return `${Math.floor(diff)}일 전`;
-  if (diff < 365) return `${Math.floor(diff / 30)}달 전`;
-  return `${Math.floor(diff / 365)}년 전`;
-}
 
 async function fetchCards(): Promise<CardData[]> {
   const framework = loadFramework();
@@ -281,7 +262,7 @@ export default async function WorklistHubPage() {
                 </h2>
                 <p className="mt-1 label-mono">
                   {c.latest_stage
-                    ? STAGE_LABEL[c.latest_stage] ?? c.latest_stage
+                    ? getStageLabel(c.latest_stage)
                     : "단계 미입력"}
                 </p>
 

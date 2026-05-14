@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { getStageLabel } from "@/lib/stage-labels";
 
 interface DiagItem {
   id: string;
@@ -27,20 +28,6 @@ interface ListResp {
   count: number;
   items: DiagItem[];
 }
-
-const STAGE_LABEL: Record<string, string> = {
-  closed_beta: "비공개 베타",
-  open_beta: "공개 베타",
-  ga_early: "정식 출시",
-  ga_growth: "성장기",
-  ga_scale: "확장기",
-  // legacy
-  pre_seed: "비공개 베타",
-  seed: "공개 베타",
-  series_a: "정식 출시",
-  series_b: "성장기",
-  series_c_plus: "확장기",
-};
 
 export function HistorySection({ workspace }: { workspace: string }) {
   const [loading, setLoading] = useState(true);
@@ -145,7 +132,7 @@ export function HistorySection({ workspace }: { workspace: string }) {
                     </span>
                     <span className="label-mono opacity-50">·</span>
                     <span className="label-mono">
-                      {STAGE_LABEL[it.stage ?? ""] ?? it.stage ?? "—"}
+                      {it.stage ? getStageLabel(it.stage) : "—"}
                     </span>
                   </div>
                   <div className="mt-1 flex items-baseline gap-3 flex-wrap">

@@ -15,13 +15,15 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // PIN auth 우선, Supabase 매직링크 fallback
-  const [pinProfile, supabaseUser] = await Promise.all([
-    getCurrentProfile().catch(() => null),
-    getCurrentUser().catch(() => null),
-  ]);
-  const userEmail = pinProfile?.email ?? supabaseUser?.email ?? null;
+  // PIN auth 우선 — PIN 세션이 있으면 Supabase 조회 생략 (모든 페이지 렌더의
+  // 2번 DB 왕복 절약). PIN 없을 때만 legacy Supabase 매직링크 fallback.
+  const pinProfile = await getCurrentProfile().catch(() => null);
+  let userEmail: string | null = pinProfile?.email ?? null;
   const userRole = pinProfile?.role ?? null;
+  if (!pinProfile) {
+    const supabaseUser = await getCurrentUser().catch(() => null);
+    userEmail = supabaseUser?.email ?? null;
+  }
 
   return (
     <html lang="ko" className="h-full antialiased">
