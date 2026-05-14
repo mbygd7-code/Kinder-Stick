@@ -36,7 +36,7 @@ export function PinField({
   value,
   onChange,
   autoComplete = "current-password",
-  placeholder = "••••",
+  placeholder,
   required,
   size = "md",
   className,
@@ -44,11 +44,24 @@ export function PinField({
   const [visible, setVisible] = useState(false);
   const textSize = size === "lg" ? "!text-2xl" : "!text-xl";
 
+  // placeholder 가 visibility 에 따라 다르게 보여야 사용자가 입력 상태를
+  // 명확히 인지 — 숨김 모드에서는 마스크 닷, 표시 모드에서는 dash 가이드.
+  const effectivePlaceholder =
+    placeholder ?? (visible ? "0 0 0 0" : "••••");
+
   return (
     <div className={className}>
       {label ? (
-        <label className="label-mono mb-1 block" htmlFor={id}>
-          {label}
+        <label
+          className="label-mono mb-1 flex items-center justify-between gap-2"
+          htmlFor={id}
+        >
+          <span>{label}</span>
+          {visible ? (
+            <span className="!normal-case tracking-normal text-accent">
+              표시 중
+            </span>
+          ) : null}
         </label>
       ) : null}
       <div className="relative">
@@ -63,14 +76,20 @@ export function PinField({
           onChange={(e) =>
             onChange(e.target.value.replace(/\D/g, "").slice(0, 4))
           }
-          className={`evidence-input ${textSize} !font-mono !tracking-[0.5em] !text-center pr-11`}
-          placeholder={placeholder}
+          className={`evidence-input ${textSize} !font-mono !tracking-[0.5em] !text-center pr-11 ${
+            visible ? "!text-accent" : ""
+          }`}
+          placeholder={effectivePlaceholder}
           required={required}
         />
         <button
           type="button"
           onClick={() => setVisible((v) => !v)}
-          className="absolute top-1/2 -translate-y-1/2 right-2 w-7 h-7 flex items-center justify-center border border-ink-soft/40 hover:border-ink hover:bg-paper-deep transition-colors"
+          className={`absolute top-1/2 -translate-y-1/2 right-2 w-7 h-7 flex items-center justify-center border transition-colors ${
+            visible
+              ? "border-accent text-accent bg-soft-amber/30"
+              : "border-ink-soft/40 hover:border-ink hover:bg-paper-deep text-ink-soft"
+          }`}
           aria-label={visible ? "PIN 숨기기" : "PIN 보기"}
           aria-pressed={visible}
           title={visible ? "PIN 숨기기" : "PIN 보기"}
