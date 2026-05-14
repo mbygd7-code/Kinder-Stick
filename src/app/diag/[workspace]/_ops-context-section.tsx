@@ -308,7 +308,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
         {/* A. 정체성 */}
         <SubGroupLabel letter="A" title="정체성" />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-7">
-          <label className="block group">
+          <label className="flex flex-col group h-full">
             <div className="flex items-baseline gap-2 mb-1.5">
               <span className="label-mono">LAUNCH</span>
               <span className="label-mono opacity-40">·</span>
@@ -316,7 +316,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
                 서비스 출시일
               </span>
             </div>
-            <p className="label-mono text-ink-soft mb-2 leading-relaxed">
+            <p className="label-mono text-ink-soft mb-2 leading-relaxed flex-1">
               올해 잔여 일수·운영 기간 산정의 기준
             </p>
             <div className="border-b-2 border-ink-soft/40 group-focus-within:border-ink">
@@ -363,7 +363,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             )}
           />
 
-          <label className="block group">
+          <label className="flex flex-col group h-full">
             <div className="flex items-baseline gap-2 mb-1.5">
               <span className="label-mono">COMPETITION</span>
               <span className="label-mono opacity-40">·</span>
@@ -371,7 +371,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
                 경쟁 압박
               </span>
             </div>
-            <p className="label-mono text-ink-soft mb-2 leading-relaxed">
+            <p className="label-mono text-ink-soft mb-2 leading-relaxed flex-1">
               시장 노출 후 유사 서비스 추격 정도 — first-mover 우위 감쇠율 결정
             </p>
             <div className="border-b-2 border-ink-soft/40 group-focus-within:border-ink">
@@ -403,7 +403,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
       <div className="mb-10 pt-8 border-t border-ink-soft/30">
         <MajorSectionHeader
           num="02"
-          title="지금 — 운영 현황"
+          title="운영 현황"
           subtitle="현재 시점 핵심 운영 지표"
         />
 
@@ -1103,13 +1103,15 @@ function EditorialTextField({
 }) {
   const filled = value.trim().length > 0;
   return (
-    <label className="block group">
+    <label className="flex flex-col group h-full">
       <div className="flex items-baseline gap-2 mb-1.5">
         <span className="label-mono">{kicker}</span>
         <span className="label-mono opacity-40">·</span>
         <span className="text-sm font-medium leading-tight">{label}</span>
       </div>
-      <p className="label-mono text-ink-soft mb-2 leading-relaxed">{hint}</p>
+      <p className="label-mono text-ink-soft mb-2 leading-relaxed flex-1">
+        {hint}
+      </p>
       <div
         className={`border-b-2 transition-colors ${
           filled
