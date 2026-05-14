@@ -158,10 +158,12 @@ const GOAL_RULES: Rule[] = [
     domain: "A6",
     severity: "high",
     fires: (c) => {
-      const r = ratio(c.goal_total_members_annual, c.mau);
+      // total_members 우선 (정확) → 없으면 MAU 폴백
+      const base = c.total_members ?? c.mau;
+      const r = ratio(c.goal_total_members_annual, base);
       return r !== null && r >= 5;
     },
-    reason: "올해 누적 회원 목표가 현재 MAU 의 5배 이상 — 획득 채널(A6) 영역 우선",
+    reason: "올해 누적 회원 목표가 현재 회원의 5배 이상 — 획득 채널(A6) 영역 우선",
   },
   {
     id: "annual-paid-gap",

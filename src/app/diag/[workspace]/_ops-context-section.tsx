@@ -18,9 +18,11 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { FieldHistoryModal } from "./_field-history-modal";
 
 export interface OpsContext {
-  // ── 지금 · 현재 운영 (8) ──
+  // ── 지금 · 현재 운영 (9) ──
   mau?: number;
   wau?: number;
+  /** 총 누적 가입자 수 — 서비스 시작 이래 전체 회원 (활성/이탈 포함) */
+  total_members?: number;
   new_signups_monthly?: number;
   churn_monthly?: number;
   /** D1 활성화율 (%) — A4.ACT.D1 매핑 */
@@ -241,9 +243,10 @@ export function OpsContextSection({ workspace, onChange }: Props) {
 
   const filled = useMemo(() => {
     const slots = [
-      // 지금 8개
+      // 지금 9개
       ctx.mau,
       ctx.wau,
+      ctx.total_members,
       ctx.new_signups_monthly,
       ctx.churn_monthly,
       ctx.d1_activation_rate,
@@ -313,7 +316,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
         <div className="text-right shrink-0">
           <p className="font-display text-3xl leading-none">
             {filled}
-            <span className="font-mono text-base text-ink-soft">/14</span>
+            <span className="font-mono text-base text-ink-soft">/15</span>
           </p>
           <p className="label-mono mt-1">입력 완료</p>
         </div>
@@ -323,7 +326,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
       <div className="h-1 bg-ink-soft/20 mb-10">
         <div
           className="h-full bg-accent transition-all duration-300"
-          style={{ width: `${(filled / 11) * 100}%` }}
+          style={{ width: `${(filled / 15) * 100}%` }}
         />
       </div>
 
@@ -373,6 +376,17 @@ export function OpsContextSection({ workspace, onChange }: Props) {
         {/* ─── B. 가입 · 이탈 · 활성화 funnel ─── */}
         <SubGroupLabel letter="B" title="가입·이탈·활성화 funnel" />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-7">
+          <EditorialNumField
+            label="총 가입자수"
+            kicker="TOTAL"
+            hint="서비스 시작 이래 누적 가입자 (활성+이탈 포함) · 연 목표 비교 기준"
+            value={ctx.total_members}
+            onChange={(v) => update("total_members", v)}
+            placeholder="25,000"
+            unit="명"
+            min={0}
+            onShowHistory={openHistory("total_members", "총 가입자수", "명")}
+          />
           <EditorialNumField
             label="한 달 신규 가입"
             kicker="NEW"
@@ -536,7 +550,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
           gaps={[
             {
               label: "누적 회원",
-              current: ctx.mau,
+              current: ctx.total_members ?? ctx.mau,
               goal: ctx.goal_total_members_annual,
               annualHint: true,
             },
