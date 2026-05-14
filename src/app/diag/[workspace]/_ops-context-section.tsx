@@ -26,22 +26,14 @@ export interface OpsContext {
   churn_monthly?: number;
   /** D1 활성화율 (%) — A4.ACT.D1 매핑 */
   d1_activation_rate?: number;
-  /** M3 코호트 retention (%) — A2.RET.M3 매핑 */
-  m3_retention_rate?: number;
 
-  // ── C. 매출 · 단위경제 ──
+  // ── C. 매출 ──
   /** 이번 달 매출 (KRW) */
   revenue_monthly_krw?: number;
   /** 월 유료 사용자 수 */
   paid_users_monthly?: number;
   /** NRR (%) — Net Revenue Retention. A13.NRR.RATE 매핑 */
   nrr_rate?: number;
-  /** CAC (KRW) — 신규 1명당 광고비 */
-  cac_krw?: number;
-
-  // ── D. 마케팅 채널 ──
-  /** 주력 채널 점유율 (%) — A6.CHANNEL.REPEAT 반전 */
-  primary_channel_share?: number;
 
   // ── Goals / context ──
   monthly_goal?: string;
@@ -111,14 +103,10 @@ export function OpsContextSection({ workspace, onChange }: Props) {
       ctx.new_signups_monthly,
       ctx.churn_monthly,
       ctx.d1_activation_rate,
-      ctx.m3_retention_rate,
       // C. 매출
       ctx.revenue_monthly_krw,
       ctx.paid_users_monthly,
       ctx.nrr_rate,
-      ctx.cac_krw,
-      // D. 채널
-      ctx.primary_channel_share,
       // Goals
       ctx.monthly_goal,
       ctx.annual_goal,
@@ -156,23 +144,6 @@ export function OpsContextSection({ workspace, onChange }: Props) {
     ctx.paid_users_monthly > 0
       ? Math.round(ctx.revenue_monthly_krw / ctx.paid_users_monthly)
       : null;
-  /** LTV/CAC ≈ (ARPU ÷ monthly churn rate) ÷ CAC. <1 위험, ≥3 healthy. */
-  const derivedLtvCac = (() => {
-    if (
-      derivedArpu === null ||
-      ctx.cac_krw === undefined ||
-      ctx.cac_krw <= 0 ||
-      derivedChurnRate === null ||
-      derivedChurnRate <= 0
-    ) {
-      return null;
-    }
-    const monthlyChurn = derivedChurnRate / 100;
-    const ltv = derivedArpu / monthlyChurn;
-    return Math.round((ltv / ctx.cac_krw) * 10) / 10; // 1 decimal
-  })();
-  /** 채널 의존도 — 주력 채널 % 그대로. A6.CHANNEL.REPEAT 반전 신호. */
-  const derivedChannelDep = ctx.primary_channel_share ?? null;
 
   return (
     <section className="max-w-5xl mx-auto px-6 sm:px-10 pt-12 pb-8">
@@ -195,7 +166,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
         <div className="text-right shrink-0">
           <p className="font-display text-3xl leading-none">
             {filled}
-            <span className="font-mono text-base text-ink-soft">/14</span>
+            <span className="font-mono text-base text-ink-soft">/11</span>
           </p>
           <p className="label-mono mt-1">입력 완료</p>
         </div>
@@ -205,7 +176,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
       <div className="h-1 bg-ink-soft/20 mb-10">
         <div
           className="h-full bg-accent transition-all duration-300"
-          style={{ width: `${(filled / 14) * 100}%` }}
+          style={{ width: `${(filled / 11) * 100}%` }}
         />
       </div>
 
@@ -225,8 +196,6 @@ export function OpsContextSection({ workspace, onChange }: Props) {
           wauMauRatio={derivedWauMauRatio}
           paidRate={derivedPaidRate}
           arpu={derivedArpu}
-          ltvCac={derivedLtvCac}
-          channelDep={derivedChannelDep}
         />
 
         {/* ─── A. 사용자 활성 ─── */}
@@ -285,17 +254,6 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             min={0}
             max={100}
           />
-          <EditorialNumField
-            label="M3 코호트 잔존율"
-            kicker="M3 RET"
-            hint="3개월 후 retain % · A2.RET.M3 critical (PMF 예측 지표)"
-            value={ctx.m3_retention_rate}
-            onChange={(v) => update("m3_retention_rate", v)}
-            placeholder="45"
-            unit="%"
-            min={0}
-            max={100}
-          />
         </div>
 
         {/* ─── C. 매출 · 단위경제 ─── */}
@@ -331,38 +289,6 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             unit="%"
             min={0}
             max={200}
-          />
-          <EditorialNumField
-            label="신규 1명당 광고비"
-            kicker="CAC"
-            hint="이번 달 광고비 ÷ 신규 가입 수 · 낮을수록 효율적"
-            value={ctx.cac_krw}
-            onChange={(v) => update("cac_krw", v)}
-            placeholder="12,000"
-            unit="₩"
-            min={0}
-          />
-        </div>
-
-        {/* ─── D. 마케팅 채널 ─── */}
-        <SubGroupLabel letter="D" title="마케팅 채널" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-7">
-          <EditorialNumField
-            label="주력 채널 점유율"
-            kicker="CHANNEL"
-            hint="가장 큰 유입 채널 1개의 신규 가입 점유율 · 60%+ 면 채널 의존 위험"
-            value={ctx.primary_channel_share}
-            onChange={(v) => update("primary_channel_share", v)}
-            placeholder="65"
-            unit="%"
-            min={0}
-            max={100}
-            tone={
-              ctx.primary_channel_share !== undefined &&
-              ctx.primary_channel_share > 60
-                ? "warning"
-                : undefined
-            }
           />
         </div>
       </div>
@@ -553,15 +479,11 @@ function DerivedLine({
   wauMauRatio,
   paidRate,
   arpu,
-  ltvCac,
-  channelDep,
 }: {
   churnRate: number | null;
   wauMauRatio: number | null;
   paidRate: number | null;
   arpu: number | null;
-  ltvCac: number | null;
-  channelDep: number | null;
 }) {
   const chips: Array<{ key: string; label: string; tone: string }> = [];
 
@@ -608,36 +530,12 @@ function DerivedLine({
       tone: "!text-ink-soft",
     });
   }
-  if (ltvCac !== null) {
-    chips.push({
-      key: "ltvcac",
-      label: `LTV/CAC ${ltvCac}x`,
-      tone:
-        ltvCac >= 3
-          ? "!text-signal-green"
-          : ltvCac >= 1
-            ? "!text-signal-amber"
-            : "!text-signal-red",
-    });
-  }
-  if (channelDep !== null) {
-    chips.push({
-      key: "ch",
-      label: `채널 의존 ${channelDep}%`,
-      tone:
-        channelDep > 60
-          ? "!text-signal-red"
-          : channelDep > 40
-            ? "!text-signal-amber"
-            : "!text-signal-green",
-    });
-  }
 
   if (chips.length === 0) {
     return (
       <p className="label-mono text-ink-soft/60 mb-5">
-        값을 입력하면 자동 계산된 비율 (churn, WAU/MAU, 유료 전환, ARPU,
-        LTV/CAC, 채널 의존) 이 여기 표시됩니다.
+        값을 입력하면 자동 계산된 비율 (churn, WAU/MAU, 유료 전환, ARPU)
+        이 여기 표시됩니다.
       </p>
     );
   }
