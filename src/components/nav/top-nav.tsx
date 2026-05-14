@@ -6,6 +6,7 @@ import { useState, useEffect } from "react";
 
 interface Props {
   userEmail: string | null;
+  userRole?: "admin" | "member" | null;
 }
 
 interface NavItem {
@@ -40,7 +41,7 @@ function detectBulkActive(): boolean {
   return false;
 }
 
-export function TopNav({ userEmail }: Props) {
+export function TopNav({ userEmail, userRole }: Props) {
   const pathname = usePathname() || "/";
   const [open, setOpen] = useState(false);
 
@@ -149,24 +150,32 @@ export function TopNav({ userEmail }: Props) {
         <div className="flex items-center gap-2 shrink-0">
           {userEmail ? (
             <div className="hidden md:flex items-center gap-2">
-              <span className="label-mono truncate max-w-[140px]">
+              {userRole === "admin" ? (
+                <span
+                  className="label-mono !text-accent border border-accent px-1.5"
+                  title="관리자"
+                >
+                  ADMIN
+                </span>
+              ) : null}
+              <span className="label-mono truncate max-w-[120px]">
                 {userEmail.split("@")[0]}
               </span>
               <span className="label-mono opacity-40">·</span>
-              <Link href="/auth/logout" className="label-mono hover:text-ink">
-                logout
+              <Link
+                href="/settings"
+                className="label-mono hover:text-ink"
+                title="계정 · 팀 · PIN · 관리자"
+              >
+                설정
               </Link>
             </div>
           ) : (
-            // 개발 모드: 로그인 강조 안 함, 익명 진입 안내만
-            // [TODO PRODUCTION] 인증 복원 시 이 영역을 Sign in 버튼으로 되돌리고
-            // /auth/login 으로 강제 redirect 하는 미들웨어를 추가할 것.
             <Link
-              href="/diag"
+              href="/auth/login"
               className="hidden md:inline-flex items-center px-3 py-1.5 text-sm font-medium label-mono hover:text-ink"
-              title="개발 모드 — 로그인 없이 진단 카드 진입"
             >
-              익명 모드
+              로그인 →
             </Link>
           )}
 
@@ -238,19 +247,28 @@ export function TopNav({ userEmail }: Props) {
             <div className="mt-3 pt-2 border-t border-ink-soft/40 flex items-center gap-3">
               {userEmail ? (
                 <>
+                  {userRole === "admin" ? (
+                    <span className="label-mono !text-accent border border-accent px-1.5">
+                      ADMIN
+                    </span>
+                  ) : null}
                   <span className="label-mono">
                     {userEmail.split("@")[0]}
                   </span>
                   <Link
-                    href="/auth/logout"
+                    href="/settings"
                     className="label-mono hover:text-ink ml-auto"
                   >
-                    logout
+                    설정 →
                   </Link>
                 </>
               ) : (
-                // [TODO PRODUCTION] 개발 모드: 모바일 Sign in 도 안내 라벨로 대체
-                <span className="label-mono opacity-60">익명 모드</span>
+                <Link
+                  href="/auth/login"
+                  className="label-mono hover:text-ink"
+                >
+                  로그인 →
+                </Link>
               )}
             </div>
           </div>

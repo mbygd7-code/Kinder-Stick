@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase/browser";
 
@@ -12,8 +12,26 @@ import { createSupabaseBrowser } from "@/lib/supabase/browser";
  *
  * Both flows ultimately call into the browser Supabase client which writes
  * the session cookies that subsequent server components can read.
+ *
+ * Next 16: useSearchParams 는 Suspense boundary 안에 있어야 prerender 가능.
  */
 export default function AuthCallbackPage() {
+  return (
+    <Suspense fallback={<CallbackFallback />}>
+      <AuthCallbackInner />
+    </Suspense>
+  );
+}
+
+function CallbackFallback() {
+  return (
+    <main className="min-h-dvh flex items-center justify-center p-8">
+      <p className="label-mono">로그인 처리 중…</p>
+    </main>
+  );
+}
+
+function AuthCallbackInner() {
   const router = useRouter();
   const params = useSearchParams();
   const [error, setError] = useState<string | null>(null);

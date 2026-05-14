@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { TopNav } from "@/components/nav/top-nav";
 import { getCurrentUser } from "@/lib/supabase/auth";
+import { getCurrentProfile } from "@/lib/auth/session";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -14,7 +15,13 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const currentUser = await getCurrentUser();
+  // PIN auth 우선, Supabase 매직링크 fallback
+  const [pinProfile, supabaseUser] = await Promise.all([
+    getCurrentProfile().catch(() => null),
+    getCurrentUser().catch(() => null),
+  ]);
+  const userEmail = pinProfile?.email ?? supabaseUser?.email ?? null;
+  const userRole = pinProfile?.role ?? null;
 
   return (
     <html lang="ko" className="h-full antialiased">
@@ -35,9 +42,7 @@ export default async function RootLayout({
           className="paper-bg min-h-dvh relative flex flex-col"
           style={{ zIndex: 2 }}
         >
-          <TopNav
-            userEmail={currentUser?.email ?? null}
-          />
+          <TopNav userEmail={userEmail} userRole={userRole} />
           <div className="flex-1 flex flex-col">{children}</div>
         </div>
       </body>
