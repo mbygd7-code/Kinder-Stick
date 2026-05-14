@@ -509,7 +509,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
           <EditorialNumField
             label="PLC 수"
             kicker="PLC · GOAL"
-            hint="이번 달 학습공동체(PLC) 운영 목표 — 교사 커뮤니티"
+            hint="이번 달 학습공동체(PLC) 운영 목표"
             value={ctx.goal_plc_monthly}
             onChange={(v) => update("goal_plc_monthly", v)}
             placeholder="20"
@@ -766,10 +766,11 @@ function EditorialNumField({
               e.preventDefault();
               onShowHistory();
             }}
-            className="ml-auto label-mono hover:text-ink underline-offset-2 hover:underline"
+            className="ml-auto label-mono border border-ink-soft/50 px-2 py-0.5 hover:border-ink hover:bg-paper-deep hover:text-ink transition-colors inline-flex items-center gap-1"
             title="이 필드의 변경 이력 보기"
           >
-            이력
+            <span aria-hidden="true">⟳</span>
+            <span>이력</span>
           </button>
         ) : null}
       </div>
