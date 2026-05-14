@@ -38,6 +38,15 @@ interface GrowthFeasibilityResult {
     reasoning: string;
   }>;
   caveats: string[];
+  /** 현재 운영·자원·시간 변수 기반 합리적 목표 추천. null = 추천 불가. */
+  recommended_goals: {
+    goal_new_signups_monthly?: number | null;
+    goal_paid_users_monthly?: number | null;
+    goal_plc_monthly?: number | null;
+    goal_total_members_annual?: number | null;
+    goal_paid_subscribers_annual?: number | null;
+    goal_plc_annual?: number | null;
+  };
 }
 
 const SYSTEM_PROMPT = `당신은 한국 영유아 EdTech 운영진을 돕는 시니어 전략 컨설턴트다.
@@ -70,8 +79,8 @@ const SYSTEM_PROMPT = `당신은 한국 영유아 EdTech 운영진을 돕는 시
   "summary": "한 문단 (3-5 문장) 종합 평가",
   "key_factors": [
     {
-      "name": "변수명 (예: 자금 런웨이)",
-      "value": "현재 값 (예: 8개월)",
+      "name": "변수명 (예: 월간 성장 투자 가용액)",
+      "value": "현재 값 (예: 1.5억 KRW)",
       "impact": "positive | neutral | negative | blocker",
       "note": "왜 이 변수가 영향을 주나"
     }
@@ -84,7 +93,7 @@ const SYSTEM_PROMPT = `당신은 한국 영유아 EdTech 운영진을 돕는 시
       "reasoning": "왜 이 확률인지"
     },
     {
-      "label": "보강 시나리오 (예: 시리즈 A + 채용 3명)",
+      "label": "보강 시나리오 (예: 마케팅 예산 2배 + 채용 3명)",
       "probability_pct": 0-100,
       "required_actions": ["구체 액션 1", "구체 액션 2"],
       "reasoning": "..."
@@ -93,13 +102,35 @@ const SYSTEM_PROMPT = `당신은 한국 영유아 EdTech 운영진을 돕는 시
   "caveats": [
     "AI 추정치이며 절대값 X. 의사결정 보조용.",
     "한국 영유아 EdTech 일반 패턴 기반. 자사 특수성 추가 고려 필요."
-  ]
+  ],
+  "recommended_goals": {
+    "goal_new_signups_monthly": number | null,
+    "goal_paid_users_monthly": number | null,
+    "goal_plc_monthly": number | null,
+    "goal_total_members_annual": number | null,
+    "goal_paid_subscribers_annual": number | null,
+    "goal_plc_annual": number | null
+  }
 }
+
+## recommended_goals 산출 가이드
+현재 운영 + 가용 자원 + 시간 + 경쟁 변수 기반으로 1년 (또는 1개월) 안에
+70-80% 가능성으로 달성 가능한 합리적 목표 숫자를 추천한다.
+
+- 현재 신규 가입 1,200명/월 + 월 예산 1.5억 → 추천 신규 가입 ~2,500/월
+  (2배 정도가 자본·팀으로 무리 없이 달성 가능)
+- 현재 유료 5%, MAU 8,000 → 추천 유료 600/월 (전환율 7-8% 도달 목표)
+- PLC 운영 안 하면 null
+- 데이터 부족하면 해당 필드 null
+
+사용자가 입력한 목표(goal_*) 와 다를 수 있다. 추천은 AI 가 보기에 합리적인
+값이며, 사용자 목표가 비현실적이면 좀 더 현실적인 추천을 제시.
 
 ## 금지
 - 데이터에 없는 가짜 숫자/사실 만들지 마라
 - "비현실적" 같은 가치 판단 X — 객관 분석만
-- 시장 데이터 인용 시 출처 모르면 "일반적 영유아 EdTech 패턴" 으로 명시`;
+- 시장 데이터 인용 시 출처 모르면 "일반적 영유아 EdTech 패턴" 으로 명시
+- recommended_goals 는 항상 객체로 반환 (모든 필드 null 이라도)`;
 
 export async function POST(
   req: Request,

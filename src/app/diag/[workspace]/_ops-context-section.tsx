@@ -16,7 +16,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { FieldHistoryModal } from "./_field-history-modal";
-import { ApplyToDiagnosisPanel } from "./_apply-to-diagnosis-panel";
+import {
+  ApplyToDiagnosisPanel,
+  type RecommendedGoals,
+} from "./_apply-to-diagnosis-panel";
 
 export interface OpsContext {
   // ── 지금 · 현재 운영 (9) ──
@@ -87,6 +90,8 @@ export function OpsContextSection({ workspace, onChange }: Props) {
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   /** 변경 안내 toast — 다른 직원이 commit 한 값을 사용자가 덮어쓰는 상황 */
   const [changeWarning, setChangeWarning] = useState<string | null>(null);
+  /** AI 분석 시 산출된 추천 목표값 — 각 goal 필드에 inline hint 로 노출 */
+  const [recommendedGoals, setRecommendedGoals] = useState<RecommendedGoals>({});
   /** 이력 modal 상태 */
   const [historyModal, setHistoryModal] = useState<{
     field: string;
@@ -540,12 +545,20 @@ export function OpsContextSection({ workspace, onChange }: Props) {
       </div>
 
       {/* ── 03 · 성장 목표 (Direction) ── */}
-      <div className="mb-10 pt-8 border-t border-ink-soft/30">
+      <div
+        id="section-growth-goals"
+        className="mb-10 pt-8 border-t border-ink-soft/30 transition-all"
+      >
         <div className="flex items-baseline gap-3 mb-3 flex-wrap">
           <p className="kicker">
             <span className="section-num">03 · </span>성장 목표
           </p>
           <span className="label-mono">월간 · 연간 핵심 지표 목표</span>
+          {Object.keys(recommendedGoals).length > 0 ? (
+            <span className="label-mono !text-accent">
+              · AI 추천값이 각 필드 아래 노출됨 (클릭 = 자동 채움)
+            </span>
+          ) : null}
         </div>
 
         {/* 통합 격차 라인 — 월·연 둘 다 표시 */}
@@ -588,6 +601,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             placeholder="2,500"
             unit="명"
             min={0}
+            recommendation={recommendedGoals.goal_new_signups_monthly}
             onShowHistory={openHistory(
               "goal_new_signups_monthly",
               "이번 달 신규 가입자 수 목표",
@@ -603,6 +617,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             placeholder="1,500"
             unit="명"
             min={0}
+            recommendation={recommendedGoals.goal_paid_users_monthly}
             onShowHistory={openHistory(
               "goal_paid_users_monthly",
               "이번 달 유료 사용자 수 목표",
@@ -618,6 +633,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             placeholder="20"
             unit="개"
             min={0}
+            recommendation={recommendedGoals.goal_plc_monthly}
             onShowHistory={openHistory(
               "goal_plc_monthly",
               "이번 달 PLC 수 목표",
@@ -638,6 +654,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             placeholder="50,000"
             unit="명"
             min={0}
+            recommendation={recommendedGoals.goal_total_members_annual}
             onShowHistory={openHistory(
               "goal_total_members_annual",
               "올해 누적 회원수 목표",
@@ -653,6 +670,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             placeholder="10,000"
             unit="명"
             min={0}
+            recommendation={recommendedGoals.goal_paid_subscribers_annual}
             onShowHistory={openHistory(
               "goal_paid_subscribers_annual",
               "올해 유료 구독자 수 목표",
@@ -668,6 +686,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             placeholder="200"
             unit="개"
             min={0}
+            recommendation={recommendedGoals.goal_plc_annual}
             onShowHistory={openHistory(
               "goal_plc_annual",
               "올해 PLC 수 목표",
@@ -687,7 +706,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
         </div>
       ) : null}
 
-      {/* ── 통합 — 진단에 반영 (분석 → 그대로 반영 / 다시 작성) ── */}
+      {/* ── 통합 — 진단에 반영 (분석 → 그대로 반영 / 목표 수정) ── */}
       <ApplyToDiagnosisPanel
         workspace={workspace}
         ctx={ctx}
@@ -699,6 +718,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
           setLastSavedAt(snap.applied_at ? new Date(snap.applied_at) : null);
           setChangeWarning(null);
         }}
+        onRecommendedGoals={(g) => setRecommendedGoals(g)}
       />
 
       {/* ── Footer ── */}
@@ -772,6 +792,7 @@ function EditorialNumField({
   min,
   max,
   onShowHistory,
+  recommendation,
 }: {
   label: string;
   kicker: string;
@@ -786,6 +807,8 @@ function EditorialNumField({
   max?: number;
   /** 이력 버튼 클릭 시 호출 */
   onShowHistory?: () => void;
+  /** AI 추천 값 — 입력란 아래에 작은 hint + 클릭 시 자동 채움 */
+  recommendation?: number | null;
 }) {
   const filled = value !== undefined && !Number.isNaN(value);
   // KRW(₩) 는 prefix, 나머지는 suffix
@@ -868,6 +891,31 @@ function EditorialNumField({
           </span>
         ) : null}
       </div>
+
+      {/* AI 추천 hint — 클릭 시 자동 채움 */}
+      {recommendation !== undefined &&
+      recommendation !== null &&
+      !Number.isNaN(recommendation) ? (
+        <div className="mt-1.5 flex items-baseline gap-1.5 flex-wrap">
+          <span className="label-mono text-ink-soft">↳ AI 추천</span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              onChange(recommendation);
+            }}
+            className={`label-mono border border-accent/40 hover:border-accent hover:bg-soft-amber/40 px-2 py-0.5 transition-colors !text-accent font-bold ${
+              value === recommendation ? "bg-soft-amber/30" : ""
+            }`}
+            title="클릭하면 이 값으로 자동 채움"
+          >
+            {isCurrency
+              ? `₩${recommendation.toLocaleString("ko-KR")}`
+              : `${recommendation.toLocaleString("ko-KR")}${unit ? ` ${unit}` : ""}`}
+            {value === recommendation ? " · 적용됨" : " →"}
+          </button>
+        </div>
+      ) : null}
     </label>
   );
 }

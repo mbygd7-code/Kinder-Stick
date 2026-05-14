@@ -15,8 +15,17 @@
  * 별도 박스로 흩어져 있어 정보 fragmented. 통합으로 일관된 결정 흐름.
  */
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import type { OpsContext } from "./_ops-context-section";
+
+export interface RecommendedGoals {
+  goal_new_signups_monthly?: number | null;
+  goal_paid_users_monthly?: number | null;
+  goal_plc_monthly?: number | null;
+  goal_total_members_annual?: number | null;
+  goal_paid_subscribers_annual?: number | null;
+  goal_plc_annual?: number | null;
+}
 
 interface FeasibilityResult {
   feasibility_pct: number;
@@ -34,6 +43,7 @@ interface FeasibilityResult {
     reasoning: string;
   }>;
   caveats: string[];
+  recommended_goals?: RecommendedGoals;
 }
 
 interface RatioRow {
@@ -59,6 +69,8 @@ interface Props {
   isDirty: boolean;
   /** commit 성공 시 parent state 갱신 */
   onCommitted: (snap: ServerSnapshot) => void;
+  /** AI 분석 완료 시 추천 목표값 전달 (parent 가 각 goal 필드에 hint 표시) */
+  onRecommendedGoals?: (g: RecommendedGoals) => void;
 }
 
 const IMPACT_TONE: Record<string, { color: string; label: string }> = {
@@ -147,12 +159,30 @@ export function ApplyToDiagnosisPanel({
   filled,
   isDirty,
   onCommitted,
+  onRecommendedGoals,
 }: Props) {
   const [analysis, setAnalysis] = useState<FeasibilityResult | null>(null);
   const [analyzing, startAnalyzing] = useTransition();
   const [committing, startCommitting] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // 캐시 로드 — 페이지 재진입 시 마지막 분석 결과 prefill
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(`${STORAGE_KEY_PREFIX}${workspace}`);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { result: FeasibilityResult };
+        if (parsed.result) {
+          setAnalysis(parsed.result);
+          if (parsed.result.recommended_goals && onRecommendedGoals) {
+            onRecommendedGoals(parsed.result.recommended_goals);
+          }
+        }
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspace]);
 
   // 분석 실행 — draft ctx 를 body 로 전송
   function runAnalysis() {
@@ -173,13 +203,18 @@ export function ApplyToDiagnosisPanel({
           setError(data.message ?? "분석 실패");
           return;
         }
-        setAnalysis(data.result as FeasibilityResult);
+        const result = data.result as FeasibilityResult;
+        setAnalysis(result);
+        // parent 에 추천 목표값 전파
+        if (result.recommended_goals && onRecommendedGoals) {
+          onRecommendedGoals(result.recommended_goals);
+        }
         // 캐시 — 다음 진입 시 prefill
         try {
           localStorage.setItem(
             `${STORAGE_KEY_PREFIX}${workspace}`,
             JSON.stringify({
-              result: data.result,
+              result,
               evaluated_at: data.evaluated_at,
             }),
           );
@@ -250,6 +285,28 @@ export function ApplyToDiagnosisPanel({
   const isCommittedAndClean =
     !isDirty && serverSnapshot && serverSnapshot.revision > 0;
 
+  // "목표 수정" 버튼 — 03 성장 목표 섹션으로 부드러운 스크롤 + 1.2초 highlight
+  function scrollToGoals() {
+    if (typeof window === "undefined") return;
+    const el = document.getElementById("section-growth-goals");
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    el.classList.add(
+      "ring-2",
+      "ring-accent",
+      "ring-offset-2",
+      "ring-offset-paper",
+    );
+    window.setTimeout(() => {
+      el.classList.remove(
+        "ring-2",
+        "ring-accent",
+        "ring-offset-2",
+        "ring-offset-paper",
+      );
+    }, 1500);
+  }
+
   return (
     <div className="mt-10 pt-6 border-t-2 border-ink">
       {/* Header */}
@@ -294,9 +351,7 @@ export function ApplyToDiagnosisPanel({
             disabled={filled === 0}
             className="btn-primary disabled:opacity-50 shrink-0 inline-flex items-center gap-2"
           >
-            <span>
-              {isCommittedAndClean ? "재분석" : "진단에 반영"}
-            </span>
+            <span>진단에 반영</span>
             <span className="font-mono text-xs">→</span>
           </button>
         </div>
@@ -326,7 +381,7 @@ export function ApplyToDiagnosisPanel({
           analysis={analysis}
           ratios={ratios}
           onCommit={commitNow}
-          onReanalyze={runAnalysis}
+          onEditGoals={scrollToGoals}
           committing={committing}
           analyzing={analyzing}
           committed={isCommittedAndClean}
@@ -357,7 +412,7 @@ function AnalysisResult({
   analysis,
   ratios,
   onCommit,
-  onReanalyze,
+  onEditGoals,
   committing,
   analyzing,
   committed,
@@ -368,7 +423,7 @@ function AnalysisResult({
   analysis: FeasibilityResult;
   ratios: RatioRow[];
   onCommit: () => void;
-  onReanalyze: () => void;
+  onEditGoals: () => void;
   committing: boolean;
   analyzing: boolean;
   committed: boolean | null | "" | undefined;
@@ -587,16 +642,17 @@ function AnalysisResult({
           </button>
           <button
             type="button"
-            onClick={onReanalyze}
-            disabled={analyzing || committing}
+            onClick={onEditGoals}
+            disabled={committing}
             className="btn-secondary disabled:opacity-50 inline-flex items-center gap-2"
+            title="위 분석의 추천 목표를 보며 03 성장 목표 섹션에서 수정"
           >
-            <span aria-hidden="true">⟳</span>
-            <span>{analyzing ? "분석 중…" : "다시 작성"}</span>
+            <span aria-hidden="true">↑</span>
+            <span>목표 수정</span>
           </button>
           <span className="label-mono text-ink-soft ml-auto">
-            "그대로 반영" 누르면 위 분석을 기반으로 진단 sub-item·워크리스트
-            업무 우선순위가 갱신됩니다.
+            "그대로 반영" = 진단·워크리스트 갱신 ·  "목표 수정" = 03 섹션에서
+            AI 추천값 보며 재입력
           </span>
         </div>
       </div>
