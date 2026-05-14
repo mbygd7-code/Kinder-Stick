@@ -167,6 +167,9 @@ export function ApplyToDiagnosisPanel({
   const [error, setError] = useState<string | null>(null);
   const [rawPreview, setRawPreview] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  /** "이번 분석" 을 사용자가 그대로 반영 클릭했는지 — 버튼 상태용 */
+  const [justCommittedThisAnalysis, setJustCommittedThisAnalysis] =
+    useState(false);
 
   // 캐시 로드 — 페이지 재진입 시 마지막 분석 결과 prefill
   useEffect(() => {
@@ -190,6 +193,7 @@ export function ApplyToDiagnosisPanel({
     setError(null);
     setRawPreview(null);
     setSuccessMsg(null);
+    setJustCommittedThisAnalysis(false); // 새 분석 시작 시 reset
     startAnalyzing(async () => {
       try {
         const res = await fetch(
@@ -267,6 +271,8 @@ export function ApplyToDiagnosisPanel({
               : "변경 사항 없음 — 이미 최신 상태입니다.",
           );
         }
+        // 사용자가 명시적으로 그대로 반영을 클릭한 후의 상태 — 버튼이 "✓ 반영됨" 표시
+        setJustCommittedThisAnalysis(true);
       } catch (e) {
         setError(String(e));
         return;
@@ -387,7 +393,7 @@ export function ApplyToDiagnosisPanel({
           onEditGoals={scrollToGoals}
           committing={committing}
           analyzing={analyzing}
-          committed={isCommittedAndClean}
+          committed={justCommittedThisAnalysis}
           serverSnapshot={serverSnapshot}
           successMsg={successMsg}
           error={error}
@@ -439,7 +445,8 @@ function AnalysisResult({
   onEditGoals: () => void;
   committing: boolean;
   analyzing: boolean;
-  committed: boolean | null | "" | undefined;
+  /** 사용자가 "이번 분석" 의 그대로 반영을 클릭해서 성공한 적 있는지 */
+  committed: boolean;
   serverSnapshot: ServerSnapshot | null;
   successMsg: string | null;
   error: string | null;
@@ -628,11 +635,11 @@ function AnalysisResult({
           <button
             type="button"
             onClick={onCommit}
-            disabled={committing || analyzing || Boolean(committed)}
+            disabled={committing || analyzing || committed}
             className="btn-primary disabled:opacity-50 inline-flex items-center gap-2"
             title={
               committed
-                ? "이미 최신 상태로 반영됨"
+                ? "이번 분석을 반영했습니다. 재분석하려면 위 '진단에 반영' 다시 클릭"
                 : "이 분석을 진단·워크리스트에 반영"
             }
           >
