@@ -799,7 +799,10 @@ function EditorialNumField({
   const isCurrency = unit === "₩";
 
   return (
-    <label className="block group">
+    // flex column + h-full 로 grid cell 의 stretch 높이 채움.
+    // hint 가 flex-1 로 grow → 입력행이 항상 cell 의 bottom 에 위치 → 같은 row
+    // 의 모든 필드 입력 baseline 이 시각적으로 정렬됨.
+    <label className="flex flex-col group h-full">
       <div className="flex items-baseline gap-2 mb-1.5 flex-wrap">
         <span className="label-mono">{kicker}</span>
         <span className="label-mono opacity-40">·</span>
@@ -819,7 +822,9 @@ function EditorialNumField({
           </button>
         ) : null}
       </div>
-      <p className="label-mono text-ink-soft mb-2 leading-relaxed">{hint}</p>
+      <p className="label-mono text-ink-soft mb-2 leading-relaxed flex-1">
+        {hint}
+      </p>
       <div
         className={`flex items-baseline gap-2 border-b-2 transition-colors ${
           filled
