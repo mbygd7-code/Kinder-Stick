@@ -17,12 +17,33 @@
 import { useEffect, useMemo, useState } from "react";
 
 export interface OpsContext {
+  // ── A. 활성 (Activity) ──
   mau?: number;
   wau?: number;
+
+  // ── B. funnel ──
   new_signups_monthly?: number;
   churn_monthly?: number;
-  /** 월 유료 사용자 수 — 매출 직결 지표 */
+  /** D1 활성화율 (%) — A4.ACT.D1 매핑 */
+  d1_activation_rate?: number;
+  /** M3 코호트 retention (%) — A2.RET.M3 매핑 */
+  m3_retention_rate?: number;
+
+  // ── C. 매출 · 단위경제 ──
+  /** 이번 달 매출 (KRW) */
+  revenue_monthly_krw?: number;
+  /** 월 유료 사용자 수 */
   paid_users_monthly?: number;
+  /** NRR (%) — Net Revenue Retention. A13.NRR.RATE 매핑 */
+  nrr_rate?: number;
+  /** CAC (KRW) — 신규 1명당 광고비 */
+  cac_krw?: number;
+
+  // ── D. 마케팅 채널 ──
+  /** 주력 채널 점유율 (%) — A6.CHANNEL.REPEAT 반전 */
+  primary_channel_share?: number;
+
+  // ── Goals / context ──
   monthly_goal?: string;
   annual_goal?: string;
   context_note?: string;
@@ -83,11 +104,22 @@ export function OpsContextSection({ workspace, onChange }: Props) {
 
   const filled = useMemo(() => {
     const slots = [
+      // A. 활성
       ctx.mau,
       ctx.wau,
+      // B. funnel
       ctx.new_signups_monthly,
       ctx.churn_monthly,
+      ctx.d1_activation_rate,
+      ctx.m3_retention_rate,
+      // C. 매출
+      ctx.revenue_monthly_krw,
       ctx.paid_users_monthly,
+      ctx.nrr_rate,
+      ctx.cac_krw,
+      // D. 채널
+      ctx.primary_channel_share,
+      // Goals
       ctx.monthly_goal,
       ctx.annual_goal,
       ctx.context_note,
@@ -117,6 +149,30 @@ export function OpsContextSection({ workspace, onChange }: Props) {
     ctx.mau > 0
       ? Math.round((ctx.paid_users_monthly / ctx.mau) * 100)
       : null;
+  /** ARPU = 매출 / 유료 사용자 — KRW per user per month */
+  const derivedArpu =
+    ctx.revenue_monthly_krw !== undefined &&
+    ctx.paid_users_monthly !== undefined &&
+    ctx.paid_users_monthly > 0
+      ? Math.round(ctx.revenue_monthly_krw / ctx.paid_users_monthly)
+      : null;
+  /** LTV/CAC ≈ (ARPU ÷ monthly churn rate) ÷ CAC. <1 위험, ≥3 healthy. */
+  const derivedLtvCac = (() => {
+    if (
+      derivedArpu === null ||
+      ctx.cac_krw === undefined ||
+      ctx.cac_krw <= 0 ||
+      derivedChurnRate === null ||
+      derivedChurnRate <= 0
+    ) {
+      return null;
+    }
+    const monthlyChurn = derivedChurnRate / 100;
+    const ltv = derivedArpu / monthlyChurn;
+    return Math.round((ltv / ctx.cac_krw) * 10) / 10; // 1 decimal
+  })();
+  /** 채널 의존도 — 주력 채널 % 그대로. A6.CHANNEL.REPEAT 반전 신호. */
+  const derivedChannelDep = ctx.primary_channel_share ?? null;
 
   return (
     <section className="max-w-5xl mx-auto px-6 sm:px-10 pt-12 pb-8">
@@ -139,7 +195,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
         <div className="text-right shrink-0">
           <p className="font-display text-3xl leading-none">
             {filled}
-            <span className="font-mono text-base text-ink-soft">/8</span>
+            <span className="font-mono text-base text-ink-soft">/14</span>
           </p>
           <p className="label-mono mt-1">입력 완료</p>
         </div>
@@ -149,55 +205,32 @@ export function OpsContextSection({ workspace, onChange }: Props) {
       <div className="h-1 bg-ink-soft/20 mb-10">
         <div
           className="h-full bg-accent transition-all duration-300"
-          style={{ width: `${(filled / 8) * 100}%` }}
+          style={{ width: `${(filled / 14) * 100}%` }}
         />
       </div>
 
       {/* ── 01 · 지금 (현재 상태) ── */}
       <div className="mb-10">
-        <div className="flex items-baseline gap-3 mb-5 flex-wrap">
+        {/* Section 01 header + derived metrics line */}
+        <div className="flex items-baseline gap-3 mb-3 flex-wrap">
           <p className="kicker">
             <span className="section-num">01 · </span>지금
           </p>
           <span className="label-mono">현재 운영 숫자</span>
-          {derivedChurnRate !== null ||
-          derivedWauMauRatio !== null ||
-          derivedPaidRate !== null ? (
-            <span className="label-mono opacity-50">·</span>
-          ) : null}
-          {derivedChurnRate !== null ? (
-            <span
-              className={`label-mono ${
-                derivedChurnRate > 10
-                  ? "!text-signal-red"
-                  : derivedChurnRate > 5
-                    ? "!text-signal-amber"
-                    : "!text-signal-green"
-              }`}
-            >
-              churn {derivedChurnRate}%/월
-            </span>
-          ) : null}
-          {derivedWauMauRatio !== null ? (
-            <span className="label-mono">
-              · WAU/MAU {derivedWauMauRatio}%
-            </span>
-          ) : null}
-          {derivedPaidRate !== null ? (
-            <span
-              className={`label-mono ${
-                derivedPaidRate >= 10
-                  ? "!text-signal-green"
-                  : derivedPaidRate >= 5
-                    ? "!text-cobalt"
-                    : "!text-signal-amber"
-              }`}
-            >
-              · 유료 전환 {derivedPaidRate}%
-            </span>
-          ) : null}
         </div>
 
+        {/* Derived 라인 — 입력될수록 채워짐 */}
+        <DerivedLine
+          churnRate={derivedChurnRate}
+          wauMauRatio={derivedWauMauRatio}
+          paidRate={derivedPaidRate}
+          arpu={derivedArpu}
+          ltvCac={derivedLtvCac}
+          channelDep={derivedChannelDep}
+        />
+
+        {/* ─── A. 사용자 활성 ─── */}
+        <SubGroupLabel letter="A" title="사용자 활성" />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-7">
           <EditorialNumField
             label="한 달 활성 사용자"
@@ -206,6 +239,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             value={ctx.mau}
             onChange={(v) => update("mau", v)}
             placeholder="8,000"
+            unit="명"
           />
           <EditorialNumField
             label="주간 활성 사용자"
@@ -214,7 +248,13 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             value={ctx.wau}
             onChange={(v) => update("wau", v)}
             placeholder="3,500"
+            unit="명"
           />
+        </div>
+
+        {/* ─── B. 가입 · 이탈 · 활성화 funnel ─── */}
+        <SubGroupLabel letter="B" title="가입·이탈·활성화 funnel" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-7">
           <EditorialNumField
             label="한 달 신규 가입"
             kicker="NEW"
@@ -222,6 +262,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             value={ctx.new_signups_monthly}
             onChange={(v) => update("new_signups_monthly", v)}
             placeholder="1,200"
+            unit="명"
           />
           <EditorialNumField
             label="한 달 이탈"
@@ -230,16 +271,98 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             value={ctx.churn_monthly}
             onChange={(v) => update("churn_monthly", v)}
             placeholder="250"
+            unit="명"
             tone="warning"
+          />
+          <EditorialNumField
+            label="D1 활성화율"
+            kicker="D1 ACT"
+            hint="가입 후 1일 안에 핵심 액션 도달 % · A4.ACT.D1 critical"
+            value={ctx.d1_activation_rate}
+            onChange={(v) => update("d1_activation_rate", v)}
+            placeholder="35"
+            unit="%"
+            min={0}
+            max={100}
+          />
+          <EditorialNumField
+            label="M3 코호트 잔존율"
+            kicker="M3 RET"
+            hint="3개월 후 retain % · A2.RET.M3 critical (PMF 예측 지표)"
+            value={ctx.m3_retention_rate}
+            onChange={(v) => update("m3_retention_rate", v)}
+            placeholder="45"
+            unit="%"
+            min={0}
+            max={100}
           />
         </div>
 
-        {/* 월 유료 사용자 — 단독 강조 (매출 직결 지표) */}
-        <div className="mt-7 pt-7 dotted-rule">
-          <PaidUsersField
+        {/* ─── C. 매출 · 단위경제 ─── */}
+        <SubGroupLabel letter="C" title="매출 · 단위경제" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-7">
+          <EditorialNumField
+            label="이번 달 매출"
+            kicker="REVENUE"
+            hint="이번 달 결제·구독 총합 · stage 검증 & ARPU 산출"
+            value={ctx.revenue_monthly_krw}
+            onChange={(v) => update("revenue_monthly_krw", v)}
+            placeholder="5,000,000"
+            unit="₩"
+            min={0}
+          />
+          <EditorialNumField
+            label="월 유료 사용자"
+            kicker="PAID"
+            hint="이번 달 결제·구독 유지 중 사용자 수"
             value={ctx.paid_users_monthly}
             onChange={(v) => update("paid_users_monthly", v)}
-            mau={ctx.mau}
+            placeholder="800"
+            unit="명"
+            min={0}
+          />
+          <EditorialNumField
+            label="순매출 유지율"
+            kicker="NRR"
+            hint="(이번달 매출 ÷ 지난달 매출) × 100 · A13.NRR.RATE"
+            value={ctx.nrr_rate}
+            onChange={(v) => update("nrr_rate", v)}
+            placeholder="105"
+            unit="%"
+            min={0}
+            max={200}
+          />
+          <EditorialNumField
+            label="신규 1명당 광고비"
+            kicker="CAC"
+            hint="이번 달 광고비 ÷ 신규 가입 수 · 낮을수록 효율적"
+            value={ctx.cac_krw}
+            onChange={(v) => update("cac_krw", v)}
+            placeholder="12,000"
+            unit="₩"
+            min={0}
+          />
+        </div>
+
+        {/* ─── D. 마케팅 채널 ─── */}
+        <SubGroupLabel letter="D" title="마케팅 채널" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-7">
+          <EditorialNumField
+            label="주력 채널 점유율"
+            kicker="CHANNEL"
+            hint="가장 큰 유입 채널 1개의 신규 가입 점유율 · 60%+ 면 채널 의존 위험"
+            value={ctx.primary_channel_share}
+            onChange={(v) => update("primary_channel_share", v)}
+            placeholder="65"
+            unit="%"
+            min={0}
+            max={100}
+            tone={
+              ctx.primary_channel_share !== undefined &&
+              ctx.primary_channel_share > 60
+                ? "warning"
+                : undefined
+            }
           />
         </div>
       </div>
@@ -326,6 +449,9 @@ function EditorialNumField({
   onChange,
   placeholder,
   tone,
+  unit,
+  min,
+  max,
 }: {
   label: string;
   kicker: string;
@@ -334,8 +460,18 @@ function EditorialNumField({
   onChange: (v: number | undefined) => void;
   placeholder?: string;
   tone?: "warning" | "neutral";
+  /** 단위 마커 — "명" | "%" | "₩" 등 */
+  unit?: string;
+  min?: number;
+  max?: number;
 }) {
   const filled = value !== undefined && !Number.isNaN(value);
+  // KRW(₩) 는 prefix, 나머지는 suffix
+  const isPrefix = unit === "₩";
+  // KRW 큰 수 천단위 콤마 표시 (입력 중엔 raw, 비포커스 시 포맷). 단순화: 모든
+  // ₩ 필드는 type=text + 콤마 표시; 그 외는 type=number.
+  const isCurrency = unit === "₩";
+
   return (
     <label className="block group">
       <div className="flex items-baseline gap-2 mb-1.5">
@@ -353,118 +489,168 @@ function EditorialNumField({
             : "border-ink-soft/40 group-focus-within:border-ink"
         }`}
       >
+        {isPrefix ? (
+          <span className="font-display text-2xl text-ink-soft shrink-0">
+            {unit}
+          </span>
+        ) : null}
         <input
-          type="number"
+          type={isCurrency ? "text" : "number"}
           inputMode="numeric"
-          value={value === undefined || Number.isNaN(value) ? "" : value}
+          min={min}
+          max={max}
+          value={
+            value === undefined || Number.isNaN(value)
+              ? ""
+              : isCurrency
+                ? value.toLocaleString("ko-KR")
+                : value
+          }
           onChange={(e) => {
-            const v = e.target.value.trim();
-            if (v === "") onChange(undefined);
-            else {
-              const n = Number(v);
-              if (Number.isFinite(n)) onChange(n);
+            const raw = e.target.value.trim();
+            if (raw === "") {
+              onChange(undefined);
+              return;
             }
+            // currency 는 콤마 제거 후 숫자 파싱
+            const cleaned = isCurrency ? raw.replace(/,/g, "") : raw;
+            const n = Number(cleaned);
+            if (!Number.isFinite(n)) return;
+            if (min !== undefined && n < min) return;
+            if (max !== undefined && n > max) return;
+            onChange(n);
           }}
           placeholder={placeholder}
-          className="flex-1 bg-transparent font-display text-3xl py-2 focus:outline-none placeholder:font-display placeholder:text-ink-soft/30"
+          className="flex-1 bg-transparent font-display text-3xl py-2 focus:outline-none placeholder:font-display placeholder:text-ink-soft/30 min-w-0"
         />
+        {!isPrefix && unit ? (
+          <span className="label-mono shrink-0">{unit}</span>
+        ) : null}
         {filled ? (
-          <span className="label-mono shrink-0">{tone === "warning" ? "↓" : "✓"}</span>
+          <span className="label-mono shrink-0">
+            {tone === "warning" ? "↓" : "✓"}
+          </span>
         ) : null}
       </div>
     </label>
   );
 }
 
-function PaidUsersField({
-  value,
-  onChange,
-  mau,
+// ─── Sub-group label (dotted-rule + letter prefix) ───
+function SubGroupLabel({ letter, title }: { letter: string; title: string }) {
+  return (
+    <div className="mt-7 pt-5 dotted-rule flex items-baseline gap-3 mb-4 first:mt-0 first:pt-0 first:border-none">
+      <span className="kicker">{letter}</span>
+      <span className="label-mono opacity-40">·</span>
+      <span className="font-display text-base leading-tight">{title}</span>
+    </div>
+  );
+}
+
+// ─── Derived metrics line — 입력될수록 채워짐 ───
+function DerivedLine({
+  churnRate,
+  wauMauRatio,
+  paidRate,
+  arpu,
+  ltvCac,
+  channelDep,
 }: {
-  value: number | undefined;
-  onChange: (v: number | undefined) => void;
-  mau: number | undefined;
+  churnRate: number | null;
+  wauMauRatio: number | null;
+  paidRate: number | null;
+  arpu: number | null;
+  ltvCac: number | null;
+  channelDep: number | null;
 }) {
-  const filled = value !== undefined && !Number.isNaN(value);
-  // 유료 전환율 (영유아 EdTech freemium 기준 5–15% 가 healthy)
-  const paidRate =
-    filled && value !== undefined && mau !== undefined && mau > 0
-      ? Math.round((value / mau) * 100)
-      : null;
-  const band =
-    paidRate === null
-      ? "neutral"
-      : paidRate >= 15
-        ? "excellent"
-        : paidRate >= 10
-          ? "good"
+  const chips: Array<{ key: string; label: string; tone: string }> = [];
+
+  if (churnRate !== null) {
+    chips.push({
+      key: "churn",
+      label: `churn ${churnRate}%/월`,
+      tone:
+        churnRate > 10
+          ? "!text-signal-red"
+          : churnRate > 5
+            ? "!text-signal-amber"
+            : "!text-signal-green",
+    });
+  }
+  if (wauMauRatio !== null) {
+    chips.push({
+      key: "wm",
+      label: `WAU/MAU ${wauMauRatio}%`,
+      tone:
+        wauMauRatio >= 50
+          ? "!text-signal-green"
+          : wauMauRatio >= 30
+            ? "!text-cobalt"
+            : "!text-signal-amber",
+    });
+  }
+  if (paidRate !== null) {
+    chips.push({
+      key: "paid",
+      label: `유료 전환 ${paidRate}%`,
+      tone:
+        paidRate >= 10
+          ? "!text-signal-green"
           : paidRate >= 5
-            ? "ok"
-            : paidRate >= 2
-              ? "weak"
-              : "bad";
-  const bandLabel: Record<string, string> = {
-    excellent: "매우 우수",
-    good: "양호",
-    ok: "보통",
-    weak: "주의",
-    bad: "낮음",
-    neutral: "—",
-  };
-  const bandTone: Record<string, string> = {
-    excellent: "!text-signal-green",
-    good: "!text-signal-green",
-    ok: "!text-cobalt",
-    weak: "!text-signal-amber",
-    bad: "!text-signal-red",
-    neutral: "!text-ink-soft",
-  };
+            ? "!text-cobalt"
+            : "!text-signal-amber",
+    });
+  }
+  if (arpu !== null) {
+    chips.push({
+      key: "arpu",
+      label: `ARPU ₩${arpu.toLocaleString("ko-KR")}`,
+      tone: "!text-ink-soft",
+    });
+  }
+  if (ltvCac !== null) {
+    chips.push({
+      key: "ltvcac",
+      label: `LTV/CAC ${ltvCac}x`,
+      tone:
+        ltvCac >= 3
+          ? "!text-signal-green"
+          : ltvCac >= 1
+            ? "!text-signal-amber"
+            : "!text-signal-red",
+    });
+  }
+  if (channelDep !== null) {
+    chips.push({
+      key: "ch",
+      label: `채널 의존 ${channelDep}%`,
+      tone:
+        channelDep > 60
+          ? "!text-signal-red"
+          : channelDep > 40
+            ? "!text-signal-amber"
+            : "!text-signal-green",
+    });
+  }
+
+  if (chips.length === 0) {
+    return (
+      <p className="label-mono text-ink-soft/60 mb-5">
+        값을 입력하면 자동 계산된 비율 (churn, WAU/MAU, 유료 전환, ARPU,
+        LTV/CAC, 채널 의존) 이 여기 표시됩니다.
+      </p>
+    );
+  }
 
   return (
-    <label className="block group">
-      <div className="flex items-baseline gap-2 mb-1.5 flex-wrap">
-        <span className="label-mono">PAID</span>
-        <span className="label-mono opacity-40">·</span>
-        <span className="text-sm font-medium leading-tight">
-          월 유료 사용자 수
+    <p className="mb-5 flex items-baseline gap-x-3 gap-y-1 flex-wrap">
+      {chips.map((c, i) => (
+        <span key={c.key} className={`label-mono ${c.tone}`}>
+          {i > 0 ? <span className="opacity-30 mr-3">·</span> : null}
+          {c.label}
         </span>
-        {paidRate !== null ? (
-          <span className={`label-mono ml-2 ${bandTone[band]}`}>
-            유료 전환 {paidRate}% · {bandLabel[band]}
-          </span>
-        ) : null}
-      </div>
-      <p className="label-mono text-ink-soft mb-3 leading-relaxed">
-        이번 달 유료 결제·구독을 유지 중인 사용자 수 — 매출 직결 지표
-        {mau === undefined ? null : ` · 영유아 EdTech freemium 5–15% 가 healthy`}
-      </p>
-      <div
-        className={`flex items-baseline gap-2 border-b-2 transition-colors ${
-          filled
-            ? "border-ink"
-            : "border-ink-soft/40 group-focus-within:border-ink"
-        }`}
-      >
-        <input
-          type="number"
-          inputMode="numeric"
-          min={0}
-          value={value === undefined || Number.isNaN(value) ? "" : value}
-          onChange={(e) => {
-            const v = e.target.value.trim();
-            if (v === "") onChange(undefined);
-            else {
-              const n = Number(v);
-              if (Number.isFinite(n) && n >= 0) onChange(n);
-            }
-          }}
-          placeholder="800"
-          className="flex-1 bg-transparent font-display text-3xl py-2 focus:outline-none placeholder:font-display placeholder:text-ink-soft/30"
-        />
-        <span className="label-mono shrink-0">명</span>
-        {filled ? <span className="label-mono shrink-0">✓</span> : null}
-      </div>
-    </label>
+      ))}
+    </p>
   );
 }
 
