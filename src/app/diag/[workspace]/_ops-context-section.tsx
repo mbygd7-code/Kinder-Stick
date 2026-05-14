@@ -14,7 +14,8 @@
  *   - 입력 진행률 progress bar + 자동 저장 timestamp
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { FieldHistoryModal } from "./_field-history-modal";
 
 export interface OpsContext {
   // ── 지금 · 현재 운영 (8) ──
@@ -46,6 +47,14 @@ export interface OpsContext {
 
 const STORAGE_KEY_PREFIX = "kso-ops-context-";
 
+interface ServerSnapshot {
+  data: OpsContext;
+  applied_at: string | null;
+  applied_by_email: string | null;
+  applied_by_name: string | null;
+  revision: number;
+}
+
 interface Props {
   workspace: string;
   onChange?: (ctx: OpsContext) => void;
@@ -54,46 +63,180 @@ interface Props {
 export function OpsContextSection({ workspace, onChange }: Props) {
   const storageKey = `${STORAGE_KEY_PREFIX}${workspace}`;
   const [hydrated, setHydrated] = useState(false);
+  /** 화면에서 사용자가 편집 중인 draft */
   const [ctx, setCtx] = useState<OpsContext>({});
+  /** 마지막 commit (서버 또는 첫 로드) — diff 비교용 */
+  const [serverSnapshot, setServerSnapshot] = useState<ServerSnapshot | null>(
+    null,
+  );
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [applying, startApplying] = useTransition();
+  const [applyMsg, setApplyMsg] = useState<string | null>(null);
+  const [applyErr, setApplyErr] = useState<string | null>(null);
+  /** 변경 안내 toast — 다른 직원이 commit 한 값을 사용자가 덮어쓰는 상황 */
+  const [changeWarning, setChangeWarning] = useState<string | null>(null);
+  /** 이력 modal 상태 */
+  const [historyModal, setHistoryModal] = useState<{
+    field: string;
+    label: string;
+    unit?: string;
+  } | null>(null);
 
+  // ── 초기 로드: 서버 → 없으면 localStorage ──
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (raw) {
-        const parsed = JSON.parse(raw) as OpsContext;
-        setCtx(parsed);
-        if (parsed.updated_at) setLastSavedAt(new Date(parsed.updated_at));
+    let cancelled = false;
+    async function load() {
+      // 서버 fetch 우선
+      try {
+        const res = await fetch(
+          `/api/ops-context/${encodeURIComponent(workspace)}`,
+        );
+        if (res.ok) {
+          const d = await res.json();
+          if (!cancelled && d.ok) {
+            const snap: ServerSnapshot = {
+              data: (d.data as OpsContext) ?? {},
+              applied_at: d.applied_at ?? null,
+              applied_by_email: d.applied_by_email ?? null,
+              applied_by_name: d.applied_by_name ?? null,
+              revision: d.revision ?? 0,
+            };
+            setServerSnapshot(snap);
+            // 서버 값이 비어있고 localStorage 에 draft 가 있으면 draft 우선
+            if (snap.revision > 0 && Object.keys(snap.data).length > 0) {
+              setCtx(snap.data);
+              if (snap.applied_at) {
+                setLastSavedAt(new Date(snap.applied_at));
+              }
+              setHydrated(true);
+              return;
+            }
+          }
+        }
+      } catch {
+        // 서버 오류면 localStorage fallback
       }
-    } catch {
-      // ignore
-    } finally {
+      // localStorage fallback (서버 비어있거나 익명 시)
+      try {
+        const raw = localStorage.getItem(storageKey);
+        if (raw) {
+          const parsed = JSON.parse(raw) as OpsContext;
+          setCtx(parsed);
+          if (parsed.updated_at) setLastSavedAt(new Date(parsed.updated_at));
+        }
+      } catch {}
       setHydrated(true);
     }
-  }, [storageKey]);
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [workspace, storageKey]);
 
+  // ── localStorage 자동 저장 (draft) ──
   useEffect(() => {
     if (!hydrated) return;
     const now = new Date();
     const payload = { ...ctx, updated_at: now.toISOString() };
     try {
       localStorage.setItem(storageKey, JSON.stringify(payload));
-      setLastSavedAt(now);
-    } catch {
-      // quota
-    }
+    } catch {}
     onChange?.(payload);
   }, [ctx, hydrated, storageKey, onChange]);
 
+  // 변경이 서버 commit 과 차이 나는지 감지 → 안내 메시지
+  useEffect(() => {
+    if (!hydrated || !serverSnapshot || serverSnapshot.revision === 0) {
+      setChangeWarning(null);
+      return;
+    }
+    const diffFields = diffKeys(ctx, serverSnapshot.data);
+    if (diffFields.length > 0) {
+      const editor =
+        serverSnapshot.applied_by_name ??
+        serverSnapshot.applied_by_email?.split("@")[0] ??
+        "이전 직원";
+      setChangeWarning(
+        `${editor} 가 적용한 값 ${diffFields.length}개를 변경 중입니다. "진단에 반영" 을 눌러 저장하세요.`,
+      );
+    } else {
+      setChangeWarning(null);
+    }
+  }, [ctx, hydrated, serverSnapshot]);
+
   function update<K extends keyof OpsContext>(key: K, value: OpsContext[K]) {
     setCtx((prev) => ({ ...prev, [key]: value }));
+    setApplyMsg(null);
+    setApplyErr(null);
   }
+
+  /** 이력 모달 열기 헬퍼 — 각 필드에서 호출 */
+  const openHistory =
+    (field: string, label: string, unit?: string) => () =>
+      setHistoryModal({ field, label, unit });
 
   function clear() {
     if (!confirm("운영 정보를 모두 지웁니다. 계속할까요?")) return;
     setCtx({});
     localStorage.removeItem(storageKey);
     setLastSavedAt(null);
+  }
+
+  function applyToDiagnosis() {
+    setApplyErr(null);
+    setApplyMsg(null);
+    startApplying(async () => {
+      // 서버에 commit
+      try {
+        const res = await fetch(
+          `/api/ops-context/${encodeURIComponent(workspace)}`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ data: stripMeta(ctx) }),
+          },
+        );
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          if (res.status === 401) {
+            // 비로그인 — localStorage 만으로 진단·워크리스트 반영
+            setApplyMsg(
+              "로그인 안 됨 — 이 기기에서만 반영됩니다. 팀과 공유하려면 로그인하세요.",
+            );
+          } else {
+            setApplyErr(data.message ?? "반영 실패");
+            return;
+          }
+        } else {
+          // 서버 commit 성공
+          setServerSnapshot({
+            data: ctx,
+            applied_at: data.applied_at ?? new Date().toISOString(),
+            applied_by_email: data.applied_by_email ?? null,
+            applied_by_name: null,
+            revision: data.revision ?? 1,
+          });
+          setLastSavedAt(new Date(data.applied_at ?? Date.now()));
+          setApplyMsg(
+            data.changes_count > 0
+              ? `${data.changes_count}개 항목이 진단·워크리스트에 반영되었습니다.`
+              : "변경 사항 없음 — 이미 최신 상태입니다.",
+          );
+          setChangeWarning(null);
+        }
+      } catch (e) {
+        setApplyErr(String(e));
+        return;
+      }
+      // adaptation banner / worklist applier 가 다시 평가하도록 storage 이벤트 발화
+      try {
+        window.dispatchEvent(new StorageEvent("storage", { key: storageKey }));
+        // 같은 탭에서도 listener 가 동작하도록 CustomEvent
+        window.dispatchEvent(
+          new CustomEvent("ops-context:applied", { detail: { workspace } }),
+        );
+      } catch {}
+    });
   }
 
   const filled = useMemo(() => {
@@ -213,6 +356,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             onChange={(v) => update("mau", v)}
             placeholder="8,000"
             unit="명"
+            onShowHistory={openHistory("mau", "한 달 활성 사용자", "명")}
           />
           <EditorialNumField
             label="주간 활성 사용자"
@@ -222,6 +366,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             onChange={(v) => update("wau", v)}
             placeholder="3,500"
             unit="명"
+            onShowHistory={openHistory("wau", "주간 활성 사용자", "명")}
           />
         </div>
 
@@ -236,6 +381,11 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             onChange={(v) => update("new_signups_monthly", v)}
             placeholder="1,200"
             unit="명"
+            onShowHistory={openHistory(
+              "new_signups_monthly",
+              "한 달 신규 가입",
+              "명",
+            )}
           />
           <EditorialNumField
             label="한 달 이탈"
@@ -246,6 +396,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             placeholder="250"
             unit="명"
             tone="warning"
+            onShowHistory={openHistory("churn_monthly", "한 달 이탈", "명")}
           />
           <EditorialNumField
             label="D1 활성화율"
@@ -257,6 +408,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             unit="%"
             min={0}
             max={100}
+            onShowHistory={openHistory("d1_activation_rate", "D1 활성화율", "%")}
           />
         </div>
 
@@ -272,6 +424,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             placeholder="5,000,000"
             unit="₩"
             min={0}
+            onShowHistory={openHistory("revenue_monthly_krw", "이번 달 매출", "₩")}
           />
           <EditorialNumField
             label="월 유료 사용자"
@@ -282,6 +435,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             placeholder="800"
             unit="명"
             min={0}
+            onShowHistory={openHistory("paid_users_monthly", "월 유료 사용자", "명")}
           />
           <EditorialNumField
             label="순매출 유지율"
@@ -293,6 +447,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             unit="%"
             min={0}
             max={200}
+            onShowHistory={openHistory("nrr_rate", "순매출 유지율", "%")}
           />
         </div>
       </div>
@@ -330,6 +485,11 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             placeholder="2,500"
             unit="명"
             min={0}
+            onShowHistory={openHistory(
+              "goal_new_signups_monthly",
+              "이번 달 신규 가입자 수 목표",
+              "명",
+            )}
           />
           <EditorialNumField
             label="유료 사용자 수"
@@ -340,6 +500,11 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             placeholder="1,500"
             unit="명"
             min={0}
+            onShowHistory={openHistory(
+              "goal_paid_users_monthly",
+              "이번 달 유료 사용자 수 목표",
+              "명",
+            )}
           />
           <EditorialNumField
             label="PLC 수"
@@ -350,6 +515,11 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             placeholder="20"
             unit="개"
             min={0}
+            onShowHistory={openHistory(
+              "goal_plc_monthly",
+              "이번 달 PLC 수 목표",
+              "개",
+            )}
           />
         </div>
       </div>
@@ -389,6 +559,11 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             placeholder="50,000"
             unit="명"
             min={0}
+            onShowHistory={openHistory(
+              "goal_total_members_annual",
+              "올해 누적 회원수 목표",
+              "명",
+            )}
           />
           <EditorialNumField
             label="유료 구독자 수"
@@ -399,6 +574,11 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             placeholder="10,000"
             unit="명"
             min={0}
+            onShowHistory={openHistory(
+              "goal_paid_subscribers_annual",
+              "올해 유료 구독자 수 목표",
+              "명",
+            )}
           />
           <EditorialNumField
             label="PLC 수"
@@ -409,16 +589,83 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             placeholder="200"
             unit="개"
             min={0}
+            onShowHistory={openHistory(
+              "goal_plc_annual",
+              "올해 PLC 수 목표",
+              "개",
+            )}
           />
         </div>
       </div>
 
+      {/* ── 변경 안내 toast ── */}
+      {changeWarning ? (
+        <div className="mt-8 border-2 border-signal-amber bg-soft-amber/30 p-4">
+          <p className="kicker !text-signal-amber mb-1">
+            변경 감지 — 아직 반영되지 않음
+          </p>
+          <p className="text-sm leading-relaxed">{changeWarning}</p>
+        </div>
+      ) : null}
+
+      {/* ── 진단에 반영 버튼 + 메시지 ── */}
+      <div className="mt-10 pt-6 border-t-2 border-ink">
+        <div className="flex items-baseline justify-between gap-4 flex-wrap mb-3">
+          <div>
+            <p className="kicker mb-1">진단·워크리스트에 적용</p>
+            <h3 className="font-display text-xl leading-tight">
+              입력한 데이터로{" "}
+              <span className="italic font-light">진단을 맞춤화</span>
+            </h3>
+            <p className="mt-1 text-sm text-ink-soft leading-relaxed max-w-xl">
+              "진단에 반영" 을 누르면 회사 컨디션 기반으로 진단 응답 카드와
+              워크리스트 업무가 자동 강조·재정렬됩니다. 다른 직원이 이 진단
+              카드를 열어도 같은 값이 기본으로 셋팅됩니다.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={applyToDiagnosis}
+            disabled={applying || filled === 0}
+            className="btn-primary disabled:opacity-50 shrink-0"
+          >
+            {applying ? "반영 중…" : "진단에 반영"}
+            <span className="font-mono text-xs">→</span>
+          </button>
+        </div>
+
+        {applyMsg ? (
+          <p className="mt-2 font-mono text-xs text-signal-green">
+            ✓ {applyMsg}
+          </p>
+        ) : null}
+        {applyErr ? (
+          <p className="mt-2 font-mono text-xs text-signal-red">
+            ⚠ {applyErr}
+          </p>
+        ) : null}
+
+        {serverSnapshot && serverSnapshot.revision > 0 ? (
+          <p className="mt-3 label-mono text-ink-soft">
+            최근 반영:{" "}
+            {serverSnapshot.applied_by_name ??
+              serverSnapshot.applied_by_email?.split("@")[0] ??
+              "익명"}{" "}
+            ·{" "}
+            {serverSnapshot.applied_at
+              ? formatRelative(new Date(serverSnapshot.applied_at))
+              : "—"}{" "}
+            · revision {serverSnapshot.revision}
+          </p>
+        ) : null}
+      </div>
+
       {/* ── Footer ── */}
-      <div className="mt-10 pt-5 border-t border-ink flex items-baseline justify-between flex-wrap gap-3">
+      <div className="mt-8 pt-4 border-t border-ink-soft/30 flex items-baseline justify-between flex-wrap gap-3">
         <p className="label-mono">
           {lastSavedAt
-            ? `✓ 자동 저장됨 — ${formatRelative(lastSavedAt)}`
-            : "자동 저장 — 입력 즉시"}
+            ? `✓ 입력 자동 저장됨 — ${formatRelative(lastSavedAt)}`
+            : "입력 자동 저장 — draft 는 즉시"}
         </p>
         {filled > 0 ? (
           <button
@@ -430,8 +677,42 @@ export function OpsContextSection({ workspace, onChange }: Props) {
           </button>
         ) : null}
       </div>
+
+      {/* ── 이력 modal ── */}
+      {historyModal ? (
+        <FieldHistoryModal
+          workspace={workspace}
+          field={historyModal.field}
+          label={historyModal.label}
+          unit={historyModal.unit}
+          onClose={() => setHistoryModal(null)}
+        />
+      ) : null}
     </section>
   );
+}
+
+// ─── helpers ───
+function stripMeta(c: OpsContext): OpsContext {
+  const { updated_at: _u, ...rest } = c;
+  void _u;
+  return rest;
+}
+
+function diffKeys(
+  a: OpsContext,
+  b: OpsContext,
+): Array<keyof OpsContext> {
+  const out: Array<keyof OpsContext> = [];
+  const keys = new Set<keyof OpsContext>([
+    ...(Object.keys(a) as Array<keyof OpsContext>),
+    ...(Object.keys(b) as Array<keyof OpsContext>),
+  ]);
+  keys.delete("updated_at" as keyof OpsContext);
+  for (const k of keys) {
+    if (JSON.stringify(a[k]) !== JSON.stringify(b[k])) out.push(k);
+  }
+  return out;
 }
 
 // ============================================================================
@@ -449,6 +730,7 @@ function EditorialNumField({
   unit,
   min,
   max,
+  onShowHistory,
 }: {
   label: string;
   kicker: string;
@@ -461,6 +743,8 @@ function EditorialNumField({
   unit?: string;
   min?: number;
   max?: number;
+  /** 이력 버튼 클릭 시 호출 */
+  onShowHistory?: () => void;
 }) {
   const filled = value !== undefined && !Number.isNaN(value);
   // KRW(₩) 는 prefix, 나머지는 suffix
@@ -471,10 +755,23 @@ function EditorialNumField({
 
   return (
     <label className="block group">
-      <div className="flex items-baseline gap-2 mb-1.5">
+      <div className="flex items-baseline gap-2 mb-1.5 flex-wrap">
         <span className="label-mono">{kicker}</span>
         <span className="label-mono opacity-40">·</span>
         <span className="text-sm font-medium leading-tight">{label}</span>
+        {onShowHistory ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              onShowHistory();
+            }}
+            className="ml-auto label-mono hover:text-ink underline-offset-2 hover:underline"
+            title="이 필드의 변경 이력 보기"
+          >
+            이력
+          </button>
+        ) : null}
       </div>
       <p className="label-mono text-ink-soft mb-2 leading-relaxed">{hint}</p>
       <div

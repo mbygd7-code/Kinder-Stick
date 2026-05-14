@@ -53,18 +53,30 @@ export function AdaptationBanner({ workspace, context = "diagnosis" }: Props) {
   const [adapt, setAdapt] = useState<AdaptationOutput | null>(null);
 
   useEffect(() => {
-    const reload = () => {
+    async function reload() {
+      // 서버 우선, 실패 시 localStorage
+      try {
+        const res = await fetch(
+          `/api/ops-context/${encodeURIComponent(workspace)}`,
+        );
+        if (res.ok) {
+          const d = await res.json();
+          if (d.ok && d.data && Object.keys(d.data).length > 0) {
+            setAdapt(computeOpsContextAdaptation(d.data));
+            return;
+          }
+        }
+      } catch {}
       const ctx = loadOpsContextFromLocalStorage(workspace);
       setAdapt(computeOpsContextAdaptation(ctx));
-    };
+    }
     reload();
-    // OpsContextSection 이 입력될 때마다 자동 반영
     window.addEventListener("storage", reload);
-    // 같은 페이지 내 변경 (storage 이벤트는 다른 탭에서만 발화)
-    const interval = window.setInterval(reload, 2000);
+    const onApplied = () => reload();
+    window.addEventListener("ops-context:applied", onApplied);
     return () => {
       window.removeEventListener("storage", reload);
-      window.clearInterval(interval);
+      window.removeEventListener("ops-context:applied", onApplied);
     };
   }, [workspace]);
 

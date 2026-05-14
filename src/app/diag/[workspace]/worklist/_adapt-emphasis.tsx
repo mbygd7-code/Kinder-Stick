@@ -24,8 +24,21 @@ interface Props {
 
 export function AdaptEmphasisApplier({ workspace }: Props) {
   useEffect(() => {
-    function apply() {
-      const ctx = loadOpsContextFromLocalStorage(workspace);
+    async function apply() {
+      // 서버 우선, 실패 시 localStorage
+      let ctx = null;
+      try {
+        const res = await fetch(
+          `/api/ops-context/${encodeURIComponent(workspace)}`,
+        );
+        if (res.ok) {
+          const d = await res.json();
+          if (d.ok && d.data && Object.keys(d.data).length > 0) {
+            ctx = d.data;
+          }
+        }
+      } catch {}
+      if (!ctx) ctx = loadOpsContextFromLocalStorage(workspace);
       const adapt = computeOpsContextAdaptation(ctx);
       const sevByDomain = new Map(
         adapt.emphasized.map((d) => [d.domain, d.severity]),
@@ -69,10 +82,12 @@ export function AdaptEmphasisApplier({ workspace }: Props) {
     apply();
     const onChange = () => apply();
     window.addEventListener("storage", onChange);
+    window.addEventListener("ops-context:applied", onChange);
     // search filter 가 DOM 갱신할 때 강조도 같이 다시 — interval 로 안전망
-    const interval = window.setInterval(apply, 2000);
+    const interval = window.setInterval(apply, 5000);
     return () => {
       window.removeEventListener("storage", onChange);
+      window.removeEventListener("ops-context:applied", onChange);
       window.clearInterval(interval);
     };
   }, [workspace]);
