@@ -26,7 +26,7 @@ export interface AdaptedDomain {
 }
 
 export interface RealismWarning {
-  /** 어떤 비교에서 경고가 났는지 */
+  /** 어떤 비교의 격차인지 */
   metric: string;
   /** 현재값 */
   current: number;
@@ -34,7 +34,9 @@ export interface RealismWarning {
   goal: number;
   /** ratio (goal/current) */
   ratio: number;
-  severity: "high" | "extreme";
+  /** 라벨 분류 (값판단 X, 시각 그루핑용) */
+  severity: "noticeable" | "significant" | "very_large";
+  /** 정보 표시용 메시지 (raw fact 만) */
   message: string;
 }
 
@@ -205,9 +207,14 @@ const ALL_RULES: Rule[] = [...STATE_RULES, ...GOAL_RULES];
 
 // ─── 현실성 체크 ───
 /**
- * 목표/현재 ratio 가 너무 크면 진단 신뢰도 ↓.
- * 10배 = high, 100배 = extreme.
- * 영유아 EdTech 운영 1년 사이클에서 합리적 성장은 2-5배. 10배+는 비현실적.
+ * 목표/현재 ratio 를 raw fact 로 반환 (value judgment X).
+ *
+ * 중요: 이 함수는 단순 산술 비교만 한다. "비현실적" 같은 판단은 하지 않음.
+ * 진정한 가능성 평가는 출시일/런웨이/팀/경쟁 등 다요인 컨텍스트가 필요하며,
+ * 그건 /api/ops-context/[ws]/growth-feasibility 의 AI 분석에서 수행.
+ *
+ * 여기선 단지 정보를 표시: "월 신규 가입: 100 → 600 (6배 격차)"
+ * UI 가 이 데이터를 받아서 "심화 분석을 원하면 AI 분석 클릭" 안내.
  */
 function checkRealism(ctx: OpsContext): RealismWarning[] {
   const out: RealismWarning[] = [];
@@ -247,29 +254,24 @@ function checkRealism(ctx: OpsContext): RealismWarning[] {
     if (c.current === undefined || c.goal === undefined || c.current <= 0)
       continue;
     const r = c.goal / c.current;
-    // 월 목표 vs 현재 → 5배+ 부터 high, 20배+ 부터 extreme
-    // 연 목표 vs 현재 → 10배+ 부터 high, 50배+ 부터 extreme
-    const threshHigh = c.period === "month" ? 5 : 10;
-    const threshExtreme = c.period === "month" ? 20 : 50;
-    if (r >= threshExtreme) {
-      out.push({
-        metric: c.metric,
-        current: c.current,
-        goal: c.goal,
-        ratio: r,
-        severity: "extreme",
-        message: `${c.metric} 목표가 현재의 ${r.toFixed(1)}배 — 1${c.period === "month" ? "개월" : "년"} 내 달성 가능성 매우 낮음. 진단 결과 해석 시 목표 재현실화 권장.`,
-      });
-    } else if (r >= threshHigh) {
-      out.push({
-        metric: c.metric,
-        current: c.current,
-        goal: c.goal,
-        ratio: r,
-        severity: "high",
-        message: `${c.metric} 목표가 현재의 ${r.toFixed(1)}배 — 도전적. 진단 점수 해석 시 격차 인지 권장.`,
-      });
-    }
+    // 격차가 1.5배 이상일 때만 표시 (단순 정보, 판단 X)
+    if (r < 1.5) continue;
+    // severity 는 라벨용일 뿐, "비현실적/도전적" 판단 X
+    // 1.5–5배 = noticeable, 5배+ = significant, 20배+ = very_large
+    const severity: RealismWarning["severity"] =
+      r >= (c.period === "month" ? 20 : 50)
+        ? "very_large"
+        : r >= (c.period === "month" ? 5 : 10)
+          ? "significant"
+          : "noticeable";
+    out.push({
+      metric: c.metric,
+      current: c.current,
+      goal: c.goal,
+      ratio: r,
+      severity,
+      message: `${c.metric}: ${c.current.toLocaleString("ko-KR")} → ${c.goal.toLocaleString("ko-KR")} (${r.toFixed(1)}배 격차, ${c.period === "month" ? "1개월" : "1년"} 내)`,
+    });
   }
   return out;
 }

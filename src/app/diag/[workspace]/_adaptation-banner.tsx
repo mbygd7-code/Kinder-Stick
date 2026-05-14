@@ -66,52 +66,48 @@ export function AdaptationBanner({ workspace, context = "diagnosis" }: Props) {
 
   return (
     <section className="max-w-5xl mx-auto px-6 sm:px-10 mt-8 space-y-4">
-      {/* 현실성 경고 (도메인 카드 제거, 이것만 유지) */}
+      {/* 목표 격차 정보 — value judgment X, raw ratio 만 */}
       {realism.length > 0 ? (
-        <div className="border-2 border-signal-amber bg-soft-amber/30 p-5">
-          <div className="flex items-baseline gap-2 flex-wrap mb-2">
-            <p className="kicker !text-signal-amber">⚠ 목표 현실성 경고</p>
-            <span className="label-mono">{realism.length}건</span>
+        <div className="border-2 border-ink-soft/40 bg-paper p-5">
+          <div className="flex items-baseline justify-between gap-2 flex-wrap mb-2">
+            <p className="kicker">목표 격차 정보</p>
+            <span className="label-mono">{realism.length}건 · raw ratio</span>
           </div>
-          <p className="text-sm leading-relaxed mb-3">
-            아래 목표는 현재 규모 대비 과도해 진단 결과의 신뢰도가 떨어질 수
-            있습니다. 진단 점수가 빨강이라도 실제 위험이 아닐 수 있으니
-            목표 재현실화 또는 점수 보정 권장.
+          <p className="text-sm leading-relaxed mb-3 text-ink-soft">
+            단순 산술 격차입니다. <strong>"비현실적" 같은 판단은 하지 않음</strong>{" "}
+            — 출시일·런웨이·팀·경쟁 변수까지 고려한 분석은 아래 "AI 심화
+            분석" 으로 확인하세요.
           </p>
           <ul className="space-y-2">
-            {realism.map((w, i) => (
-              <li
-                key={i}
-                className={`border-l-4 pl-3 py-1.5 bg-paper ${
-                  w.severity === "extreme"
-                    ? "border-signal-red"
-                    : "border-signal-amber"
-                }`}
-              >
-                <div className="flex items-baseline gap-2 flex-wrap mb-0.5">
+            {realism.map((w, i) => {
+              const dotColor =
+                w.severity === "very_large"
+                  ? "bg-signal-red/60"
+                  : w.severity === "significant"
+                    ? "bg-signal-amber/60"
+                    : "bg-cobalt/50";
+              return (
+                <li
+                  key={i}
+                  className="border-l-4 border-ink-soft/40 pl-3 py-1.5 bg-paper-soft flex items-baseline gap-2 flex-wrap"
+                >
                   <span
-                    className={`label-mono ${
-                      w.severity === "extreme"
-                        ? "!text-signal-red"
-                        : "!text-signal-amber"
-                    }`}
-                  >
-                    {w.severity === "extreme" ? "✕ 매우 비현실적" : "⚠ 도전적"}
-                  </span>
-                  <span className="font-mono text-sm text-ink">
-                    {w.metric}
-                  </span>
+                    className={`inline-block w-2 h-2 rounded-full ${dotColor} shrink-0 self-center`}
+                    aria-hidden="true"
+                  />
+                  <span className="font-mono text-sm text-ink">{w.metric}</span>
                   <span className="label-mono opacity-50">·</span>
                   <span className="label-mono">
                     {w.current.toLocaleString("ko-KR")} →{" "}
-                    {w.goal.toLocaleString("ko-KR")} ({w.ratio.toFixed(1)}배)
+                    {w.goal.toLocaleString("ko-KR")}
                   </span>
-                </div>
-                <p className="label-mono text-ink-soft leading-relaxed">
-                  {w.message}
-                </p>
-              </li>
-            ))}
+                  <span className="label-mono opacity-50">·</span>
+                  <span className="label-mono font-bold">
+                    {w.ratio.toFixed(1)}배
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         </div>
       ) : null}

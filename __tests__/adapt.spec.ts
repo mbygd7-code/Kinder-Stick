@@ -13,7 +13,7 @@ interface Case {
   /** 현실성 경고 개수 (옵션 — 명시 안 하면 검증 X) */
   expectedRealismCount?: number;
   /** 현실성 경고 중 extreme 개수 */
-  expectedExtremeCount?: number;
+  expectedVeryLargeCount?: number;
 }
 
 const cases: Case[] = [
@@ -115,28 +115,35 @@ const cases: Case[] = [
     ctx: { new_signups_monthly: 100, goal_new_signups_monthly: 2000 },
     expectedDomains: [{ domain: "A6", severity: "high" }],
     expectedRealismCount: 1,
-    expectedExtremeCount: 1,
+    expectedVeryLargeCount: 1,
   },
   {
     name: "현실성: 월 신규 가입 6배 → high 1건",
     ctx: { new_signups_monthly: 100, goal_new_signups_monthly: 600 },
     expectedDomains: [{ domain: "A6", severity: "high" }],
     expectedRealismCount: 1,
-    expectedExtremeCount: 0,
+    expectedVeryLargeCount: 0,
   },
   {
     name: "현실성: 연 누적 회원 60배 → extreme",
     ctx: { total_members: 1000, goal_total_members_annual: 60000 },
     expectedDomains: [{ domain: "A6", severity: "high" }],
     expectedRealismCount: 1,
-    expectedExtremeCount: 1,
+    expectedVeryLargeCount: 1,
   },
   {
-    name: "현실성: 합리적 목표 (3배) → 경고 없음",
+    name: "정보: 합리적 목표 (3배) → noticeable 1건 (value 판단 X)",
     ctx: { new_signups_monthly: 100, goal_new_signups_monthly: 300 },
     expectedDomains: [{ domain: "A6", severity: "high" }],
+    expectedRealismCount: 1,
+    expectedVeryLargeCount: 0,
+  },
+  {
+    name: "정보: 1.2배 (1.5배 미만) → 0건 (노출 안 함)",
+    ctx: { new_signups_monthly: 100, goal_new_signups_monthly: 120 },
+    expectedDomains: [],
     expectedRealismCount: 0,
-    expectedExtremeCount: 0,
+    expectedVeryLargeCount: 0,
   },
 ];
 
@@ -180,11 +187,11 @@ for (const c of cases) {
   if (c.expectedRealismCount !== undefined) {
     realismMatch = out.realism_warnings.length === c.expectedRealismCount;
   }
-  if (c.expectedExtremeCount !== undefined) {
-    const extremeCount = out.realism_warnings.filter(
-      (w) => w.severity === "extreme",
+  if (c.expectedVeryLargeCount !== undefined) {
+    const vlCount = out.realism_warnings.filter(
+      (w) => w.severity === "very_large",
     ).length;
-    if (extremeCount !== c.expectedExtremeCount) realismMatch = false;
+    if (vlCount !== c.expectedVeryLargeCount) realismMatch = false;
   }
 
   if (domainsMatch && ruleMatch && realismMatch) {
@@ -203,7 +210,7 @@ for (const c of cases) {
     }
     if (!realismMatch) {
       console.log("    expected realism count:", c.expectedRealismCount);
-      console.log("    expected extreme count:", c.expectedExtremeCount);
+      console.log("    expected extreme count:", c.expectedVeryLargeCount);
       console.log(
         "    actual realism:",
         out.realism_warnings.map((w) => `${w.metric}=${w.severity}`),

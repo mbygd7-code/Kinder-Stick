@@ -34,6 +34,16 @@ export interface OpsContext {
   /** NRR (%) — Net Revenue Retention. A13.NRR.RATE 매핑 */
   nrr_rate?: number;
 
+  // ── 성장 컨텍스트 (AI 분석 입력) ──
+  /** 서비스 출시일 (YYYY-MM-DD) — 올해 잔여 일수 계산 */
+  service_launched_at?: string;
+  /** 팀 규모 (정규직·풀타임 기준) */
+  team_size?: number;
+  /** 자금 런웨이 개월 — 현재 자금으로 운영 가능한 개월 수 */
+  funding_runway_months?: number;
+  /** 경쟁 압박 — low(독점) / medium(유사 1-3) / high(다수 추격) */
+  competitive_pressure?: "low" | "medium" | "high";
+
   // ── 이번 달 목표 (3) ──
   goal_new_signups_monthly?: number;
   goal_paid_users_monthly?: number;
@@ -618,6 +628,111 @@ export function OpsContextSection({ workspace, onChange }: Props) {
               "개",
             )}
           />
+        </div>
+      </div>
+
+      {/* ── 04 · 성장 컨텍스트 (AI 분석 입력) ── */}
+      <div className="mb-10 pt-8 border-t border-ink-soft/30">
+        <div className="flex items-baseline gap-3 mb-3 flex-wrap">
+          <p className="kicker">
+            <span className="section-num">04 · </span>성장 컨텍스트
+          </p>
+          <span className="label-mono">
+            AI 가능성 분석 입력 (시간·자본·인력·경쟁)
+          </span>
+        </div>
+        <p className="label-mono text-ink-soft mb-5 leading-relaxed">
+          단순 ratio 비교만으로는 목표 달성 가능성을 평가할 수 없습니다. 출시
+          시점·런웨이·팀 규모·경쟁 압박이 모두 변수입니다. 입력하면 AI 가
+          한국 영유아 EdTech 맥락에서 시나리오·필요 조건을 분석합니다.
+        </p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-7">
+          <label className="block group">
+            <div className="flex items-baseline gap-2 mb-1.5">
+              <span className="label-mono">LAUNCH</span>
+              <span className="label-mono opacity-40">·</span>
+              <span className="text-sm font-medium leading-tight">
+                서비스 출시일
+              </span>
+            </div>
+            <p className="label-mono text-ink-soft mb-2 leading-relaxed">
+              올해 잔여 일수·운영 기간 산정의 기준
+            </p>
+            <div className="border-b-2 border-ink-soft/40 group-focus-within:border-ink">
+              <input
+                type="date"
+                value={ctx.service_launched_at ?? ""}
+                onChange={(e) =>
+                  update("service_launched_at", e.target.value || undefined)
+                }
+                className="w-full bg-transparent font-display text-2xl py-2 focus:outline-none"
+              />
+            </div>
+          </label>
+
+          <EditorialNumField
+            label="팀 규모 (정규직)"
+            kicker="TEAM"
+            hint="실행 capacity 의 1차 지표 — 외주 제외, 풀타임만"
+            value={ctx.team_size}
+            onChange={(v) => update("team_size", v)}
+            placeholder="12"
+            unit="명"
+            min={1}
+            onShowHistory={openHistory("team_size", "팀 규모", "명")}
+          />
+
+          <EditorialNumField
+            label="자금 런웨이"
+            kicker="RUNWAY"
+            hint="현재 자금·매출로 운영 가능한 개월 수 (성장 속도 상한 결정)"
+            value={ctx.funding_runway_months}
+            onChange={(v) => update("funding_runway_months", v)}
+            placeholder="14"
+            unit="개월"
+            min={0}
+            max={120}
+            onShowHistory={openHistory(
+              "funding_runway_months",
+              "자금 런웨이",
+              "개월",
+            )}
+          />
+
+          <label className="block group">
+            <div className="flex items-baseline gap-2 mb-1.5">
+              <span className="label-mono">COMPETITION</span>
+              <span className="label-mono opacity-40">·</span>
+              <span className="text-sm font-medium leading-tight">
+                경쟁 압박
+              </span>
+            </div>
+            <p className="label-mono text-ink-soft mb-2 leading-relaxed">
+              시장 노출 후 유사 서비스 추격 정도 — first-mover 우위 감쇠율 결정
+            </p>
+            <div className="border-b-2 border-ink-soft/40 group-focus-within:border-ink">
+              <select
+                value={ctx.competitive_pressure ?? ""}
+                onChange={(e) =>
+                  update(
+                    "competitive_pressure",
+                    (e.target.value || undefined) as
+                      | "low"
+                      | "medium"
+                      | "high"
+                      | undefined,
+                  )
+                }
+                className="w-full bg-transparent font-display text-xl py-2 focus:outline-none"
+              >
+                <option value="">— 선택 안 함</option>
+                <option value="low">low · 독점 또는 유사 0개</option>
+                <option value="medium">medium · 유사 1–3개 등장</option>
+                <option value="high">high · 다수 추격 중</option>
+              </select>
+            </div>
+          </label>
         </div>
       </div>
 
