@@ -264,7 +264,12 @@ export function OpsContextSection({ workspace, onChange }: Props) {
 
   const filled = useMemo(() => {
     const slots = [
-      // 지금 9개
+      // 01 정체성 · 가용 자원 (4)
+      ctx.service_launched_at,
+      ctx.team_size,
+      ctx.monthly_growth_budget_krw,
+      ctx.competitive_pressure,
+      // 02 지금 운영 현황 (9)
       ctx.mau,
       ctx.wau,
       ctx.total_members,
@@ -274,11 +279,10 @@ export function OpsContextSection({ workspace, onChange }: Props) {
       ctx.revenue_monthly_krw,
       ctx.paid_users_monthly,
       ctx.nrr_rate,
-      // 이번 달 목표 3개
+      // 03 목표 (6)
       ctx.goal_new_signups_monthly,
       ctx.goal_paid_users_monthly,
       ctx.goal_plc_monthly,
-      // 올해 목표 3개
       ctx.goal_total_members_annual,
       ctx.goal_paid_subscribers_annual,
       ctx.goal_plc_annual,
@@ -337,7 +341,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
         <div className="text-right shrink-0">
           <p className="font-display text-3xl leading-none">
             {filled}
-            <span className="font-mono text-base text-ink-soft">/15</span>
+            <span className="font-mono text-base text-ink-soft">/19</span>
           </p>
           <p className="label-mono mt-1">입력 완료</p>
         </div>
@@ -347,308 +351,28 @@ export function OpsContextSection({ workspace, onChange }: Props) {
       <div className="h-1 bg-ink-soft/20 mb-10">
         <div
           className="h-full bg-accent transition-all duration-300"
-          style={{ width: `${(filled / 15) * 100}%` }}
+          style={{ width: `${(filled / 19) * 100}%` }}
         />
       </div>
 
-      {/* ── 01 · 지금 (현재 상태) ── */}
+      {/* ── 01 · 회사 정체성 + 가용 자원 (Foundation) ── */}
       <div className="mb-10">
-        {/* Section 01 header + derived metrics line */}
         <div className="flex items-baseline gap-3 mb-3 flex-wrap">
           <p className="kicker">
-            <span className="section-num">01 · </span>지금
-          </p>
-          <span className="label-mono">현재 운영 숫자</span>
-        </div>
-
-        {/* Derived 라인 — 입력될수록 채워짐 */}
-        <DerivedLine
-          churnRate={derivedChurnRate}
-          wauMauRatio={derivedWauMauRatio}
-          paidRate={derivedPaidRate}
-          arpu={derivedArpu}
-        />
-
-        {/* ─── A. 사용자 활성 ─── */}
-        <SubGroupLabel letter="A" title="사용자 활성" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-7">
-          <EditorialNumField
-            label="한 달 활성 사용자"
-            kicker="MAU"
-            hint="지난 30일 안에 한 번이라도 핵심 액션을 한 사용자 수"
-            value={ctx.mau}
-            onChange={(v) => update("mau", v)}
-            placeholder="8,000"
-            unit="명"
-            onShowHistory={openHistory("mau", "한 달 활성 사용자", "명")}
-          />
-          <EditorialNumField
-            label="주간 활성 사용자"
-            kicker="WAU"
-            hint="지난 7일 활성 사용자 수"
-            value={ctx.wau}
-            onChange={(v) => update("wau", v)}
-            placeholder="3,500"
-            unit="명"
-            onShowHistory={openHistory("wau", "주간 활성 사용자", "명")}
-          />
-        </div>
-
-        {/* ─── B. 가입 · 이탈 · 활성화 funnel ─── */}
-        <SubGroupLabel letter="B" title="가입·이탈·활성화 funnel" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-7">
-          <EditorialNumField
-            label="총 가입자수"
-            kicker="TOTAL"
-            hint="서비스 시작 이래 누적 가입자 (활성+이탈 포함) · 연 목표 비교 기준"
-            value={ctx.total_members}
-            onChange={(v) => update("total_members", v)}
-            placeholder="25,000"
-            unit="명"
-            min={0}
-            onShowHistory={openHistory("total_members", "총 가입자수", "명")}
-          />
-          <EditorialNumField
-            label="한 달 신규 가입"
-            kicker="NEW"
-            hint="이번 달 새로 가입한 사용자 수"
-            value={ctx.new_signups_monthly}
-            onChange={(v) => update("new_signups_monthly", v)}
-            placeholder="1,200"
-            unit="명"
-            onShowHistory={openHistory(
-              "new_signups_monthly",
-              "한 달 신규 가입",
-              "명",
-            )}
-          />
-          <EditorialNumField
-            label="한 달 이탈"
-            kicker="CHURN"
-            hint="해지·30일+ 미접속 사용자 수"
-            value={ctx.churn_monthly}
-            onChange={(v) => update("churn_monthly", v)}
-            placeholder="250"
-            unit="명"
-            tone="warning"
-            onShowHistory={openHistory("churn_monthly", "한 달 이탈", "명")}
-          />
-          <EditorialNumField
-            label="D1 활성화율"
-            kicker="D1 ACT"
-            hint="가입 후 1일 안에 핵심 액션 도달 % · A4.ACT.D1 critical"
-            value={ctx.d1_activation_rate}
-            onChange={(v) => update("d1_activation_rate", v)}
-            placeholder="35"
-            unit="%"
-            min={0}
-            max={100}
-            onShowHistory={openHistory("d1_activation_rate", "D1 활성화율", "%")}
-          />
-        </div>
-
-        {/* ─── C. 매출 · 단위경제 ─── */}
-        <SubGroupLabel letter="C" title="매출 · 단위경제" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-7">
-          <EditorialNumField
-            label="이번 달 매출"
-            kicker="REVENUE"
-            hint="이번 달 결제·구독 총합 · stage 검증 & ARPU 산출"
-            value={ctx.revenue_monthly_krw}
-            onChange={(v) => update("revenue_monthly_krw", v)}
-            placeholder="5,000,000"
-            unit="₩"
-            min={0}
-            onShowHistory={openHistory("revenue_monthly_krw", "이번 달 매출", "₩")}
-          />
-          <EditorialNumField
-            label="월 유료 사용자"
-            kicker="PAID"
-            hint="이번 달 결제·구독 유지 중 사용자 수"
-            value={ctx.paid_users_monthly}
-            onChange={(v) => update("paid_users_monthly", v)}
-            placeholder="800"
-            unit="명"
-            min={0}
-            onShowHistory={openHistory("paid_users_monthly", "월 유료 사용자", "명")}
-          />
-          <EditorialNumField
-            label="순매출 유지율"
-            kicker="NRR"
-            hint="(이번달 매출 ÷ 지난달 매출) × 100 · A13.NRR.RATE"
-            value={ctx.nrr_rate}
-            onChange={(v) => update("nrr_rate", v)}
-            placeholder="105"
-            unit="%"
-            min={0}
-            max={200}
-            onShowHistory={openHistory("nrr_rate", "순매출 유지율", "%")}
-          />
-        </div>
-      </div>
-
-      {/* ── 02 · 어디로 (이번 달 목표) ── */}
-      <div className="mb-10 pt-8 border-t border-ink-soft/30">
-        <div className="flex items-baseline gap-3 mb-3 flex-wrap">
-          <p className="kicker">
-            <span className="section-num">02 · </span>이번 달 목표
-          </p>
-          <span className="label-mono">월간 핵심 지표 목표</span>
-        </div>
-        <GoalGapLine
-          gaps={[
-            {
-              label: "신규 가입",
-              current: ctx.new_signups_monthly,
-              goal: ctx.goal_new_signups_monthly,
-            },
-            {
-              label: "유료 사용자",
-              current: ctx.paid_users_monthly,
-              goal: ctx.goal_paid_users_monthly,
-            },
-          ]}
-        />
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-8 gap-y-7 mt-5">
-          <EditorialNumField
-            label="신규 가입자 수"
-            kicker="NEW · GOAL"
-            hint="이번 달 가입 목표"
-            value={ctx.goal_new_signups_monthly}
-            onChange={(v) => update("goal_new_signups_monthly", v)}
-            placeholder="2,500"
-            unit="명"
-            min={0}
-            onShowHistory={openHistory(
-              "goal_new_signups_monthly",
-              "이번 달 신규 가입자 수 목표",
-              "명",
-            )}
-          />
-          <EditorialNumField
-            label="유료 사용자 수"
-            kicker="PAID · GOAL"
-            hint="이번 달 결제·구독 목표"
-            value={ctx.goal_paid_users_monthly}
-            onChange={(v) => update("goal_paid_users_monthly", v)}
-            placeholder="1,500"
-            unit="명"
-            min={0}
-            onShowHistory={openHistory(
-              "goal_paid_users_monthly",
-              "이번 달 유료 사용자 수 목표",
-              "명",
-            )}
-          />
-          <EditorialNumField
-            label="PLC 수"
-            kicker="PLC · GOAL"
-            hint="이번 달 학습공동체(PLC) 운영 목표"
-            value={ctx.goal_plc_monthly}
-            onChange={(v) => update("goal_plc_monthly", v)}
-            placeholder="20"
-            unit="개"
-            min={0}
-            onShowHistory={openHistory(
-              "goal_plc_monthly",
-              "이번 달 PLC 수 목표",
-              "개",
-            )}
-          />
-        </div>
-      </div>
-
-      {/* ── 03 · 올해 목표 ── */}
-      <div className="mb-10 pt-8 border-t border-ink-soft/30">
-        <div className="flex items-baseline gap-3 mb-3 flex-wrap">
-          <p className="kicker">
-            <span className="section-num">03 · </span>올해 목표
-          </p>
-          <span className="label-mono">연간 누적 지표 목표</span>
-        </div>
-        <GoalGapLine
-          gaps={[
-            {
-              label: "누적 회원",
-              current: ctx.total_members ?? ctx.mau,
-              goal: ctx.goal_total_members_annual,
-              annualHint: true,
-            },
-            {
-              label: "유료 구독자",
-              current: ctx.paid_users_monthly,
-              goal: ctx.goal_paid_subscribers_annual,
-              annualHint: true,
-            },
-          ]}
-        />
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-8 gap-y-7 mt-5">
-          <EditorialNumField
-            label="누적 회원수"
-            kicker="MEMBERS · YR"
-            hint="연말까지 누적 가입자 목표"
-            value={ctx.goal_total_members_annual}
-            onChange={(v) => update("goal_total_members_annual", v)}
-            placeholder="50,000"
-            unit="명"
-            min={0}
-            onShowHistory={openHistory(
-              "goal_total_members_annual",
-              "올해 누적 회원수 목표",
-              "명",
-            )}
-          />
-          <EditorialNumField
-            label="유료 구독자 수"
-            kicker="PAID SUB · YR"
-            hint="연말까지 유료 구독 유지 목표"
-            value={ctx.goal_paid_subscribers_annual}
-            onChange={(v) => update("goal_paid_subscribers_annual", v)}
-            placeholder="10,000"
-            unit="명"
-            min={0}
-            onShowHistory={openHistory(
-              "goal_paid_subscribers_annual",
-              "올해 유료 구독자 수 목표",
-              "명",
-            )}
-          />
-          <EditorialNumField
-            label="PLC 수"
-            kicker="PLC · YR"
-            hint="연말까지 누적 PLC 운영 목표"
-            value={ctx.goal_plc_annual}
-            onChange={(v) => update("goal_plc_annual", v)}
-            placeholder="200"
-            unit="개"
-            min={0}
-            onShowHistory={openHistory(
-              "goal_plc_annual",
-              "올해 PLC 수 목표",
-              "개",
-            )}
-          />
-        </div>
-      </div>
-
-      {/* ── 04 · 성장 컨텍스트 (AI 분석 입력) ── */}
-      <div className="mb-10 pt-8 border-t border-ink-soft/30">
-        <div className="flex items-baseline gap-3 mb-3 flex-wrap">
-          <p className="kicker">
-            <span className="section-num">04 · </span>성장 컨텍스트
+            <span className="section-num">01 · </span>회사 정체성 · 가용 자원
           </p>
           <span className="label-mono">
-            AI 가능성 분석 입력 (시간·자본·인력·경쟁)
+            출시 시점 · 실행 capacity · 자본 · 경쟁 위치
           </span>
         </div>
         <p className="label-mono text-ink-soft mb-5 leading-relaxed">
-          단순 ratio 비교만으로는 목표 달성 가능성을 평가할 수 없습니다. 출시
-          시점·런웨이·팀 규모·경쟁 압박이 모두 변수입니다. 입력하면 AI 가
-          한국 영유아 EdTech 맥락에서 시나리오·필요 조건을 분석합니다.
+          진단 가능성 분석의 기초 변수 — 회사가 어디서 시작했고, 누구·얼마로
+          움직이며, 시장에서 어디 위치하는지. AI 가능성 분석 (아래 패널) 도
+          이 정보를 사용합니다.
         </p>
 
+        {/* A. 정체성 */}
+        <SubGroupLabel letter="A" title="정체성" />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-7">
           <label className="block group">
             <div className="flex items-baseline gap-2 mb-1.5">
@@ -684,7 +408,11 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             min={1}
             onShowHistory={openHistory("team_size", "팀 규모", "명")}
           />
+        </div>
 
+        {/* B. 가용 자원 */}
+        <SubGroupLabel letter="B" title="가용 자원" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-7">
           <EditorialNumField
             label="월간 성장 투자 가용액"
             kicker="GROWTH BUDGET"
@@ -734,6 +462,279 @@ export function OpsContextSection({ workspace, onChange }: Props) {
               </select>
             </div>
           </label>
+        </div>
+      </div>
+
+      {/* ── 02 · 지금 — 운영 현황 (Current State) ── */}
+      <div className="mb-10 pt-8 border-t border-ink-soft/30">
+        <div className="flex items-baseline gap-3 mb-3 flex-wrap">
+          <p className="kicker">
+            <span className="section-num">02 · </span>지금 — 운영 현황
+          </p>
+          <span className="label-mono">현재 시점 핵심 운영 지표</span>
+        </div>
+
+        {/* Derived 라인 — 입력될수록 채워짐 */}
+        <DerivedLine
+          churnRate={derivedChurnRate}
+          wauMauRatio={derivedWauMauRatio}
+          paidRate={derivedPaidRate}
+          arpu={derivedArpu}
+        />
+
+        {/* A. 활성 · 누적 사용자 */}
+        <SubGroupLabel letter="A" title="활성 · 누적 사용자" />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-8 gap-y-7">
+          <EditorialNumField
+            label="한 달 활성 사용자"
+            kicker="MAU"
+            hint="지난 30일 안에 한 번이라도 핵심 액션을 한 사용자 수"
+            value={ctx.mau}
+            onChange={(v) => update("mau", v)}
+            placeholder="8,000"
+            unit="명"
+            onShowHistory={openHistory("mau", "한 달 활성 사용자", "명")}
+          />
+          <EditorialNumField
+            label="주간 활성 사용자"
+            kicker="WAU"
+            hint="지난 7일 활성 사용자 수"
+            value={ctx.wau}
+            onChange={(v) => update("wau", v)}
+            placeholder="3,500"
+            unit="명"
+            onShowHistory={openHistory("wau", "주간 활성 사용자", "명")}
+          />
+          <EditorialNumField
+            label="총 가입자수"
+            kicker="TOTAL"
+            hint="서비스 시작 이래 누적 가입자 (활성+이탈 포함)"
+            value={ctx.total_members}
+            onChange={(v) => update("total_members", v)}
+            placeholder="25,000"
+            unit="명"
+            min={0}
+            onShowHistory={openHistory("total_members", "총 가입자수", "명")}
+          />
+        </div>
+
+        {/* B. 신규 · 이탈 · 활성화 */}
+        <SubGroupLabel letter="B" title="신규 · 이탈 · 활성화" />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-8 gap-y-7">
+          <EditorialNumField
+            label="한 달 신규 가입"
+            kicker="NEW"
+            hint="이번 달 새로 가입한 사용자 수"
+            value={ctx.new_signups_monthly}
+            onChange={(v) => update("new_signups_monthly", v)}
+            placeholder="1,200"
+            unit="명"
+            onShowHistory={openHistory(
+              "new_signups_monthly",
+              "한 달 신규 가입",
+              "명",
+            )}
+          />
+          <EditorialNumField
+            label="한 달 이탈"
+            kicker="CHURN"
+            hint="해지·30일+ 미접속 사용자 수"
+            value={ctx.churn_monthly}
+            onChange={(v) => update("churn_monthly", v)}
+            placeholder="250"
+            unit="명"
+            tone="warning"
+            onShowHistory={openHistory("churn_monthly", "한 달 이탈", "명")}
+          />
+          <EditorialNumField
+            label="D1 활성화율"
+            kicker="D1 ACT"
+            hint="가입 후 1일 안에 핵심 액션 도달 % · A4.ACT.D1 critical"
+            value={ctx.d1_activation_rate}
+            onChange={(v) => update("d1_activation_rate", v)}
+            placeholder="35"
+            unit="%"
+            min={0}
+            max={100}
+            onShowHistory={openHistory("d1_activation_rate", "D1 활성화율", "%")}
+          />
+        </div>
+
+        {/* C. 매출 · 단위경제 */}
+        <SubGroupLabel letter="C" title="매출 · 단위경제" />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-8 gap-y-7">
+          <EditorialNumField
+            label="이번 달 매출"
+            kicker="REVENUE"
+            hint="이번 달 결제·구독 총합 · stage 검증 & ARPU 산출"
+            value={ctx.revenue_monthly_krw}
+            onChange={(v) => update("revenue_monthly_krw", v)}
+            placeholder="5,000,000"
+            unit="₩"
+            min={0}
+            onShowHistory={openHistory("revenue_monthly_krw", "이번 달 매출", "₩")}
+          />
+          <EditorialNumField
+            label="월 유료 사용자"
+            kicker="PAID"
+            hint="이번 달 결제·구독 유지 중 사용자 수"
+            value={ctx.paid_users_monthly}
+            onChange={(v) => update("paid_users_monthly", v)}
+            placeholder="800"
+            unit="명"
+            min={0}
+            onShowHistory={openHistory("paid_users_monthly", "월 유료 사용자", "명")}
+          />
+          <EditorialNumField
+            label="순매출 유지율"
+            kicker="NRR"
+            hint="(이번달 매출 ÷ 지난달 매출) × 100 · A13.NRR.RATE"
+            value={ctx.nrr_rate}
+            onChange={(v) => update("nrr_rate", v)}
+            placeholder="105"
+            unit="%"
+            min={0}
+            max={200}
+            onShowHistory={openHistory("nrr_rate", "순매출 유지율", "%")}
+          />
+        </div>
+      </div>
+
+      {/* ── 03 · 성장 목표 (Direction) ── */}
+      <div className="mb-10 pt-8 border-t border-ink-soft/30">
+        <div className="flex items-baseline gap-3 mb-3 flex-wrap">
+          <p className="kicker">
+            <span className="section-num">03 · </span>성장 목표
+          </p>
+          <span className="label-mono">월간 · 연간 핵심 지표 목표</span>
+        </div>
+
+        {/* 통합 격차 라인 — 월·연 둘 다 표시 */}
+        <GoalGapLine
+          gaps={[
+            {
+              label: "월 신규",
+              current: ctx.new_signups_monthly,
+              goal: ctx.goal_new_signups_monthly,
+            },
+            {
+              label: "월 유료",
+              current: ctx.paid_users_monthly,
+              goal: ctx.goal_paid_users_monthly,
+            },
+            {
+              label: "연 누적 회원",
+              current: ctx.total_members ?? ctx.mau,
+              goal: ctx.goal_total_members_annual,
+              annualHint: true,
+            },
+            {
+              label: "연 유료 구독자",
+              current: ctx.paid_users_monthly,
+              goal: ctx.goal_paid_subscribers_annual,
+              annualHint: true,
+            },
+          ]}
+        />
+
+        {/* A. 이번 달 */}
+        <SubGroupLabel letter="A" title="이번 달" />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-8 gap-y-7">
+          <EditorialNumField
+            label="신규 가입자 수"
+            kicker="NEW · GOAL"
+            hint="이번 달 가입 목표"
+            value={ctx.goal_new_signups_monthly}
+            onChange={(v) => update("goal_new_signups_monthly", v)}
+            placeholder="2,500"
+            unit="명"
+            min={0}
+            onShowHistory={openHistory(
+              "goal_new_signups_monthly",
+              "이번 달 신규 가입자 수 목표",
+              "명",
+            )}
+          />
+          <EditorialNumField
+            label="유료 사용자 수"
+            kicker="PAID · GOAL"
+            hint="이번 달 결제·구독 목표"
+            value={ctx.goal_paid_users_monthly}
+            onChange={(v) => update("goal_paid_users_monthly", v)}
+            placeholder="1,500"
+            unit="명"
+            min={0}
+            onShowHistory={openHistory(
+              "goal_paid_users_monthly",
+              "이번 달 유료 사용자 수 목표",
+              "명",
+            )}
+          />
+          <EditorialNumField
+            label="PLC 수"
+            kicker="PLC · GOAL"
+            hint="이번 달 학습공동체(PLC) 운영 목표"
+            value={ctx.goal_plc_monthly}
+            onChange={(v) => update("goal_plc_monthly", v)}
+            placeholder="20"
+            unit="개"
+            min={0}
+            onShowHistory={openHistory(
+              "goal_plc_monthly",
+              "이번 달 PLC 수 목표",
+              "개",
+            )}
+          />
+        </div>
+
+        {/* B. 올해 */}
+        <SubGroupLabel letter="B" title="올해 (연말까지)" />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-8 gap-y-7">
+          <EditorialNumField
+            label="누적 회원수"
+            kicker="MEMBERS · YR"
+            hint="연말까지 누적 가입자 목표"
+            value={ctx.goal_total_members_annual}
+            onChange={(v) => update("goal_total_members_annual", v)}
+            placeholder="50,000"
+            unit="명"
+            min={0}
+            onShowHistory={openHistory(
+              "goal_total_members_annual",
+              "올해 누적 회원수 목표",
+              "명",
+            )}
+          />
+          <EditorialNumField
+            label="유료 구독자 수"
+            kicker="PAID SUB · YR"
+            hint="연말까지 유료 구독 유지 목표"
+            value={ctx.goal_paid_subscribers_annual}
+            onChange={(v) => update("goal_paid_subscribers_annual", v)}
+            placeholder="10,000"
+            unit="명"
+            min={0}
+            onShowHistory={openHistory(
+              "goal_paid_subscribers_annual",
+              "올해 유료 구독자 수 목표",
+              "명",
+            )}
+          />
+          <EditorialNumField
+            label="PLC 수"
+            kicker="PLC · YR"
+            hint="연말까지 누적 PLC 운영 목표"
+            value={ctx.goal_plc_annual}
+            onChange={(v) => update("goal_plc_annual", v)}
+            placeholder="200"
+            unit="개"
+            min={0}
+            onShowHistory={openHistory(
+              "goal_plc_annual",
+              "올해 PLC 수 목표",
+              "개",
+            )}
+          />
         </div>
       </div>
 
