@@ -47,6 +47,8 @@ import { TaskKpiChecklist } from "./_task-kpi-checklist";
 import { BulkPlaybookGenerator } from "./_bulk-playbook-generator";
 import { ScrollToTopButton } from "./_scroll-to-top";
 import { sortByPriority } from "@/lib/worklist/priority";
+import { AdaptationBanner } from "../_adaptation-banner";
+import { AdaptEmphasisApplier } from "./_adapt-emphasis";
 
 interface Props {
   params: Promise<{ workspace: string }>;
@@ -215,6 +217,9 @@ export default async function WorklistPage({ params }: Props) {
         }}
       />
 
+      {/* ADAPTATION BANNER — OpsContext → 강조 도메인 */}
+      <AdaptationBanner workspace={workspace} context="worklist" />
+
       {/* PROGRESS STRIP — slim, 단독 */}
       <section className="max-w-6xl mx-auto px-6 sm:px-10 mt-8">
         <ProgressStrip workspace={workspace} tasks={TASKS} autoMap={autoMap} />
@@ -316,7 +321,8 @@ export default async function WorklistPage({ params }: Props) {
                               data-phase={t.phase}
                               data-funnel={stage}
                               data-tier={t.tier}
-                              className="relative border border-ink-soft/40 hover:border-ink/60 bg-paper transition-colors"
+                              data-boost-domains={(t.boost_domains ?? [t.domain]).filter(Boolean).join(",")}
+                              className="relative border border-ink-soft/40 hover:border-ink/60 bg-paper transition-colors data-[adapt-emphasis=high]:!border-l-4 data-[adapt-emphasis=high]:!border-l-signal-red data-[adapt-emphasis=medium]:!border-l-4 data-[adapt-emphasis=medium]:!border-l-signal-amber"
                             >
                               <div className="flex items-start gap-3 sm:gap-4 p-4 sm:p-5">
                                 <span
@@ -457,6 +463,9 @@ export default async function WorklistPage({ params }: Props) {
 
       {/* FLOATING — 맨 위로 스크롤 버튼 */}
       <ScrollToTopButton />
+
+      {/* CLIENT-SIDE — OpsContext 강조 도메인의 task 에 좌측 컬러 보더 적용 */}
+      <AdaptEmphasisApplier workspace={workspace} />
     </main>
   );
 }

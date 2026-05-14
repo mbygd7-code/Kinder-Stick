@@ -20,6 +20,7 @@ import {
 } from "./_diagnosis-form";
 import { OpsContextSection } from "./_ops-context-section";
 import { HistorySection } from "./_history-section";
+import { AdaptationBanner } from "./_adaptation-banner";
 
 interface Props {
   workspace: string;
@@ -48,6 +49,9 @@ export function UnifiedDiagnosisShell({ workspace, framework }: Props) {
     <>
       {/* (A) 운영 컨텍스트 — 진단 폼 위 */}
       <OpsContextSection workspace={workspace} />
+
+      {/* (A.1) 컨텍스트 → 진단 도메인 강조 banner */}
+      <AdaptationBanner workspace={workspace} context="diagnosis" />
 
       {/* (B) 진단 응답 폼 */}
       <DiagnosisForm

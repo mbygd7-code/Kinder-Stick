@@ -17,17 +17,13 @@
 import { useEffect, useMemo, useState } from "react";
 
 export interface OpsContext {
-  // ── A. 활성 (Activity) ──
+  // ── 지금 · 현재 운영 (8) ──
   mau?: number;
   wau?: number;
-
-  // ── B. funnel ──
   new_signups_monthly?: number;
   churn_monthly?: number;
   /** D1 활성화율 (%) — A4.ACT.D1 매핑 */
   d1_activation_rate?: number;
-
-  // ── C. 매출 ──
   /** 이번 달 매출 (KRW) */
   revenue_monthly_krw?: number;
   /** 월 유료 사용자 수 */
@@ -35,10 +31,16 @@ export interface OpsContext {
   /** NRR (%) — Net Revenue Retention. A13.NRR.RATE 매핑 */
   nrr_rate?: number;
 
-  // ── Goals / context ──
-  monthly_goal?: string;
-  annual_goal?: string;
-  context_note?: string;
+  // ── 이번 달 목표 (3) ──
+  goal_new_signups_monthly?: number;
+  goal_paid_users_monthly?: number;
+  goal_plc_monthly?: number;
+
+  // ── 올해 목표 (3) ──
+  goal_total_members_annual?: number;
+  goal_paid_subscribers_annual?: number;
+  goal_plc_annual?: number;
+
   updated_at?: string;
 }
 
@@ -96,24 +98,26 @@ export function OpsContextSection({ workspace, onChange }: Props) {
 
   const filled = useMemo(() => {
     const slots = [
-      // A. 활성
+      // 지금 8개
       ctx.mau,
       ctx.wau,
-      // B. funnel
       ctx.new_signups_monthly,
       ctx.churn_monthly,
       ctx.d1_activation_rate,
-      // C. 매출
       ctx.revenue_monthly_krw,
       ctx.paid_users_monthly,
       ctx.nrr_rate,
-      // Goals
-      ctx.monthly_goal,
-      ctx.annual_goal,
-      ctx.context_note,
+      // 이번 달 목표 3개
+      ctx.goal_new_signups_monthly,
+      ctx.goal_paid_users_monthly,
+      ctx.goal_plc_monthly,
+      // 올해 목표 3개
+      ctx.goal_total_members_annual,
+      ctx.goal_paid_subscribers_annual,
+      ctx.goal_plc_annual,
     ];
     return slots.filter(
-      (v) => v !== undefined && v !== "" && v !== null,
+      (v) => v !== undefined && v !== null && !Number.isNaN(v),
     ).length;
   }, [ctx]);
 
@@ -166,7 +170,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
         <div className="text-right shrink-0">
           <p className="font-display text-3xl leading-none">
             {filled}
-            <span className="font-mono text-base text-ink-soft">/11</span>
+            <span className="font-mono text-base text-ink-soft">/14</span>
           </p>
           <p className="label-mono mt-1">입력 완료</p>
         </div>
@@ -293,53 +297,120 @@ export function OpsContextSection({ workspace, onChange }: Props) {
         </div>
       </div>
 
-      {/* ── 02 · 어디로 (목표) ── */}
+      {/* ── 02 · 어디로 (이번 달 목표) ── */}
       <div className="mb-10 pt-8 border-t border-ink-soft/30">
-        <div className="flex items-baseline gap-3 mb-5 flex-wrap">
+        <div className="flex items-baseline gap-3 mb-3 flex-wrap">
           <p className="kicker">
-            <span className="section-num">02 · </span>어디로
+            <span className="section-num">02 · </span>이번 달 목표
           </p>
-          <span className="label-mono">이번 달·올해 목표</span>
+          <span className="label-mono">월간 핵심 지표 목표</span>
         </div>
+        <GoalGapLine
+          gaps={[
+            {
+              label: "신규 가입",
+              current: ctx.new_signups_monthly,
+              goal: ctx.goal_new_signups_monthly,
+            },
+            {
+              label: "유료 사용자",
+              current: ctx.paid_users_monthly,
+              goal: ctx.goal_paid_users_monthly,
+            },
+          ]}
+        />
 
-        <div className="space-y-6">
-          <EditorialTextField
-            label="이번 달 목표"
-            kicker="THIS MONTH"
-            hint="한 줄로 — 가장 중요한 한 가지"
-            value={ctx.monthly_goal ?? ""}
-            onChange={(v) => update("monthly_goal", v)}
-            placeholder="예: 신규 가입 1,200명 + 활성 사용자 8,000명 유지"
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-8 gap-y-7 mt-5">
+          <EditorialNumField
+            label="신규 가입자 수"
+            kicker="NEW · GOAL"
+            hint="이번 달 가입 목표"
+            value={ctx.goal_new_signups_monthly}
+            onChange={(v) => update("goal_new_signups_monthly", v)}
+            placeholder="2,500"
+            unit="명"
+            min={0}
           />
-          <EditorialTextField
-            label="올해 목표"
-            kicker="THIS YEAR"
-            hint="OKR 형식 권장 — 측정 가능한 결과로"
-            value={ctx.annual_goal ?? ""}
-            onChange={(v) => update("annual_goal", v)}
-            placeholder="예: 연말까지 유료 회원 1만명 + 매출 5억"
+          <EditorialNumField
+            label="유료 사용자 수"
+            kicker="PAID · GOAL"
+            hint="이번 달 결제·구독 목표"
+            value={ctx.goal_paid_users_monthly}
+            onChange={(v) => update("goal_paid_users_monthly", v)}
+            placeholder="1,500"
+            unit="명"
+            min={0}
+          />
+          <EditorialNumField
+            label="PLC 수"
+            kicker="PLC · GOAL"
+            hint="이번 달 학습공동체(PLC) 운영 목표 — 교사 커뮤니티"
+            value={ctx.goal_plc_monthly}
+            onChange={(v) => update("goal_plc_monthly", v)}
+            placeholder="20"
+            unit="개"
+            min={0}
           />
         </div>
       </div>
 
-      {/* ── 03 · 왜 어려운가 (자유 서술) ── */}
-      <div className="pt-8 border-t border-ink-soft/30">
-        <div className="flex items-baseline gap-3 mb-5 flex-wrap">
+      {/* ── 03 · 올해 목표 ── */}
+      <div className="mb-10 pt-8 border-t border-ink-soft/30">
+        <div className="flex items-baseline gap-3 mb-3 flex-wrap">
           <p className="kicker">
-            <span className="section-num">03 · </span>왜 어려운가
+            <span className="section-num">03 · </span>올해 목표
           </p>
-          <span className="label-mono">자유 서술 · AI 해석에 활용</span>
+          <span className="label-mono">연간 누적 지표 목표</span>
         </div>
-
-        <EditorialTextField
-          label="가장 큰 도전 또는 우선순위"
-          kicker="CHALLENGE"
-          hint="자유롭게 — AI 코치가 진단 결과를 이 맥락에서 해석합니다"
-          value={ctx.context_note ?? ""}
-          onChange={(v) => update("context_note", v)}
-          placeholder="예: 교사 retention 이 50% 미만이어서 가장 큰 우선순위. 알림장 도구 사용 비율은 높지만 활성화가 안 됨."
-          multiline
+        <GoalGapLine
+          gaps={[
+            {
+              label: "누적 회원",
+              current: ctx.mau,
+              goal: ctx.goal_total_members_annual,
+              annualHint: true,
+            },
+            {
+              label: "유료 구독자",
+              current: ctx.paid_users_monthly,
+              goal: ctx.goal_paid_subscribers_annual,
+              annualHint: true,
+            },
+          ]}
         />
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-8 gap-y-7 mt-5">
+          <EditorialNumField
+            label="누적 회원수"
+            kicker="MEMBERS · YR"
+            hint="연말까지 누적 가입자 목표"
+            value={ctx.goal_total_members_annual}
+            onChange={(v) => update("goal_total_members_annual", v)}
+            placeholder="50,000"
+            unit="명"
+            min={0}
+          />
+          <EditorialNumField
+            label="유료 구독자 수"
+            kicker="PAID SUB · YR"
+            hint="연말까지 유료 구독 유지 목표"
+            value={ctx.goal_paid_subscribers_annual}
+            onChange={(v) => update("goal_paid_subscribers_annual", v)}
+            placeholder="10,000"
+            unit="명"
+            min={0}
+          />
+          <EditorialNumField
+            label="PLC 수"
+            kicker="PLC · YR"
+            hint="연말까지 누적 PLC 운영 목표"
+            value={ctx.goal_plc_annual}
+            onChange={(v) => update("goal_plc_annual", v)}
+            placeholder="200"
+            unit="개"
+            min={0}
+          />
+        </div>
       </div>
 
       {/* ── Footer ── */}
@@ -542,6 +613,58 @@ function DerivedLine({
 
   return (
     <p className="mb-5 flex items-baseline gap-x-3 gap-y-1 flex-wrap">
+      {chips.map((c, i) => (
+        <span key={c.key} className={`label-mono ${c.tone}`}>
+          {i > 0 ? <span className="opacity-30 mr-3">·</span> : null}
+          {c.label}
+        </span>
+      ))}
+    </p>
+  );
+}
+
+// ─── Goal gap chips — 현재값 vs 목표값 격차 표시 ───
+function GoalGapLine({
+  gaps,
+}: {
+  gaps: Array<{
+    label: string;
+    current: number | undefined;
+    goal: number | undefined;
+    annualHint?: boolean;
+  }>;
+}) {
+  const chips = gaps
+    .map((g) => {
+      if (g.current === undefined || g.goal === undefined || g.current <= 0)
+        return null;
+      const ratio = g.goal / g.current;
+      const tone =
+        ratio >= 3
+          ? "!text-signal-red"
+          : ratio >= 1.5
+            ? "!text-signal-amber"
+            : ratio >= 1
+              ? "!text-cobalt"
+              : "!text-signal-green";
+      const ratioLabel =
+        ratio >= 1
+          ? `${ratio.toFixed(1)}배${g.annualHint ? " (연말까지)" : ""}`
+          : "이미 달성";
+      return { key: g.label, label: `${g.label} 격차 ${ratioLabel}`, tone };
+    })
+    .filter((c): c is { key: string; label: string; tone: string } => c !== null);
+
+  if (chips.length === 0) {
+    return (
+      <p className="label-mono text-ink-soft/60 mb-3">
+        현재 운영 숫자와 목표를 모두 입력하면 격차가 자동 계산됩니다.
+      </p>
+    );
+  }
+
+  return (
+    <p className="mb-3 flex items-baseline gap-x-3 gap-y-1 flex-wrap">
       {chips.map((c, i) => (
         <span key={c.key} className={`label-mono ${c.tone}`}>
           {i > 0 ? <span className="opacity-30 mr-3">·</span> : null}
