@@ -199,13 +199,6 @@ export function OpsContextSection({ workspace, onChange }: Props) {
     (field: string, label: string, unit?: string) => () =>
       setHistoryModal({ field, label, unit });
 
-  function clear() {
-    if (!confirm("운영 정보를 모두 지웁니다. 계속할까요?")) return;
-    setCtx({});
-    localStorage.removeItem(storageKey);
-    setLastSavedAt(null);
-  }
-
   const filled = useMemo(() => {
     const slots = [
       // 01 정체성 · 가용 자원 (4)
@@ -722,21 +715,12 @@ export function OpsContextSection({ workspace, onChange }: Props) {
       />
 
       {/* ── Footer ── */}
-      <div className="mt-8 pt-4 border-t border-ink-soft/30 flex items-baseline justify-between flex-wrap gap-3">
+      <div className="mt-8 pt-4 border-t border-ink-soft/30">
         <p className="label-mono">
           {lastSavedAt
             ? `✓ 입력 자동 저장됨 — ${formatRelative(lastSavedAt)}`
             : "입력 자동 저장 — draft 는 즉시"}
         </p>
-        {filled > 0 ? (
-          <button
-            type="button"
-            onClick={clear}
-            className="label-mono hover:text-signal-red"
-          >
-            모두 지우기
-          </button>
-        ) : null}
       </div>
 
       {/* ── 이력 modal ── */}
