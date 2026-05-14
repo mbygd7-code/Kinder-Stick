@@ -208,8 +208,8 @@ ${JSON.stringify(opsData, null, 2)}
     const client = new Anthropic({ apiKey });
     const completion = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 2500,
-      temperature: 0.2,
+      max_tokens: 4000,
+      temperature: 0.1,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content: userPrompt }],
     });
@@ -218,21 +218,18 @@ ${JSON.stringify(opsData, null, 2)}
       .map((b) => (b.type === "text" ? b.text : ""))
       .join("\n");
 
-    // JSON 추출 (혹시 fence 가 있으면 제거)
-    const cleaned = text
-      .replace(/^```(?:json)?\s*/i, "")
-      .replace(/```\s*$/i, "")
-      .trim();
-    let parsed: GrowthFeasibilityResult;
-    try {
-      parsed = JSON.parse(cleaned);
-    } catch (e) {
-      console.error("Claude returned invalid JSON:", text.slice(0, 500));
+    // JSON 추출 — 견고하게:
+    // 1) markdown fence 제거
+    // 2) 첫 '{' 와 마지막 '}' 사이 substring 만 추출 (preamble/postamble 제거)
+    // 3) 일부 trailing comma 같은 흔한 오류는 그대로 두고 파싱 시도
+    const parsed = extractAndParseJson<GrowthFeasibilityResult>(text);
+    if (!parsed) {
+      console.error("Claude returned invalid JSON:", text.slice(0, 800));
       return NextResponse.json(
         {
           ok: false,
           message: "AI 응답 파싱 실패 — 다시 시도하세요",
-          raw_preview: text.slice(0, 200),
+          raw_preview: text.slice(0, 300),
         },
         { status: 500 },
       );
@@ -262,5 +259,43 @@ ${JSON.stringify(opsData, null, 2)}
       { ok: false, message: `AI 호출 실패: ${msg}` },
       { status: 500 },
     );
+  }
+}
+
+/**
+ * 견고한 JSON 추출 — Claude 가 markdown fence·preamble·postamble 을 추가해도
+ * 첫 '{' 와 마지막 '}' 사이의 substring 만 잘라 파싱 시도.
+ * 흔한 LLM trailing comma 도 strip 시도.
+ */
+function extractAndParseJson<T>(raw: string): T | null {
+  if (!raw) return null;
+
+  // 1. markdown fence 제거
+  let s = raw
+    .replace(/```(?:json)?\s*/gi, "")
+    .replace(/```\s*/g, "")
+    .trim();
+
+  // 2. preamble/postamble — 첫 { 와 마지막 } 사이만
+  const first = s.indexOf("{");
+  const last = s.lastIndexOf("}");
+  if (first === -1 || last === -1 || last <= first) return null;
+  s = s.slice(first, last + 1);
+
+  // 3. 직접 시도
+  try {
+    return JSON.parse(s) as T;
+  } catch {
+    // 4. trailing comma 제거 — 흔한 LLM 오류 (",}" or ",]")
+    const repaired = s
+      .replace(/,(\s*[}\]])/g, "$1")
+      // smart quotes → 일반 quote
+      .replace(/[“”]/g, '"')
+      .replace(/[‘’]/g, "'");
+    try {
+      return JSON.parse(repaired) as T;
+    } catch {
+      return null;
+    }
   }
 }

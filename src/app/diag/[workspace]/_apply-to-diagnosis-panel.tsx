@@ -165,6 +165,7 @@ export function ApplyToDiagnosisPanel({
   const [analyzing, startAnalyzing] = useTransition();
   const [committing, startCommitting] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [rawPreview, setRawPreview] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   // 캐시 로드 — 페이지 재진입 시 마지막 분석 결과 prefill
@@ -187,6 +188,7 @@ export function ApplyToDiagnosisPanel({
   // 분석 실행 — draft ctx 를 body 로 전송
   function runAnalysis() {
     setError(null);
+    setRawPreview(null);
     setSuccessMsg(null);
     startAnalyzing(async () => {
       try {
@@ -201,6 +203,7 @@ export function ApplyToDiagnosisPanel({
         const data = await res.json();
         if (!res.ok || !data.ok) {
           setError(data.message ?? "분석 실패");
+          if (data.raw_preview) setRawPreview(data.raw_preview as string);
           return;
         }
         const result = data.result as FeasibilityResult;
@@ -395,6 +398,16 @@ export function ApplyToDiagnosisPanel({
       {error && !analyzing && !hasResult ? (
         <div className="mt-4 border-2 border-signal-red/40 bg-soft-red/10 p-4">
           <p className="font-mono text-xs text-signal-red mb-2">⚠ {error}</p>
+          {rawPreview ? (
+            <details className="mb-2">
+              <summary className="label-mono cursor-pointer hover:text-ink">
+                AI 원본 응답 미리보기 (디버깅)
+              </summary>
+              <pre className="mt-2 text-xs whitespace-pre-wrap break-all bg-paper-deep p-2 border border-ink-soft/30 max-h-40 overflow-y-auto">
+                {rawPreview}
+              </pre>
+            </details>
+          ) : null}
           <button
             type="button"
             onClick={runAnalysis}
