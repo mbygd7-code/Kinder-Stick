@@ -1,35 +1,30 @@
 "use client";
 
 /**
- * 운영 컨텍스트 섹션 — Appendix F + G 적용.
+ * 운영 컨텍스트 섹션 — Appendix F + G 적용, 2026-05-15 재디자인.
  *
  * 진단 시작 전 회사 운영 데이터·목표를 입력받아 (선택)
  * 추후 적응형 진단 시스템에서 활용.
  *
- * 현재는 localStorage 저장 + 진단 응답에 메타 동봉.
- * 풀 AI 적응 단계 (DiagnosisProfile 생성) 는 Phase F 별도 작업.
+ * 디자인 원칙:
+ *   - 페이지의 editorial 톤(kicker + dotted-rule + asymmetric) 에 맞춤
+ *   - 박스 두 겹 X — 진단 폼과 같은 max-w-5xl 흐름
+ *   - 항상 펼침 — 진단 정확도에 핵심이라 숨기지 않음
+ *   - 3단 그룹: 01 지금 → 02 어디로 → 03 왜 어려운가
+ *   - 입력 진행률 progress bar + 자동 저장 timestamp
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 export interface OpsContext {
-  /** 한 달 활성 사용자 */
   mau?: number;
-  /** 주간 활성 사용자 */
   wau?: number;
-  /** 한 달 신규 가입 */
   new_signups_monthly?: number;
-  /** 한 달 이탈 */
   churn_monthly?: number;
-  /** 추천 의향 점수 (NPS) -100 ~ 100 */
   nps?: number;
-  /** 이번 달 목표 (자유 1줄) */
   monthly_goal?: string;
-  /** 올해 목표 (자유 1줄) */
   annual_goal?: string;
-  /** 가장 큰 도전·우선순위 (자유) */
   context_note?: string;
-  /** 마지막 업데이트 시각 */
   updated_at?: string;
 }
 
@@ -37,28 +32,23 @@ const STORAGE_KEY_PREFIX = "kso-ops-context-";
 
 interface Props {
   workspace: string;
-  /** 변경 시 부모에게 알림 (제출 시 함께 보낼 때 사용) */
   onChange?: (ctx: OpsContext) => void;
-  /** 기본 펼침 상태 */
-  defaultOpen?: boolean;
 }
 
-export function OpsContextSection({
-  workspace,
-  onChange,
-  defaultOpen = false,
-}: Props) {
+export function OpsContextSection({ workspace, onChange }: Props) {
   const storageKey = `${STORAGE_KEY_PREFIX}${workspace}`;
   const [hydrated, setHydrated] = useState(false);
-  const [open, setOpen] = useState(defaultOpen);
   const [ctx, setCtx] = useState<OpsContext>({});
-  const [moreVisible, setMoreVisible] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
 
-  // Load
   useEffect(() => {
     try {
       const raw = localStorage.getItem(storageKey);
-      if (raw) setCtx(JSON.parse(raw) as OpsContext);
+      if (raw) {
+        const parsed = JSON.parse(raw) as OpsContext;
+        setCtx(parsed);
+        if (parsed.updated_at) setLastSavedAt(new Date(parsed.updated_at));
+      }
     } catch {
       // ignore
     } finally {
@@ -66,12 +56,13 @@ export function OpsContextSection({
     }
   }, [storageKey]);
 
-  // Persist + notify
   useEffect(() => {
     if (!hydrated) return;
-    const payload = { ...ctx, updated_at: new Date().toISOString() };
+    const now = new Date();
+    const payload = { ...ctx, updated_at: now.toISOString() };
     try {
       localStorage.setItem(storageKey, JSON.stringify(payload));
+      setLastSavedAt(now);
     } catch {
       // quota
     }
@@ -86,188 +77,398 @@ export function OpsContextSection({
     if (!confirm("운영 정보를 모두 지웁니다. 계속할까요?")) return;
     setCtx({});
     localStorage.removeItem(storageKey);
+    setLastSavedAt(null);
   }
 
-  const filledCount = [
-    ctx.mau,
-    ctx.wau,
-    ctx.new_signups_monthly,
-    ctx.churn_monthly,
-    ctx.nps,
-    ctx.monthly_goal,
-    ctx.annual_goal,
-    ctx.context_note,
-  ].filter((v) => v !== undefined && v !== "" && v !== null).length;
+  const filled = useMemo(() => {
+    const slots = [
+      ctx.mau,
+      ctx.wau,
+      ctx.new_signups_monthly,
+      ctx.churn_monthly,
+      ctx.nps,
+      ctx.monthly_goal,
+      ctx.annual_goal,
+      ctx.context_note,
+    ];
+    return slots.filter(
+      (v) => v !== undefined && v !== "" && v !== null,
+    ).length;
+  }, [ctx]);
+
+  // 파생 지표 — 사용자에게 컨텍스트 의미를 즉시 보여줌
+  const derivedChurnRate =
+    ctx.churn_monthly !== undefined &&
+    ctx.mau !== undefined &&
+    ctx.mau > 0
+      ? Math.round((ctx.churn_monthly / ctx.mau) * 100)
+      : null;
+  const derivedWauMauRatio =
+    ctx.wau !== undefined &&
+    ctx.mau !== undefined &&
+    ctx.mau > 0
+      ? Math.round((ctx.wau / ctx.mau) * 100)
+      : null;
 
   return (
-    <section className="max-w-5xl mx-auto px-6 sm:px-10 mt-6">
-      <div className="border-2 border-ink-soft/40 bg-paper-soft">
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="w-full flex items-center justify-between gap-3 p-5 hover:bg-paper-deep/30 transition-colors text-left"
-        >
-          <div className="flex-1 min-w-0">
-            <p className="kicker mb-1">선택 입력 · 회사 정보</p>
-            <h2 className="font-display text-xl sm:text-2xl leading-tight">
-              운영 숫자·목표 ({filledCount}/8 입력됨)
-            </h2>
-            <p className="mt-1 text-sm text-ink-soft leading-relaxed">
-              회사 현재 상황·목표를 알려주면 진단 결과 해석과 추천 액션이
-              더 정확해집니다. <strong>모두 선택 입력</strong> — 모르는 항목은 건너뛰세요.
-            </p>
-          </div>
-          <span className="font-mono text-2xl shrink-0">{open ? "−" : "+"}</span>
-        </button>
+    <section className="max-w-5xl mx-auto px-6 sm:px-10 pt-12 pb-8">
+      {/* ── Header ── */}
+      <div className="flex items-baseline justify-between flex-wrap gap-3 mb-5">
+        <div>
+          <p className="kicker mb-2">
+            <span className="section-num">No. </span>00 · 진단 정확도 향상
+          </p>
+          <h2 className="font-display text-3xl sm:text-4xl leading-[1.05] tracking-tight">
+            우리 회사를{" "}
+            <span className="italic font-light">알려주세요</span>
+          </h2>
+          <p className="mt-3 text-sm sm:text-base leading-relaxed text-ink-soft max-w-2xl">
+            현재 운영 숫자와 목표를 알려주면 진단 결과 해석과 추천 액션이
+            훨씬 정확해집니다. <strong>모두 선택 입력</strong> — 빈 칸은
+            건너뛰어도 됩니다.
+          </p>
+        </div>
+        <div className="text-right shrink-0">
+          <p className="font-display text-3xl leading-none">
+            {filled}
+            <span className="font-mono text-base text-ink-soft">/8</span>
+          </p>
+          <p className="label-mono mt-1">입력 완료</p>
+        </div>
+      </div>
 
-        {open ? (
-          <div className="border-t border-ink-soft/30 p-5 sm:p-6 space-y-5">
-            {/* 핵심 5개 */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <NumField
-                label="한 달 활성 사용자"
-                hint="MAU · Monthly Active Users — 지난 30일 안에 한 번이라도 핵심 액션을 한 사용자 수"
-                value={ctx.mau}
-                onChange={(v) => update("mau", v)}
-                placeholder="예: 8,000"
-              />
-              <NumField
-                label="주간 활성 사용자"
-                hint="WAU · Weekly Active Users — 지난 7일 활성 사용자 수"
-                value={ctx.wau}
-                onChange={(v) => update("wau", v)}
-                placeholder="예: 3,500"
-              />
-              <NumField
-                label="한 달 신규 가입"
-                hint="이번 달 새로 가입한 사용자 수"
-                value={ctx.new_signups_monthly}
-                onChange={(v) => update("new_signups_monthly", v)}
-                placeholder="예: 1,200"
-              />
-              <NumField
-                label="한 달 이탈"
-                hint="이번 달 사용을 멈춘 사용자 수 (해지·30일+ 미접속)"
-                value={ctx.churn_monthly}
-                onChange={(v) => update("churn_monthly", v)}
-                placeholder="예: 250"
-              />
-              <NumField
-                label="교사 NPS (-100 ~ 100)"
-                hint="추천 의향 점수 (Net Promoter Score) — 0–10 답 중 promoter(9–10) - detractor(0–6)"
-                value={ctx.nps}
-                onChange={(v) => update("nps", v)}
-                placeholder="예: 32"
-                min={-100}
-                max={100}
-              />
-            </div>
+      {/* 진행률 바 */}
+      <div className="h-1 bg-ink-soft/20 mb-10">
+        <div
+          className="h-full bg-accent transition-all duration-300"
+          style={{ width: `${(filled / 8) * 100}%` }}
+        />
+      </div>
 
-            {/* 더 보기 토글 */}
-            {!moreVisible ? (
-              <button
-                type="button"
-                onClick={() => setMoreVisible(true)}
-                className="label-mono hover:text-ink"
-              >
-                + 목표·자유 컨텍스트 더 입력
-              </button>
-            ) : (
-              <div className="space-y-3 pt-4 border-t border-ink-soft/30">
-                <TextField
-                  label="이번 달 목표"
-                  hint="한 줄로. 예: '신규 가입 1,200명 + 활성 사용자 8,000명'"
-                  value={ctx.monthly_goal ?? ""}
-                  onChange={(v) => update("monthly_goal", v)}
-                  placeholder="이번 달 가장 중요한 목표 1줄"
-                />
-                <TextField
-                  label="올해 목표"
-                  hint="OKR · Objectives and Key Results 형식 권장. 예: '연말까지 유료 회원 1만명'"
-                  value={ctx.annual_goal ?? ""}
-                  onChange={(v) => update("annual_goal", v)}
-                  placeholder="올해 가장 중요한 목표 1줄"
-                />
-                <TextField
-                  label="가장 큰 도전 / 우선순위"
-                  hint="자유 서술. AI 가 진단 해석·코칭 추천에 활용"
-                  value={ctx.context_note ?? ""}
-                  onChange={(v) => update("context_note", v)}
-                  placeholder="예: '교사 retention 이 50% 미만이어서 가장 큰 우선순위'"
-                  multiline
-                />
-              </div>
-            )}
+      {/* ── 01 · 지금 (현재 상태) ── */}
+      <div className="mb-10">
+        <div className="flex items-baseline gap-3 mb-5 flex-wrap">
+          <p className="kicker">
+            <span className="section-num">01 · </span>지금
+          </p>
+          <span className="label-mono">현재 운영 숫자</span>
+          {derivedChurnRate !== null || derivedWauMauRatio !== null ? (
+            <span className="label-mono opacity-50">·</span>
+          ) : null}
+          {derivedChurnRate !== null ? (
+            <span
+              className={`label-mono ${
+                derivedChurnRate > 10
+                  ? "!text-signal-red"
+                  : derivedChurnRate > 5
+                    ? "!text-signal-amber"
+                    : "!text-signal-green"
+              }`}
+            >
+              churn {derivedChurnRate}%/월
+            </span>
+          ) : null}
+          {derivedWauMauRatio !== null ? (
+            <span className="label-mono">
+              · WAU/MAU {derivedWauMauRatio}%
+            </span>
+          ) : null}
+        </div>
 
-            <div className="pt-3 border-t border-ink-soft/30 flex items-center justify-between gap-3 flex-wrap">
-              <p className="label-mono">
-                자동 저장됨 · 입력은 모두 선택사항
-              </p>
-              {filledCount > 0 ? (
-                <button
-                  type="button"
-                  onClick={clear}
-                  className="label-mono hover:text-signal-red"
-                >
-                  모두 지우기
-                </button>
-              ) : null}
-            </div>
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-7">
+          <EditorialNumField
+            label="한 달 활성 사용자"
+            kicker="MAU"
+            hint="지난 30일 안에 한 번이라도 핵심 액션을 한 사용자 수"
+            value={ctx.mau}
+            onChange={(v) => update("mau", v)}
+            placeholder="8,000"
+          />
+          <EditorialNumField
+            label="주간 활성 사용자"
+            kicker="WAU"
+            hint="지난 7일 활성 사용자 수"
+            value={ctx.wau}
+            onChange={(v) => update("wau", v)}
+            placeholder="3,500"
+          />
+          <EditorialNumField
+            label="한 달 신규 가입"
+            kicker="NEW"
+            hint="이번 달 새로 가입한 사용자 수"
+            value={ctx.new_signups_monthly}
+            onChange={(v) => update("new_signups_monthly", v)}
+            placeholder="1,200"
+          />
+          <EditorialNumField
+            label="한 달 이탈"
+            kicker="CHURN"
+            hint="해지·30일+ 미접속 사용자 수"
+            value={ctx.churn_monthly}
+            onChange={(v) => update("churn_monthly", v)}
+            placeholder="250"
+            tone="warning"
+          />
+        </div>
+
+        {/* NPS — 단독, 강조 (-100 ~ +100 시각화) */}
+        <div className="mt-7 pt-7 dotted-rule">
+          <NpsField
+            value={ctx.nps}
+            onChange={(v) => update("nps", v)}
+          />
+        </div>
+      </div>
+
+      {/* ── 02 · 어디로 (목표) ── */}
+      <div className="mb-10 pt-8 border-t border-ink-soft/30">
+        <div className="flex items-baseline gap-3 mb-5 flex-wrap">
+          <p className="kicker">
+            <span className="section-num">02 · </span>어디로
+          </p>
+          <span className="label-mono">이번 달·올해 목표</span>
+        </div>
+
+        <div className="space-y-6">
+          <EditorialTextField
+            label="이번 달 목표"
+            kicker="THIS MONTH"
+            hint="한 줄로 — 가장 중요한 한 가지"
+            value={ctx.monthly_goal ?? ""}
+            onChange={(v) => update("monthly_goal", v)}
+            placeholder="예: 신규 가입 1,200명 + 활성 사용자 8,000명 유지"
+          />
+          <EditorialTextField
+            label="올해 목표"
+            kicker="THIS YEAR"
+            hint="OKR 형식 권장 — 측정 가능한 결과로"
+            value={ctx.annual_goal ?? ""}
+            onChange={(v) => update("annual_goal", v)}
+            placeholder="예: 연말까지 유료 회원 1만명 + 매출 5억"
+          />
+        </div>
+      </div>
+
+      {/* ── 03 · 왜 어려운가 (자유 서술) ── */}
+      <div className="pt-8 border-t border-ink-soft/30">
+        <div className="flex items-baseline gap-3 mb-5 flex-wrap">
+          <p className="kicker">
+            <span className="section-num">03 · </span>왜 어려운가
+          </p>
+          <span className="label-mono">자유 서술 · AI 해석에 활용</span>
+        </div>
+
+        <EditorialTextField
+          label="가장 큰 도전 또는 우선순위"
+          kicker="CHALLENGE"
+          hint="자유롭게 — AI 코치가 진단 결과를 이 맥락에서 해석합니다"
+          value={ctx.context_note ?? ""}
+          onChange={(v) => update("context_note", v)}
+          placeholder="예: 교사 retention 이 50% 미만이어서 가장 큰 우선순위. 알림장 도구 사용 비율은 높지만 활성화가 안 됨."
+          multiline
+        />
+      </div>
+
+      {/* ── Footer ── */}
+      <div className="mt-10 pt-5 border-t border-ink flex items-baseline justify-between flex-wrap gap-3">
+        <p className="label-mono">
+          {lastSavedAt
+            ? `✓ 자동 저장됨 — ${formatRelative(lastSavedAt)}`
+            : "자동 저장 — 입력 즉시"}
+        </p>
+        {filled > 0 ? (
+          <button
+            type="button"
+            onClick={clear}
+            className="label-mono hover:text-signal-red"
+          >
+            모두 지우기
+          </button>
         ) : null}
       </div>
     </section>
   );
 }
 
-// ============================================================
-// Sub-components
-// ============================================================
+// ============================================================================
+// Sub-components — editorial style (no boxy borders)
+// ============================================================================
 
-function NumField({
+function EditorialNumField({
   label,
+  kicker,
   hint,
   value,
   onChange,
   placeholder,
-  min,
-  max,
+  tone,
 }: {
   label: string;
-  hint?: string;
+  kicker: string;
+  hint: string;
   value: number | undefined;
   onChange: (v: number | undefined) => void;
   placeholder?: string;
-  min?: number;
-  max?: number;
+  tone?: "warning" | "neutral";
 }) {
+  const filled = value !== undefined && !Number.isNaN(value);
   return (
-    <label className="block">
-      <span className="block text-sm font-medium">{label}</span>
-      {hint ? <span className="block label-mono mt-0.5">{hint}</span> : null}
-      <input
-        type="number"
-        inputMode="numeric"
-        value={value === undefined || Number.isNaN(value) ? "" : value}
-        onChange={(e) => {
-          const v = e.target.value.trim();
-          if (v === "") onChange(undefined);
-          else {
-            const n = Number(v);
-            if (Number.isFinite(n)) onChange(n);
-          }
-        }}
-        placeholder={placeholder}
-        min={min}
-        max={max}
-        className="mt-2 w-full px-3 py-2 border-2 border-ink-soft/40 bg-paper focus:border-ink focus:outline-none"
-      />
+    <label className="block group">
+      <div className="flex items-baseline gap-2 mb-1.5">
+        <span className="label-mono">{kicker}</span>
+        <span className="label-mono opacity-40">·</span>
+        <span className="text-sm font-medium leading-tight">{label}</span>
+      </div>
+      <p className="label-mono text-ink-soft mb-2 leading-relaxed">{hint}</p>
+      <div
+        className={`flex items-baseline gap-2 border-b-2 transition-colors ${
+          filled
+            ? tone === "warning"
+              ? "border-signal-amber"
+              : "border-ink"
+            : "border-ink-soft/40 group-focus-within:border-ink"
+        }`}
+      >
+        <input
+          type="number"
+          inputMode="numeric"
+          value={value === undefined || Number.isNaN(value) ? "" : value}
+          onChange={(e) => {
+            const v = e.target.value.trim();
+            if (v === "") onChange(undefined);
+            else {
+              const n = Number(v);
+              if (Number.isFinite(n)) onChange(n);
+            }
+          }}
+          placeholder={placeholder}
+          className="flex-1 bg-transparent font-display text-3xl py-2 focus:outline-none placeholder:font-display placeholder:text-ink-soft/30"
+        />
+        {filled ? (
+          <span className="label-mono shrink-0">{tone === "warning" ? "↓" : "✓"}</span>
+        ) : null}
+      </div>
     </label>
   );
 }
 
-function TextField({
+function NpsField({
+  value,
+  onChange,
+}: {
+  value: number | undefined;
+  onChange: (v: number | undefined) => void;
+}) {
+  const filled = value !== undefined && !Number.isNaN(value);
+  // -100 ~ 100 시각적 위치 (0~100%)
+  const pct =
+    filled && value !== undefined
+      ? Math.max(0, Math.min(100, (value + 100) / 2))
+      : null;
+  const band =
+    !filled || value === undefined
+      ? "neutral"
+      : value >= 60
+        ? "excellent"
+        : value >= 40
+          ? "good"
+          : value >= 20
+            ? "ok"
+            : value >= 0
+              ? "weak"
+              : "bad";
+  const bandLabel: Record<string, string> = {
+    excellent: "매우 우수",
+    good: "양호",
+    ok: "보통",
+    weak: "주의",
+    bad: "위험",
+    neutral: "—",
+  };
+  const bandTone: Record<string, string> = {
+    excellent: "!text-signal-green",
+    good: "!text-cobalt",
+    ok: "!text-ink",
+    weak: "!text-signal-amber",
+    bad: "!text-signal-red",
+    neutral: "!text-ink-soft",
+  };
+
+  return (
+    <label className="block">
+      <div className="flex items-baseline gap-2 mb-1.5">
+        <span className="label-mono">NPS</span>
+        <span className="label-mono opacity-40">·</span>
+        <span className="text-sm font-medium leading-tight">
+          교사 추천 의향 점수
+        </span>
+        {filled ? (
+          <span className={`label-mono ml-2 ${bandTone[band]}`}>
+            {bandLabel[band]}
+          </span>
+        ) : null}
+      </div>
+      <p className="label-mono text-ink-soft mb-3 leading-relaxed">
+        −100 (전부 비추천) ~ +100 (전부 추천) — Promoter(9–10) % − Detractor(0–6) %
+      </p>
+
+      <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-5 items-end">
+        {/* 슬라이더 시각화 */}
+        <div className="relative">
+          <input
+            type="range"
+            min={-100}
+            max={100}
+            step={1}
+            value={value ?? 0}
+            onChange={(e) => onChange(Number(e.target.value))}
+            className="w-full appearance-none cursor-pointer h-2 bg-ink-soft/20 rounded-none accent-ink"
+          />
+          {pct !== null ? (
+            <span
+              className="absolute -top-2 -translate-x-1/2 font-mono text-xs bg-ink text-paper px-1 leading-tight"
+              style={{ left: `${pct}%` }}
+            >
+              {value !== undefined && value >= 0 ? "+" : ""}
+              {value}
+            </span>
+          ) : null}
+          <div className="mt-2 flex justify-between label-mono">
+            <span>−100</span>
+            <span>0</span>
+            <span>+100</span>
+          </div>
+        </div>
+
+        {/* 직접 입력 */}
+        <div className="flex items-baseline gap-2 border-b-2 border-ink-soft/40 focus-within:border-ink sm:min-w-[7rem]">
+          <input
+            type="number"
+            inputMode="numeric"
+            min={-100}
+            max={100}
+            value={value === undefined || Number.isNaN(value) ? "" : value}
+            onChange={(e) => {
+              const v = e.target.value.trim();
+              if (v === "") onChange(undefined);
+              else {
+                const n = Number(v);
+                if (Number.isFinite(n)) onChange(n);
+              }
+            }}
+            placeholder="32"
+            className="flex-1 bg-transparent font-display text-3xl py-1 focus:outline-none text-right placeholder:font-display placeholder:text-ink-soft/30"
+          />
+          <span className="label-mono shrink-0">점</span>
+        </div>
+      </div>
+    </label>
+  );
+}
+
+function EditorialTextField({
   label,
+  kicker,
   hint,
   value,
   onChange,
@@ -275,34 +476,58 @@ function TextField({
   multiline = false,
 }: {
   label: string;
-  hint?: string;
+  kicker: string;
+  hint: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   multiline?: boolean;
 }) {
+  const filled = value.trim().length > 0;
   return (
-    <label className="block">
-      <span className="block text-sm font-medium">{label}</span>
-      {hint ? <span className="block label-mono mt-0.5">{hint}</span> : null}
-      {multiline ? (
-        <textarea
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          rows={3}
-          className="mt-2 w-full px-3 py-2 border-2 border-ink-soft/40 bg-paper focus:border-ink focus:outline-none resize-none"
-        />
-      ) : (
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          maxLength={200}
-          className="mt-2 w-full px-3 py-2 border-2 border-ink-soft/40 bg-paper focus:border-ink focus:outline-none"
-        />
-      )}
+    <label className="block group">
+      <div className="flex items-baseline gap-2 mb-1.5">
+        <span className="label-mono">{kicker}</span>
+        <span className="label-mono opacity-40">·</span>
+        <span className="text-sm font-medium leading-tight">{label}</span>
+      </div>
+      <p className="label-mono text-ink-soft mb-2 leading-relaxed">{hint}</p>
+      <div
+        className={`border-b-2 transition-colors ${
+          filled
+            ? "border-ink"
+            : "border-ink-soft/40 group-focus-within:border-ink"
+        }`}
+      >
+        {multiline ? (
+          <textarea
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={placeholder}
+            rows={3}
+            className="w-full bg-transparent text-base leading-relaxed py-2 focus:outline-none resize-none placeholder:text-ink-soft/40"
+          />
+        ) : (
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={placeholder}
+            maxLength={200}
+            className="w-full bg-transparent text-base py-2 focus:outline-none placeholder:text-ink-soft/40"
+          />
+        )}
+      </div>
     </label>
   );
+}
+
+function formatRelative(d: Date): string {
+  const diff = Date.now() - d.getTime();
+  const sec = Math.floor(diff / 1000);
+  if (sec < 5) return "방금 전";
+  if (sec < 60) return `${sec}초 전`;
+  if (sec < 3600) return `${Math.floor(sec / 60)}분 전`;
+  if (sec < 86400) return `${Math.floor(sec / 3600)}시간 전`;
+  return d.toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" });
 }
