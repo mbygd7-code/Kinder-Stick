@@ -20,6 +20,7 @@ interface HistoryItem {
   changed_by: string | null;
   changed_by_email: string | null;
   changed_by_name: string | null;
+  synthesized?: boolean;
 }
 
 interface Props {
@@ -69,6 +70,7 @@ export function FieldHistoryModal({
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [tableMissing, setTableMissing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,8 +81,12 @@ export function FieldHistoryModal({
       .then((r) => r.json())
       .then((d) => {
         if (cancelled) return;
-        if (d.ok) setHistory(d.history as HistoryItem[]);
-        else setErr(d.message ?? "이력 조회 실패");
+        if (d.ok) {
+          setHistory(d.history as HistoryItem[]);
+          setTableMissing(Boolean(d.table_missing));
+        } else {
+          setErr(d.message ?? "이력 조회 실패");
+        }
       })
       .catch((e) => !cancelled && setErr(String(e)))
       .finally(() => !cancelled && setLoading(false));
@@ -128,11 +134,33 @@ export function FieldHistoryModal({
           {loading ? (
             <p className="label-mono">불러오는 중…</p>
           ) : err ? (
-            <p className="font-mono text-xs text-signal-red">⚠ {err}</p>
+            <div>
+              <p className="font-mono text-xs text-signal-red mb-2">⚠ {err}</p>
+              <p className="label-mono text-ink-soft leading-relaxed">
+                테이블이 아직 준비되지 않았을 수 있습니다 — 관리자가{" "}
+                <code className="font-mono">
+                  framework/migrations/2026_05_16_ops_context.sql
+                </code>{" "}
+                를 Supabase 에서 실행해야 이력이 기록됩니다.
+              </p>
+            </div>
           ) : history.length === 0 ? (
-            <p className="label-mono text-ink-soft">
-              이 필드는 아직 변경된 적이 없습니다.
-            </p>
+            <div>
+              <p className="label-mono text-ink-soft mb-2">
+                이 필드는 아직 입력 기록이 없습니다.
+              </p>
+              {tableMissing ? (
+                <p className="font-mono text-xs text-signal-amber leading-relaxed">
+                  ⚠ 이력 테이블이 아직 생성되지 않았습니다 — Supabase 에{" "}
+                  <code>2026_05_16_ops_context.sql</code> 마이그레이션 실행
+                  필요. 실행 후엔 모든 변경이 기록됩니다.
+                </p>
+              ) : (
+                <p className="label-mono text-ink-soft">
+                  값을 입력하고 "진단에 반영" 을 누르면 여기에 기록됩니다.
+                </p>
+              )}
+            </div>
           ) : (
             <ol className="space-y-3">
               {history.map((h, i) => {
@@ -142,6 +170,7 @@ export function FieldHistoryModal({
                     ? h.changed_by_email.split("@")[0]
                     : "익명");
                 const isLatest = i === 0;
+                const isInitial = h.old_value === null;
                 return (
                   <li
                     key={h.id}
@@ -154,6 +183,11 @@ export function FieldHistoryModal({
                     <div className="flex items-baseline gap-2 flex-wrap mb-1">
                       {isLatest ? (
                         <span className="kicker !text-accent">현재 값</span>
+                      ) : null}
+                      {h.synthesized ? (
+                        <span className="label-mono !text-cobalt">
+                          서버 상태
+                        </span>
                       ) : null}
                       <span className="font-mono text-sm text-ink">
                         {editor}
@@ -169,12 +203,20 @@ export function FieldHistoryModal({
                       ) : null}
                     </div>
                     <div className="flex items-baseline gap-3 flex-wrap font-display text-lg">
-                      <span className="text-ink-soft line-through">
-                        {formatValue(h.old_value, unit)}
-                      </span>
-                      <span className="font-mono text-base text-ink-soft">
-                        →
-                      </span>
+                      {isInitial ? (
+                        <span className="label-mono !text-cobalt">
+                          최초 입력 →
+                        </span>
+                      ) : (
+                        <>
+                          <span className="text-ink-soft line-through">
+                            {formatValue(h.old_value, unit)}
+                          </span>
+                          <span className="font-mono text-base text-ink-soft">
+                            →
+                          </span>
+                        </>
+                      )}
                       <span className="text-ink">
                         {formatValue(h.new_value, unit)}
                       </span>
