@@ -121,21 +121,34 @@ export async function POST(
     );
   }
 
-  // OpsContext 서버에서 fetch (최신 commit)
-  const sb = supabaseAdmin();
-  const { data: row } = await sb
-    .from("kso_ops_context")
-    .select("data")
-    .eq("workspace_id", workspace)
-    .maybeSingle();
-  const opsData = (row?.data as Record<string, unknown> | null) ?? {};
+  // body 에 draft ops 가 있으면 우선 사용 (commit 안 한 상태에서도 분석 가능),
+  // 없으면 DB 최신 commit 에서 fetch.
+  let body: { ops?: Record<string, unknown> } = {};
+  try {
+    body = await req.json();
+  } catch {
+    // body 없어도 OK (DB fallback)
+  }
+
+  let opsData: Record<string, unknown>;
+  if (body.ops && typeof body.ops === "object" && !Array.isArray(body.ops)) {
+    opsData = body.ops as Record<string, unknown>;
+  } else {
+    const sb = supabaseAdmin();
+    const { data: row } = await sb
+      .from("kso_ops_context")
+      .select("data")
+      .eq("workspace_id", workspace)
+      .maybeSingle();
+    opsData = (row?.data as Record<string, unknown> | null) ?? {};
+  }
 
   if (Object.keys(opsData).length === 0) {
     return NextResponse.json(
       {
         ok: false,
         message:
-          "운영 컨텍스트가 비어있습니다. 현황·목표를 입력 후 진단에 반영 먼저 누르세요.",
+          "운영 컨텍스트가 비어있습니다. 현황·목표를 입력하고 다시 시도하세요.",
       },
       { status: 400 },
     );

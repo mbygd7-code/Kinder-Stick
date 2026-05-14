@@ -20,9 +20,7 @@ import {
 } from "./_diagnosis-form";
 import { OpsContextSection } from "./_ops-context-section";
 import { HistorySection } from "./_history-section";
-import { AdaptationBanner } from "./_adaptation-banner";
 import { DiagnosisAdaptEmphasisApplier } from "./_diagnosis-adapt-emphasis";
-import { GrowthFeasibilityPanel } from "./_growth-feasibility-panel";
 
 interface Props {
   workspace: string;
@@ -49,12 +47,8 @@ export function UnifiedDiagnosisShell({ workspace, framework }: Props) {
 
   return (
     <>
-      {/* (A) 운영 컨텍스트 — 진단 폼 위 */}
+      {/* (A) 운영 컨텍스트 — 진단 폼 위 (안에 통합 ApplyToDiagnosisPanel 포함) */}
       <OpsContextSection workspace={workspace} />
-
-      {/* (A.1) 컨텍스트 → 목표 격차 정보 + AI 가능성 분석 */}
-      <AdaptationBanner workspace={workspace} context="diagnosis" />
-      <GrowthFeasibilityPanel workspace={workspace} />
 
       {/* (B) 진단 응답 폼 */}
       <DiagnosisForm

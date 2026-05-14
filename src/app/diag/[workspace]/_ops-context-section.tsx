@@ -14,8 +14,9 @@
  *   - 입력 진행률 progress bar + 자동 저장 timestamp
  */
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FieldHistoryModal } from "./_field-history-modal";
+import { ApplyToDiagnosisPanel } from "./_apply-to-diagnosis-panel";
 
 export interface OpsContext {
   // ── 지금 · 현재 운영 (9) ──
@@ -84,9 +85,6 @@ export function OpsContextSection({ workspace, onChange }: Props) {
     null,
   );
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
-  const [applying, startApplying] = useTransition();
-  const [applyMsg, setApplyMsg] = useState<string | null>(null);
-  const [applyErr, setApplyErr] = useState<string | null>(null);
   /** 변경 안내 toast — 다른 직원이 commit 한 값을 사용자가 덮어쓰는 상황 */
   const [changeWarning, setChangeWarning] = useState<string | null>(null);
   /** 이력 modal 상태 */
@@ -189,8 +187,6 @@ export function OpsContextSection({ workspace, onChange }: Props) {
 
   function update<K extends keyof OpsContext>(key: K, value: OpsContext[K]) {
     setCtx((prev) => ({ ...prev, [key]: value }));
-    setApplyMsg(null);
-    setApplyErr(null);
   }
 
   /** 이력 모달 열기 헬퍼 — 각 필드에서 호출 */
@@ -203,63 +199,6 @@ export function OpsContextSection({ workspace, onChange }: Props) {
     setCtx({});
     localStorage.removeItem(storageKey);
     setLastSavedAt(null);
-  }
-
-  function applyToDiagnosis() {
-    setApplyErr(null);
-    setApplyMsg(null);
-    startApplying(async () => {
-      // 서버에 commit
-      try {
-        const res = await fetch(
-          `/api/ops-context/${encodeURIComponent(workspace)}`,
-          {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ data: stripMeta(ctx) }),
-          },
-        );
-        const data = await res.json();
-        if (!res.ok || !data.ok) {
-          if (res.status === 401) {
-            // 비로그인 — localStorage 만으로 진단·워크리스트 반영
-            setApplyMsg(
-              "로그인 안 됨 — 이 기기에서만 반영됩니다. 팀과 공유하려면 로그인하세요.",
-            );
-          } else {
-            setApplyErr(data.message ?? "반영 실패");
-            return;
-          }
-        } else {
-          // 서버 commit 성공
-          setServerSnapshot({
-            data: ctx,
-            applied_at: data.applied_at ?? new Date().toISOString(),
-            applied_by_email: data.applied_by_email ?? null,
-            applied_by_name: null,
-            revision: data.revision ?? 1,
-          });
-          setLastSavedAt(new Date(data.applied_at ?? Date.now()));
-          setApplyMsg(
-            data.changes_count > 0
-              ? `${data.changes_count}개 항목이 진단·워크리스트에 반영되었습니다.`
-              : "변경 사항 없음 — 이미 최신 상태입니다.",
-          );
-          setChangeWarning(null);
-        }
-      } catch (e) {
-        setApplyErr(String(e));
-        return;
-      }
-      // adaptation banner / worklist applier 가 다시 평가하도록 storage 이벤트 발화
-      try {
-        window.dispatchEvent(new StorageEvent("storage", { key: storageKey }));
-        // 같은 탭에서도 listener 가 동작하도록 CustomEvent
-        window.dispatchEvent(
-          new CustomEvent("ops-context:applied", { detail: { workspace } }),
-        );
-      } catch {}
-    });
   }
 
   const filled = useMemo(() => {
@@ -748,97 +687,19 @@ export function OpsContextSection({ workspace, onChange }: Props) {
         </div>
       ) : null}
 
-      {/* ── 진단에 반영 버튼 + 메시지 ── */}
-      <div className="mt-10 pt-6 border-t-2 border-ink">
-        <div className="flex items-baseline justify-between gap-4 flex-wrap mb-3">
-          <div>
-            <p className="kicker mb-1">진단·워크리스트에 적용</p>
-            <h3 className="font-display text-xl leading-tight">
-              입력한 데이터로{" "}
-              <span className="italic font-light">진단을 맞춤화</span>
-            </h3>
-            <p className="mt-1 text-sm text-ink-soft leading-relaxed max-w-xl">
-              "진단에 반영" 을 누르면 회사 컨디션 기반으로 진단 응답 카드와
-              워크리스트 업무가 자동 강조·재정렬됩니다. 다른 직원이 이 진단
-              카드를 열어도 같은 값이 기본으로 셋팅됩니다.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={applyToDiagnosis}
-            disabled={applying || filled === 0 || !isDirty}
-            className="btn-primary disabled:opacity-50 shrink-0 inline-flex items-center gap-2"
-            aria-busy={applying}
-            title={
-              !isDirty && serverSnapshot && serverSnapshot.revision > 0
-                ? "현재 입력값이 이미 반영되어 있습니다"
-                : undefined
-            }
-          >
-            {applying ? (
-              <>
-                <span
-                  aria-hidden="true"
-                  className="inline-block w-3 h-3 border-2 border-paper border-t-transparent rounded-full animate-spin"
-                />
-                <span>반영 중…</span>
-              </>
-            ) : !isDirty && serverSnapshot && serverSnapshot.revision > 0 ? (
-              <>
-                <span>✓ 진단에 반영됨</span>
-              </>
-            ) : (
-              <>
-                <span>
-                  {serverSnapshot && serverSnapshot.revision > 0
-                    ? "진단에 다시 반영"
-                    : "진단에 반영"}
-                </span>
-                <span className="font-mono text-xs">→</span>
-              </>
-            )}
-          </button>
-        </div>
-
-        {/* 반영 결과 상세 — 성공/실패/현재 상태 */}
-        <div className="mt-2 space-y-1">
-          {applyMsg ? (
-            <p className="font-mono text-xs text-signal-green">✓ {applyMsg}</p>
-          ) : null}
-          {applyErr ? (
-            <p className="font-mono text-xs text-signal-red">⚠ {applyErr}</p>
-          ) : null}
-
-          {serverSnapshot && serverSnapshot.revision > 0 ? (
-            <div className="mt-2 border border-signal-green/50 bg-soft-green/15 px-3 py-2 inline-flex items-baseline gap-2 flex-wrap">
-              <span className="kicker !text-signal-green">✓ 반영됨</span>
-              <span className="font-mono text-sm text-ink">
-                {serverSnapshot.applied_at
-                  ? formatDateTime(new Date(serverSnapshot.applied_at))
-                  : "—"}
-              </span>
-              <span className="label-mono opacity-50">·</span>
-              <span className="label-mono">
-                {serverSnapshot.applied_by_name ??
-                  serverSnapshot.applied_by_email?.split("@")[0] ??
-                  "익명"}
-              </span>
-              <span className="label-mono opacity-50">·</span>
-              <span className="label-mono">
-                revision {serverSnapshot.revision}
-              </span>
-              <span className="label-mono opacity-50">·</span>
-              <span className="label-mono text-ink-soft">
-                {formatRelative(new Date(serverSnapshot.applied_at!))}
-              </span>
-            </div>
-          ) : (
-            <p className="mt-2 label-mono text-ink-soft">
-              아직 반영 안 됨 — 위 버튼을 눌러야 진단·워크리스트에 적용됩니다.
-            </p>
-          )}
-        </div>
-      </div>
+      {/* ── 통합 — 진단에 반영 (분석 → 그대로 반영 / 다시 작성) ── */}
+      <ApplyToDiagnosisPanel
+        workspace={workspace}
+        ctx={ctx}
+        serverSnapshot={serverSnapshot}
+        filled={filled}
+        isDirty={isDirty}
+        onCommitted={(snap) => {
+          setServerSnapshot(snap);
+          setLastSavedAt(snap.applied_at ? new Date(snap.applied_at) : null);
+          setChangeWarning(null);
+        }}
+      />
 
       {/* ── Footer ── */}
       <div className="mt-8 pt-4 border-t border-ink-soft/30 flex items-baseline justify-between flex-wrap gap-3">
