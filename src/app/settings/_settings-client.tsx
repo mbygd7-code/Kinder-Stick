@@ -8,13 +8,14 @@
  *   D. 위험 영역 (로그아웃·삭제)
  */
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   TEAMS,
   TEAM_LABEL,
   type Team,
 } from "@/lib/auth/pin";
+import { PinField } from "@/components/ui/pin-field";
 
 interface Me {
   id: string;
@@ -331,57 +332,27 @@ export function SettingsClient({ me }: { me: Me }) {
         </p>
 
         <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div>
-            <label className="label-mono mb-1 block" htmlFor="cur_pin">
-              현재 PIN
-            </label>
-            <input
-              id="cur_pin"
-              type="password"
-              inputMode="numeric"
-              maxLength={4}
-              value={curPin}
-              onChange={(e) =>
-                setCurPin(e.target.value.replace(/\D/g, "").slice(0, 4))
-              }
-              className="evidence-input !text-xl !font-mono !tracking-[0.4em] !text-center"
-              placeholder="••••"
-            />
-          </div>
-          <div>
-            <label className="label-mono mb-1 block" htmlFor="new_pin">
-              새 PIN
-            </label>
-            <input
-              id="new_pin"
-              type="password"
-              inputMode="numeric"
-              maxLength={4}
-              value={newPin}
-              onChange={(e) =>
-                setNewPin(e.target.value.replace(/\D/g, "").slice(0, 4))
-              }
-              className="evidence-input !text-xl !font-mono !tracking-[0.4em] !text-center"
-              placeholder="••••"
-            />
-          </div>
-          <div>
-            <label className="label-mono mb-1 block" htmlFor="new_pin2">
-              새 PIN 확인
-            </label>
-            <input
-              id="new_pin2"
-              type="password"
-              inputMode="numeric"
-              maxLength={4}
-              value={newPin2}
-              onChange={(e) =>
-                setNewPin2(e.target.value.replace(/\D/g, "").slice(0, 4))
-              }
-              className="evidence-input !text-xl !font-mono !tracking-[0.4em] !text-center"
-              placeholder="••••"
-            />
-          </div>
+          <PinField
+            id="cur_pin"
+            label="현재 PIN"
+            value={curPin}
+            onChange={setCurPin}
+            autoComplete="current-password"
+          />
+          <PinField
+            id="new_pin"
+            label="새 PIN"
+            value={newPin}
+            onChange={setNewPin}
+            autoComplete="new-password"
+          />
+          <PinField
+            id="new_pin2"
+            label="새 PIN 확인"
+            value={newPin2}
+            onChange={setNewPin2}
+            autoComplete="new-password"
+          />
         </div>
 
         {pinErr ? (
@@ -411,175 +382,17 @@ export function SettingsClient({ me }: { me: Me }) {
 
       {/* SECTION C — 관리자 영역 (admin only) */}
       {me.role === "admin" ? (
-        <section className="max-w-4xl mx-auto px-6 sm:px-10 mt-16">
-          <p className="kicker mb-1 !text-accent">
-            <span className="section-num">No. </span>03 · ADMIN
-          </p>
-          <h2 className="font-display text-2xl sm:text-3xl tracking-tight leading-tight">
-            사용자 권한 관리
-          </h2>
-          <p className="mt-1 label-mono">
-            가입한 모든 사용자의 권한·팀·잠금 상태를 관리합니다. 관리자
-            승격은 신중하게 — 모든 진단 응답이 가능해집니다.
-          </p>
-
-          <div className="mt-5 flex items-center gap-3 flex-wrap">
-            <input
-              type="search"
-              value={searchQ}
-              onChange={(e) => setSearchQ(e.target.value)}
-              placeholder="이메일·이름·팀 검색…"
-              className="evidence-input max-w-sm"
-            />
-            <span className="label-mono">
-              {filteredUsers.length} / {users.length}명
-            </span>
-          </div>
-
-          {usersErr ? (
-            <p className="mt-3 font-mono text-xs text-signal-red">
-              ⚠ {usersErr}
-            </p>
-          ) : null}
-
-          {usersLoading ? (
-            <p className="mt-6 label-mono">사용자 목록 로딩 중…</p>
-          ) : (
-            <div className="mt-6 overflow-x-auto border-2 border-ink">
-              <table className="w-full text-sm">
-                <thead className="bg-paper-soft border-b-2 border-ink">
-                  <tr>
-                    <th className="text-left p-3 label-mono">이메일</th>
-                    <th className="text-left p-3 label-mono">이름</th>
-                    <th className="text-left p-3 label-mono">팀</th>
-                    <th className="text-left p-3 label-mono">권한</th>
-                    <th className="text-left p-3 label-mono">최근 로그인</th>
-                    <th className="text-left p-3 label-mono">동작</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredUsers.map((u) => {
-                    const isMe = u.id === me.id;
-                    const isLocked =
-                      u.locked_until &&
-                      new Date(u.locked_until) > new Date();
-                    return (
-                      <tr
-                        key={u.id}
-                        className={`border-t border-ink-soft/30 ${
-                          isLocked ? "bg-soft-red/10" : ""
-                        }`}
-                      >
-                        <td className="p-3 font-mono text-xs">
-                          {u.email}
-                          {isMe ? (
-                            <span className="ml-2 label-mono">(나)</span>
-                          ) : null}
-                          {isLocked ? (
-                            <span className="ml-2 label-mono !text-signal-red">
-                              잠금
-                            </span>
-                          ) : null}
-                        </td>
-                        <td className="p-3">{u.display_name ?? "—"}</td>
-                        <td className="p-3">
-                          <select
-                            value={u.team ?? ""}
-                            onChange={(e) =>
-                              patchUser(
-                                u.id,
-                                { team: e.target.value || null },
-                                "팀 변경",
-                              )
-                            }
-                            className="evidence-input !text-xs !py-1 !px-1.5"
-                          >
-                            <option value="">—</option>
-                            {TEAMS.map((t) => (
-                              <option key={t} value={t}>
-                                {TEAM_LABEL[t]}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="p-3">
-                          <select
-                            value={u.role}
-                            disabled={isMe}
-                            onChange={(e) =>
-                              patchUser(
-                                u.id,
-                                { role: e.target.value },
-                                "권한 변경",
-                              )
-                            }
-                            className={`evidence-input !text-xs !py-1 !px-1.5 ${
-                              u.role === "admin"
-                                ? "!text-accent !border-accent font-medium"
-                                : ""
-                            }`}
-                            title={
-                              isMe
-                                ? "본인 권한은 여기서 변경 불가"
-                                : "권한 변경"
-                            }
-                          >
-                            <option value="member">member</option>
-                            <option value="admin">admin</option>
-                          </select>
-                        </td>
-                        <td className="p-3 label-mono">
-                          {u.last_login_at
-                            ? u.last_login_at.slice(0, 10)
-                            : "—"}
-                        </td>
-                        <td className="p-3 flex gap-2 flex-wrap">
-                          {isLocked ? (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                patchUser(u.id, { unlock: true }, "잠금 해제")
-                              }
-                              className="label-mono hover:text-ink"
-                            >
-                              잠금 해제
-                            </button>
-                          ) : null}
-                          {!isMe ? (
-                            <button
-                              type="button"
-                              onClick={() => deleteUser(u.id, u.email)}
-                              className="label-mono !text-signal-red hover:underline"
-                            >
-                              삭제
-                            </button>
-                          ) : null}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {filteredUsers.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={6}
-                        className="p-6 text-center label-mono"
-                      >
-                        결과 없음
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          <p className="mt-3 label-mono text-ink-soft">
-            · 본인 권한은 본인이 변경 불가 (마지막 관리자 보호 + 자살 방지)
-            <br />· 마지막 관리자가 1명일 때 강등·삭제 거부됨
-            <br />· 사용자 삭제 시 그가 작성한 진단 응답의 profile 링크만
-            끊김 — 응답 데이터 자체는 보존
-          </p>
-        </section>
+        <AdminSection
+          me={me}
+          users={users}
+          usersLoading={usersLoading}
+          usersErr={usersErr}
+          searchQ={searchQ}
+          setSearchQ={setSearchQ}
+          filteredUsers={filteredUsers}
+          patchUser={patchUser}
+          deleteUser={deleteUser}
+        />
       ) : null}
 
       {/* SECTION D — 위험 영역 */}
@@ -616,17 +429,15 @@ export function SettingsClient({ me }: { me: Me }) {
               영구 삭제 — 되돌릴 수 없습니다. 작성한 진단 응답은 익명으로
               보존됩니다.
             </p>
-            <input
-              type="password"
-              inputMode="numeric"
-              maxLength={4}
-              value={delPin}
-              onChange={(e) =>
-                setDelPin(e.target.value.replace(/\D/g, "").slice(0, 4))
-              }
-              className="mt-3 evidence-input !text-lg !font-mono !tracking-[0.4em] !text-center max-w-[10rem]"
-              placeholder="본인 PIN"
-            />
+            <div className="mt-3 max-w-[12rem]">
+              <PinField
+                id="del_pin"
+                label="본인 PIN"
+                value={delPin}
+                onChange={setDelPin}
+                autoComplete="current-password"
+              />
+            </div>
             <label className="mt-3 flex items-baseline gap-2 text-sm">
               <input
                 type="checkbox"
@@ -653,5 +464,387 @@ export function SettingsClient({ me }: { me: Me }) {
         </div>
       </section>
     </main>
+  );
+}
+
+// ============================================================================
+// AdminSection — 관리자 권한 부여 (집중 카드) + 사용자 카드 리스트
+// ============================================================================
+
+interface AdminSectionProps {
+  me: Me;
+  users: AdminUserRow[];
+  usersLoading: boolean;
+  usersErr: string | null;
+  searchQ: string;
+  setSearchQ: (q: string) => void;
+  filteredUsers: AdminUserRow[];
+  patchUser: (
+    id: string,
+    payload: Record<string, unknown>,
+    label: string,
+  ) => Promise<void>;
+  deleteUser: (id: string, email: string) => Promise<void>;
+}
+
+function AdminSection({
+  me,
+  users,
+  usersLoading,
+  usersErr,
+  searchQ,
+  setSearchQ,
+  filteredUsers,
+  patchUser,
+  deleteUser,
+}: AdminSectionProps) {
+  // ── 권한 부여 집중 카드 state ──
+  const [selectedUserId, setSelectedUserId] = useState<string>("");
+  const [grantBusy, setGrantBusy] = useState(false);
+  const [grantMsg, setGrantMsg] = useState<string | null>(null);
+  const [grantErr, setGrantErr] = useState<string | null>(null);
+
+  // 후보 = 본인 제외한 모든 사용자 (관리자 승격은 본인이 본인을 할 일 없음)
+  const candidates = useMemo(
+    () => users.filter((u) => u.id !== me.id),
+    [users, me.id],
+  );
+  const selectedUser = candidates.find((u) => u.id === selectedUserId);
+
+  // member 후보만 보여주는 옵션 vs admin 해제 후보 — 둘 다 표시 (현재 role 에 따라 동작 결정)
+  const targetRole: "admin" | "member" =
+    selectedUser?.role === "admin" ? "member" : "admin";
+
+  async function applyRoleChange() {
+    if (!selectedUser) return;
+    setGrantBusy(true);
+    setGrantErr(null);
+    setGrantMsg(null);
+    try {
+      const res = await fetch(`/api/admin/users/${selectedUser.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: targetRole }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setGrantErr(data.message ?? "변경 실패");
+        return;
+      }
+      setGrantMsg(
+        targetRole === "admin"
+          ? `${selectedUser.email} 을(를) 관리자로 승격했습니다`
+          : `${selectedUser.email} 의 관리자 권한을 해제했습니다`,
+      );
+      // 부모 list 갱신 — patchUser 호출로 reuse
+      await patchUser(selectedUser.id, {}, "새로고침");
+      setSelectedUserId("");
+    } finally {
+      setGrantBusy(false);
+    }
+  }
+
+  return (
+    <section className="max-w-4xl mx-auto px-6 sm:px-10 mt-16">
+      <p className="kicker mb-1 !text-accent">
+        <span className="section-num">No. </span>03 · ADMIN
+      </p>
+      <h2 className="font-display text-2xl sm:text-3xl tracking-tight leading-tight">
+        관리자 권한 관리
+      </h2>
+      <p className="mt-1 label-mono">
+        관리자 승격은 신중하게 — 승격된 사용자는 모든 진단 응답·다른 팀
+        데이터 수정·계정 관리에 접근할 수 있습니다.
+      </p>
+
+      {/* ─── 권한 부여 집중 카드 ─── */}
+      <div className="mt-6 border-2 border-accent bg-soft-amber/20 p-5 sm:p-6">
+        <p className="kicker !text-accent mb-2">관리자 권한 부여 / 해제</p>
+        <h3 className="font-display text-xl leading-tight mb-4">
+          한 사용자를 선택해 권한을 바꾸세요
+        </h3>
+
+        {usersLoading ? (
+          <p className="label-mono">사용자 목록 로딩 중…</p>
+        ) : candidates.length === 0 ? (
+          <p className="text-sm text-ink-soft">
+            본인 외 다른 사용자가 없습니다 — 가입을 권유하세요.
+          </p>
+        ) : (
+          <>
+            <label className="label-mono mb-1 block" htmlFor="grant_user">
+              사용자 선택
+            </label>
+            <select
+              id="grant_user"
+              value={selectedUserId}
+              onChange={(e) => {
+                setSelectedUserId(e.target.value);
+                setGrantMsg(null);
+                setGrantErr(null);
+              }}
+              className="evidence-input"
+            >
+              <option value="">— 사용자를 고르세요 —</option>
+              {candidates.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.email}
+                  {u.display_name ? ` · ${u.display_name}` : ""}
+                  {" · "}
+                  현재 {u.role === "admin" ? "관리자" : "팀 멤버"}
+                  {u.team ? ` · ${TEAM_LABEL[u.team]}` : ""}
+                </option>
+              ))}
+            </select>
+
+            {/* 선택 후 preview + 확인 버튼 */}
+            {selectedUser ? (
+              <div className="mt-5 pt-5 border-t border-ink-soft/40">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm mb-4">
+                  <div>
+                    <span className="label-mono">이메일</span>
+                    <p className="font-mono text-ink">{selectedUser.email}</p>
+                  </div>
+                  <div>
+                    <span className="label-mono">이름</span>
+                    <p>{selectedUser.display_name ?? "—"}</p>
+                  </div>
+                  <div>
+                    <span className="label-mono">소속 팀</span>
+                    <p>
+                      {selectedUser.team ? TEAM_LABEL[selectedUser.team] : "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="label-mono">현재 권한</span>
+                    <p
+                      className={
+                        selectedUser.role === "admin"
+                          ? "text-accent font-semibold"
+                          : ""
+                      }
+                    >
+                      {selectedUser.role === "admin" ? "관리자" : "팀 멤버"}
+                    </p>
+                  </div>
+                </div>
+
+                <p
+                  className={`text-sm leading-relaxed mb-3 ${
+                    targetRole === "admin"
+                      ? "text-accent"
+                      : "text-signal-red"
+                  }`}
+                >
+                  {targetRole === "admin" ? (
+                    <>
+                      ⚡ 이 작업으로 <strong>{selectedUser.email}</strong> 가
+                      <strong> 관리자</strong>로 승격됩니다. 모든 진단·코칭·
+                      사용자 권한·데이터 삭제 작업이 가능해집니다.
+                    </>
+                  ) : (
+                    <>
+                      ↓ 이 작업으로 <strong>{selectedUser.email}</strong> 의
+                      관리자 권한이 <strong>해제</strong>됩니다. 본인 팀
+                      시각으로만 응답 가능해집니다.
+                    </>
+                  )}
+                </p>
+
+                <button
+                  type="button"
+                  onClick={applyRoleChange}
+                  disabled={grantBusy}
+                  className={`disabled:opacity-50 px-4 py-2 text-sm font-medium border-2 transition-colors ${
+                    targetRole === "admin"
+                      ? "border-accent text-accent hover:bg-accent hover:text-paper"
+                      : "border-signal-red text-signal-red hover:bg-signal-red hover:text-paper"
+                  }`}
+                >
+                  {grantBusy
+                    ? "변경 중…"
+                    : targetRole === "admin"
+                      ? "관리자로 승격"
+                      : "관리자 권한 해제"}
+                  <span className="font-mono text-xs ml-1">→</span>
+                </button>
+              </div>
+            ) : (
+              <p className="mt-3 label-mono text-ink-soft">
+                사용자를 선택하면 상세 정보와 변경 미리보기가 표시됩니다.
+              </p>
+            )}
+
+            {grantErr ? (
+              <p className="mt-3 font-mono text-xs text-signal-red">
+                ⚠ {grantErr}
+              </p>
+            ) : null}
+            {grantMsg ? (
+              <p className="mt-3 font-mono text-xs text-signal-green">
+                ✓ {grantMsg}
+              </p>
+            ) : null}
+          </>
+        )}
+      </div>
+
+      {/* ─── 전체 사용자 카드 리스트 ─── */}
+      <div className="mt-10">
+        <div className="flex items-baseline justify-between gap-3 flex-wrap mb-3">
+          <h3 className="font-display text-xl leading-tight">
+            전체 사용자 목록
+          </h3>
+          <div className="flex items-center gap-3">
+            <input
+              type="search"
+              value={searchQ}
+              onChange={(e) => setSearchQ(e.target.value)}
+              placeholder="이메일·이름·팀 검색…"
+              className="evidence-input !py-1 !px-2 !text-sm max-w-[14rem]"
+            />
+            <span className="label-mono">
+              {filteredUsers.length} / {users.length}명
+            </span>
+          </div>
+        </div>
+
+        {usersErr ? (
+          <p className="font-mono text-xs text-signal-red mb-3">⚠ {usersErr}</p>
+        ) : null}
+
+        {filteredUsers.length === 0 ? (
+          <p className="label-mono text-ink-soft p-6 border border-ink-soft/40 text-center">
+            결과 없음
+          </p>
+        ) : (
+          <ul className="space-y-3">
+            {filteredUsers.map((u) => {
+              const isMe = u.id === me.id;
+              const isLocked =
+                u.locked_until && new Date(u.locked_until) > new Date();
+              const isAdmin = u.role === "admin";
+              return (
+                <li
+                  key={u.id}
+                  className={`border-2 p-4 sm:p-5 ${
+                    isAdmin
+                      ? "border-accent bg-soft-amber/10"
+                      : "border-ink-soft/40 bg-paper"
+                  } ${isLocked ? "ring-2 ring-signal-red/50" : ""}`}
+                >
+                  {/* Header — identity + badges */}
+                  <div className="flex items-baseline justify-between gap-3 flex-wrap mb-3">
+                    <div className="flex items-baseline gap-2 flex-wrap min-w-0">
+                      {isAdmin ? (
+                        <span className="kicker !text-accent border border-accent px-1.5">
+                          ADMIN
+                        </span>
+                      ) : (
+                        <span className="kicker !text-cobalt">MEMBER</span>
+                      )}
+                      <span className="font-mono text-sm text-ink break-all">
+                        {u.email}
+                      </span>
+                      {isMe ? (
+                        <span className="label-mono">(나)</span>
+                      ) : null}
+                      {isLocked ? (
+                        <span className="label-mono !text-signal-red">
+                          잠금 중
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {/* Meta row */}
+                  <dl className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2 text-sm mb-4">
+                    <div>
+                      <dt className="label-mono">이름</dt>
+                      <dd>{u.display_name ?? "—"}</dd>
+                    </div>
+                    <div>
+                      <dt className="label-mono">소속 팀</dt>
+                      <dd>{u.team ? TEAM_LABEL[u.team] : "—"}</dd>
+                    </div>
+                    <div>
+                      <dt className="label-mono">가입</dt>
+                      <dd className="label-mono">
+                        {u.created_at ? u.created_at.slice(0, 10) : "—"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="label-mono">최근 로그인</dt>
+                      <dd className="label-mono">
+                        {u.last_login_at
+                          ? u.last_login_at.slice(0, 10)
+                          : "—"}
+                      </dd>
+                    </div>
+                  </dl>
+
+                  {/* Action row */}
+                  <div className="flex items-center gap-3 flex-wrap pt-3 border-t border-ink-soft/30">
+                    <label className="label-mono">팀 변경:</label>
+                    <select
+                      value={u.team ?? ""}
+                      onChange={(e) =>
+                        patchUser(
+                          u.id,
+                          { team: e.target.value || null },
+                          "팀 변경",
+                        )
+                      }
+                      className="evidence-input !text-xs !py-1 !px-2 max-w-[10rem]"
+                    >
+                      <option value="">— 미지정</option>
+                      {TEAMS.map((t) => (
+                        <option key={t} value={t}>
+                          {TEAM_LABEL[t]}
+                        </option>
+                      ))}
+                    </select>
+
+                    {isLocked ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          patchUser(u.id, { unlock: true }, "잠금 해제")
+                        }
+                        className="label-mono hover:text-ink border border-ink-soft/40 px-2 py-1 hover:border-ink"
+                      >
+                        잠금 해제
+                      </button>
+                    ) : null}
+
+                    {!isMe ? (
+                      <button
+                        type="button"
+                        onClick={() => deleteUser(u.id, u.email)}
+                        className="ml-auto label-mono !text-signal-red hover:underline"
+                      >
+                        삭제
+                      </button>
+                    ) : (
+                      <span className="ml-auto label-mono text-ink-soft">
+                        본인 계정 — 위험 영역에서 삭제
+                      </span>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+
+        <p className="mt-4 label-mono text-ink-soft leading-relaxed">
+          · 권한 변경은 위 "관리자 권한 부여 / 해제" 카드에서 한 명씩 신중하게.
+          <br />
+          · 팀 변경·잠금 해제·삭제는 각 카드에서 즉시 가능.
+          <br />
+          · 마지막 관리자가 1명일 때 강등·삭제 거부됨 (서버 측 안전장치).
+        </p>
+      </div>
+    </section>
   );
 }

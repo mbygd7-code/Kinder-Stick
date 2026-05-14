@@ -15,6 +15,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { PinField } from "@/components/ui/pin-field";
 
 const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const PIN_PATTERN = /^\d{4}$/;
@@ -30,8 +31,11 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [pending, startPending] = useTransition();
-  const pinRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLFormElement>(null);
+  const focusPin = () => {
+    const el = document.getElementById("pin") as HTMLInputElement | null;
+    el?.focus();
+  };
 
   // localStorage 에서 이전 이메일 prefill
   useEffect(() => {
@@ -43,7 +47,7 @@ export default function LoginPage() {
       if (last && EMAIL_PATTERN.test(last)) {
         setEmail(last);
         // PIN 만 입력하면 되므로 PIN 으로 포커스
-        setTimeout(() => pinRef.current?.focus(), 100);
+        setTimeout(focusPin, 100);
       }
     } catch {}
   }, []);
@@ -166,7 +170,7 @@ export default function LoginPage() {
                           ev.preventDefault();
                           setEmail(e);
                           setShowHistory(false);
-                          setTimeout(() => pinRef.current?.focus(), 50);
+                          setTimeout(focusPin, 50);
                         }}
                         className="w-full text-left px-3 py-2 text-sm hover:bg-paper-deep transition-colors font-mono"
                       >
@@ -179,28 +183,17 @@ export default function LoginPage() {
             </div>
 
             {/* ── PIN 입력란 ── */}
-            <label
-              className="label-mono mb-1 mt-5 block"
-              htmlFor="pin"
-            >
-              PIN (4자리 숫자)
-            </label>
-            <input
-              ref={pinRef}
-              id="pin"
-              type="password"
-              inputMode="numeric"
-              autoComplete="current-password"
-              maxLength={4}
-              pattern="\d{4}"
-              value={pin}
-              onChange={(e) =>
-                setPin(e.target.value.replace(/\D/g, "").slice(0, 4))
-              }
-              className="evidence-input !text-2xl !font-mono !tracking-[0.5em] !text-center"
-              placeholder="••••"
-              required
-            />
+            <div className="mt-5">
+              <PinField
+                id="pin"
+                label="PIN (4자리 숫자)"
+                value={pin}
+                onChange={setPin}
+                autoComplete="current-password"
+                size="lg"
+                required
+              />
+            </div>
 
             {error ? (
               <p className="mt-3 font-mono text-xs text-signal-red">

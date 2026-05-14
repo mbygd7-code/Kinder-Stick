@@ -9,9 +9,10 @@
  * 첫 사용자는 자동 admin (운영 편의)
  */
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { TEAMS, TEAM_LABEL, type Team } from "@/lib/auth/pin";
+import { PinField } from "@/components/ui/pin-field";
 
 const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const PIN_PATTERN = /^\d{4}$/;
@@ -28,11 +29,11 @@ export default function SignupPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [pending, startPending] = useTransition();
-  const pin2Ref = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (PIN_PATTERN.test(pin) && pin2.length === 0) {
-      pin2Ref.current?.focus();
+      const el = document.getElementById("pin2") as HTMLInputElement | null;
+      el?.focus();
     }
   }, [pin, pin2.length]);
 
@@ -124,50 +125,28 @@ export default function SignupPage() {
               required
             />
 
-            <label
-              className="label-mono mb-1 mt-5 block"
-              htmlFor="pin"
-            >
-              PIN (4자리 숫자) <span className="text-signal-red">*</span>
-            </label>
-            <input
-              id="pin"
-              type="password"
-              inputMode="numeric"
-              autoComplete="new-password"
-              maxLength={4}
-              pattern="\d{4}"
-              value={pin}
-              onChange={(e) =>
-                setPin(e.target.value.replace(/\D/g, "").slice(0, 4))
-              }
-              className="evidence-input !text-2xl !font-mono !tracking-[0.5em] !text-center"
-              placeholder="••••"
-              required
-            />
-
-            <label
-              className="label-mono mb-1 mt-3 block"
-              htmlFor="pin2"
-            >
-              PIN 확인
-            </label>
-            <input
-              ref={pin2Ref}
-              id="pin2"
-              type="password"
-              inputMode="numeric"
-              autoComplete="new-password"
-              maxLength={4}
-              pattern="\d{4}"
-              value={pin2}
-              onChange={(e) =>
-                setPin2(e.target.value.replace(/\D/g, "").slice(0, 4))
-              }
-              className="evidence-input !text-2xl !font-mono !tracking-[0.5em] !text-center"
-              placeholder="••••"
-              required
-            />
+            <div className="mt-5">
+              <PinField
+                id="pin"
+                label="PIN (4자리 숫자) *"
+                value={pin}
+                onChange={setPin}
+                autoComplete="new-password"
+                size="lg"
+                required
+              />
+            </div>
+            <div className="mt-3">
+              <PinField
+                id="pin2"
+                label="PIN 확인"
+                value={pin2}
+                onChange={setPin2}
+                autoComplete="new-password"
+                size="lg"
+                required
+              />
+            </div>
             {pin2.length === 4 && !matched ? (
               <p className="mt-2 label-mono !text-signal-red">
                 PIN 이 일치하지 않습니다
