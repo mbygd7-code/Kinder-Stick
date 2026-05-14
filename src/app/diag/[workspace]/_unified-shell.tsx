@@ -4,12 +4,16 @@
  * 진단 응답 페이지 shell.
  *
  * 역할 분리:
- *   /diag/[ws]      — (이 파일) 진단 응답 작성 + 운영 컨텍스트 입력 + 이전 이력
+ *   /diag/[ws]      — (이 파일) 진단 응답 작성 + 운영 컨텍스트 입력
  *   /diag/[ws]/home — 운영 hub (점수·이번 주 할 일·도메인 신호등)
+ *   /diag/[ws]/timeline — 분기 시계열 (이전 진단 이력 포함)
  *
  * 제출 흐름:
  *   응답 제출 → 자동으로 /home 으로 이동 → 결과·다음 액션은 home 에서 확인.
  *   이 페이지에서는 결과 인라인 표시 안 함 (홈과 중복 방지).
+ *
+ * 이전 진단 이력 섹션은 /timeline 페이지에서 정식 시각화로 노출 — 진단 입력
+ * 페이지를 가볍게 유지하고 sticky submit bar 영역 침해 문제도 해소.
  */
 
 import { useState } from "react";
@@ -19,7 +23,6 @@ import {
   type DiagnosisSubmitResult,
 } from "./_diagnosis-form";
 import { OpsContextSection } from "./_ops-context-section";
-import { HistorySection } from "./_history-section";
 import { DiagnosisAdaptEmphasisApplier } from "./_diagnosis-adapt-emphasis";
 import { DiagnosisProfileProvider } from "./_diagnosis-profile-provider";
 
@@ -79,9 +82,6 @@ export function UnifiedDiagnosisShell({ workspace, framework }: Props) {
           </div>
         </section>
       ) : null}
-
-      {/* (D) 이전 진단 이력 — 항상 표시 (첫 진단이면 자동 숨김) */}
-      <HistorySection workspace={workspace} />
 
       {/* CLIENT — OpsContext 강조 도메인의 진단 sub-item section 에 시각 강조 */}
       <DiagnosisAdaptEmphasisApplier workspace={workspace} />
