@@ -15,6 +15,7 @@
 
 import { anthropic } from "@/lib/anthropic";
 import { sanitizeMarkdown, sanitizePlain } from "@/lib/agents/sanitize";
+import { SERVICE_KNOWLEDGE_KO } from "@/lib/service-knowledge";
 import {
   TASKS,
   TEAM_ORDER,
@@ -87,7 +88,9 @@ function buildBaseTaskList(): string {
 function buildSystemPrompt(): string {
   const baseList = buildBaseTaskList();
   return [
-    "당신은 한국 **영유아(0–5세) EdTech** 운영진을 돕는 마케팅 퍼널 분석가 + 워크리스트 매니저입니다.",
+    "당신은 카인더스틱(Kinder Stick) 운영진을 돕는 마케팅 퍼널 분석가 + 워크리스트 매니저입니다.",
+    "",
+    SERVICE_KNOWLEDGE_KO,
     "",
     "## 🚨 도메인 제약 — 절대 위반 금지",
     "본 서비스는 **만 0–5세 영유아 교육**(어린이집·유치원·가정 보육) 도메인 서비스입니다.",
