@@ -17,6 +17,7 @@ import {
   aggregateRespondents,
   type DiagRowMin,
 } from "@/lib/diagnosis-aggregate";
+import { fetchDiagnosisProfilesBatch } from "@/lib/diagnosis-profile/server-fetch";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -142,6 +143,11 @@ async function fetchCards(): Promise<CardData[]> {
     }
   }
 
+  // 워크스페이스별 진단 적응 프로필 batch fetch
+  const profilesByWs = await fetchDiagnosisProfilesBatch(
+    Array.from(groups.keys()),
+  );
+
   const out: CardData[] = [];
   for (const g of groups.values()) {
     const sorted = g.rows
@@ -153,7 +159,12 @@ async function fetchCards(): Promise<CardData[]> {
       );
     const orgId = orgIdByWs.get(g.workspace_id);
     try {
-      const agg = aggregateRespondents(framework, g.rows);
+      const agg = aggregateRespondents(
+        framework,
+        g.rows,
+        [],
+        profilesByWs[g.workspace_id] ?? null,
+      );
       out.push({
         workspace_id: g.workspace_id,
         respondents: g.rows.length,

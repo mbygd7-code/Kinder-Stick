@@ -27,6 +27,7 @@ import {
   isRemovedDomain,
 } from "@/lib/stale-content-filter";
 import { aggregateRespondents } from "@/lib/diagnosis-aggregate";
+import { fetchDiagnosisProfile } from "@/lib/diagnosis-profile/server-fetch";
 
 interface Props {
   params: Promise<{ workspace: string }>;
@@ -190,7 +191,15 @@ export default async function HomePage({ params, searchParams }: Props) {
   const surveyInjections = await injectActiveSurveyResults(workspace).catch(
     () => [],
   );
-  const aggregate = aggregateRespondents(framework, rows, surveyInjections);
+  // 운영 컨텍스트 기반 적응 프로필 — 점수·실패확률에 T1 가중치, T3 추가 카드,
+  // inactive 면제 적용. OpsContext 없으면 null (기본 frame 사용 — 적응 없음).
+  const adaptationProfile = await fetchDiagnosisProfile(workspace);
+  const aggregate = aggregateRespondents(
+    framework,
+    rows,
+    surveyInjections,
+    adaptationProfile,
+  );
 
   // Quarterly check
   const latestRow = rows[rows.length - 1];

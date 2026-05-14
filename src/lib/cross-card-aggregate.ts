@@ -19,6 +19,7 @@ import {
   type DiagRowMin,
   type AggregateResult,
 } from "@/lib/diagnosis-aggregate";
+import type { DiagnosisProfile } from "@/lib/diagnosis-profile/types";
 
 export interface PerWorkspaceAggregate extends AggregateResult {
   workspace_id: string;
@@ -55,11 +56,14 @@ type DiagRowWithWorkspace = DiagRowMin & {
 /**
  * @param rows 전 워크스페이스 응답 통합 (limit 500 권장)
  * @param currentWorkspace 강조할 카드 (있으면 100%, 없으면 모두 0.3)
+ * @param profilesByWorkspace 워크스페이스별 진단 적응 프로필 (T1/T3/inactive 적용).
+ *   생략하면 모든 카드 기본 frame 점수 (적응 없음).
  */
 export function aggregateCrossCard(
   framework: FrameworkConfig,
   rows: DiagRowWithWorkspace[],
   currentWorkspace?: string,
+  profilesByWorkspace?: Record<string, DiagnosisProfile | null>,
 ): CrossCardAggregate {
   if (rows.length === 0) {
     return {
@@ -85,7 +89,8 @@ export function aggregateCrossCard(
 
   const per_workspace: PerWorkspaceAggregate[] = [];
   for (const [ws, list] of byWs.entries()) {
-    const agg = aggregateRespondents(framework, list);
+    const profile = profilesByWorkspace?.[ws] ?? null;
+    const agg = aggregateRespondents(framework, list, [], profile);
     per_workspace.push({
       ...agg,
       workspace_id: ws,

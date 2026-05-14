@@ -27,6 +27,12 @@ import {
   type GroupDef,
   type DomainDef,
 } from "@/lib/scoring";
+import type { DiagnosisProfile } from "@/lib/diagnosis-profile/types";
+import {
+  applyWeightMultipliers,
+  buildAddedSubDefs,
+  computeMissingPenaltyForDomain,
+} from "@/lib/diagnosis-profile/apply-scoring";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -98,6 +104,11 @@ interface IncomingPayload {
     team_size?: string;
   };
   responses: Record<string, IncomingResponse>;
+  /**
+   * 운영 컨텍스트 기반 진단 적응 프로필 (T1 가중치 + T2 참고정보 +
+   * T3 추가 카드 + inactive). 없으면 기본 frame 그대로 점수 산출.
+   */
+  applied_profile?: DiagnosisProfile;
 }
 
 export async function POST(req: Request) {
@@ -275,7 +286,10 @@ function computeAllScores(
   payload: IncomingPayload,
 ) {
   const now = new Date();
-  const subDefs: SubItemDef[] = framework.domains.flatMap((d) =>
+  const profile = payload.applied_profile ?? null;
+
+  // 기본 frame sub-items
+  const baseSubDefs: SubItemDef[] = framework.domains.flatMap((d) =>
     d.groups.flatMap((g) =>
       g.sub_items.map((s) => ({
         code: s.code,
@@ -288,6 +302,11 @@ function computeAllScores(
       })),
     ),
   );
+  // T3 추가 카드의 SubItemDef 도 합쳐 점수 산출 대상에 포함
+  const addedSubDefs: SubItemDef[] = profile
+    ? buildAddedSubDefs(profile.added_sub_items)
+    : [];
+  const subDefs: SubItemDef[] = [...baseSubDefs, ...addedSubDefs];
   const subDefMap = new Map(subDefs.map((s) => [s.code, s]));
 
   // Collect responses with valid mappings.
@@ -342,17 +361,32 @@ function computeAllScores(
   }
 
   // Group definitions (synthesized from framework)
+  // 추가 카드의 group 이 존재하면 도메인 내 weight 재배분 (기본 + custom 균등)
+  const addedGroupsByDomain = new Map<string, SubItemDef[]>();
+  for (const a of addedSubDefs) {
+    const list = addedGroupsByDomain.get(a.domain);
+    if (list) list.push(a);
+    else addedGroupsByDomain.set(a.domain, [a]);
+  }
   const groupDefs: GroupDef[] = framework.domains.flatMap((d) => {
-    const groupCount = d.groups.length || 1;
-    return d.groups.map((g) => {
-      const hasCritical = g.sub_items.some((s) => s.tier === "critical");
-      return {
-        code: g.code,
+    const hasCustom = addedGroupsByDomain.has(d.code);
+    const totalGroups = d.groups.length + (hasCustom ? 1 : 0) || 1;
+    const baseGroups: GroupDef[] = d.groups.map((g) => ({
+      code: g.code,
+      domain: d.code,
+      weight_within_domain: 1 / totalGroups,
+      is_critical: g.sub_items.some((s) => s.tier === "critical"),
+    }));
+    if (hasCustom) {
+      const customSubs = addedGroupsByDomain.get(d.code)!;
+      baseGroups.push({
+        code: `${d.code}.CUSTOM`,
         domain: d.code,
-        weight_within_domain: 1 / groupCount,
-        is_critical: hasCritical,
-      };
-    });
+        weight_within_domain: 1 / totalGroups,
+        is_critical: customSubs.some((s) => s.tier === "critical"),
+      });
+    }
+    return baseGroups;
   });
   const groupDefMap = new Map(groupDefs.map((g) => [g.code, g]));
 
@@ -373,31 +407,34 @@ function computeAllScores(
     groupScoreMap.set(code, computeGroupScore(groupDef, defs, subScoreMap));
   }
 
-  // Domain definitions
-  const domainDefs: DomainDef[] = framework.domains.map((d) => ({
+  // Domain definitions — T1 weight multipliers 적용
+  const baseDomainDefs: DomainDef[] = framework.domains.map((d) => ({
     code: d.code,
     weight: d.weight,
     tier: d.tier,
   }));
-  const domainScores = framework.domains.map((d) => {
-    // missing penalty: each missing sub_item with dq_req >= 2 contributes -8
-    const responded = new Set(subResponses.map((r) => r.sub_item_code));
-    const missingPenalty =
-      d.groups
-        .flatMap((g) => g.sub_items)
-        .filter(
-          (s) =>
-            !responded.has(s.code) && (s.data_quality_required ?? 1) >= 2,
-        ).length * -8;
+  const domainDefs: DomainDef[] = applyWeightMultipliers(
+    baseDomainDefs,
+    profile,
+  );
+  const domainDefByCode = new Map(domainDefs.map((d) => [d.code, d]));
+  const responded = new Set(subResponses.map((r) => r.sub_item_code));
 
-    const dGroups = groupDefs.filter((g) => g.domain === d.code);
-    return computeDomainScore(
-      { code: d.code, weight: d.weight, tier: d.tier },
-      dGroups,
-      groupScoreMap,
-      missingPenalty,
-      d.thresholds,
+  const domainScores = framework.domains.map((d) => {
+    // missing penalty: 비활성 sub-item 은 면제 (apply-scoring 헬퍼)
+    const missingPenalty = computeMissingPenaltyForDomain(
+      d.code,
+      framework,
+      responded,
+      profile,
     );
+    const dGroups = groupDefs.filter((g) => g.domain === d.code);
+    const def = domainDefByCode.get(d.code) ?? {
+      code: d.code,
+      weight: d.weight,
+      tier: d.tier,
+    };
+    return computeDomainScore(def, dGroups, groupScoreMap, missingPenalty, d.thresholds);
   });
 
   const overall = computeOverallScore(domainScores, domainDefs);
@@ -439,6 +476,9 @@ function computeAllScores(
       score: r.score,
       flag: r.flag,
     })),
+    // Audit trail: 점수 산정에 적용된 적응 프로필 (T1/T2/T3/inactive).
+    // 분기 비교 시 "이 분기의 적응이 무엇이었나" 추적 가능.
+    applied_profile: profile,
     failure_probability: fp,
     n_responses: subResponses.length,
     computed_at: now.toISOString(),

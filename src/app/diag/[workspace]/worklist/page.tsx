@@ -25,6 +25,7 @@ import {
 } from "@/lib/worklist/derive";
 import { loadFramework } from "@/lib/framework/loader";
 import type { Stage, DomainDef, SubItemDef } from "@/lib/scoring";
+import { fetchDiagnosisProfile } from "@/lib/diagnosis-profile/server-fetch";
 import {
   aggregateRespondents,
   type DiagRowMin,
@@ -91,7 +92,13 @@ export default async function WorklistPage({ params }: Props) {
     const surveyInjections = await injectActiveSurveyResults(workspace).catch(
       () => [],
     );
-    const agg = aggregateRespondents(framework, diagListRaw, surveyInjections);
+    const adaptationProfile = await fetchDiagnosisProfile(workspace);
+    const agg = aggregateRespondents(
+      framework,
+      diagListRaw,
+      surveyInjections,
+      adaptationProfile,
+    );
 
     // sub-item defs + domain defs (computeFailureProbability 입력)
     const subDefs: SubItemDef[] = framework.domains.flatMap((d) =>

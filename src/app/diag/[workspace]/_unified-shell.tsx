@@ -21,6 +21,7 @@ import {
 import { OpsContextSection } from "./_ops-context-section";
 import { HistorySection } from "./_history-section";
 import { DiagnosisAdaptEmphasisApplier } from "./_diagnosis-adapt-emphasis";
+import { DiagnosisProfileProvider } from "./_diagnosis-profile-provider";
 
 interface Props {
   workspace: string;
@@ -46,11 +47,11 @@ export function UnifiedDiagnosisShell({ workspace, framework }: Props) {
   }
 
   return (
-    <>
+    <DiagnosisProfileProvider workspace={workspace}>
       {/* (A) 운영 컨텍스트 — 진단 폼 위 (안에 통합 ApplyToDiagnosisPanel 포함) */}
       <OpsContextSection workspace={workspace} />
 
-      {/* (B) 진단 응답 폼 */}
+      {/* (B) 진단 응답 폼 — Provider 가 OpsContext → DiagnosisProfile 변환·주입 */}
       <DiagnosisForm
         workspace={workspace}
         framework={framework}
@@ -84,6 +85,6 @@ export function UnifiedDiagnosisShell({ workspace, framework }: Props) {
 
       {/* CLIENT — OpsContext 강조 도메인의 진단 sub-item section 에 시각 강조 */}
       <DiagnosisAdaptEmphasisApplier workspace={workspace} />
-    </>
+    </DiagnosisProfileProvider>
   );
 }

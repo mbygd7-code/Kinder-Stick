@@ -459,51 +459,141 @@ function AnalysisResult({
         ? "text-signal-amber"
         : "text-signal-red";
 
+  // ── 요약 한 줄로 축약 — 첫 2 문장만 표시 (직원이 한눈에) ──
+  const shortSummary = truncateToSentences(analysis.summary, 2);
+
+  // ── 핵심 요인 정렬 — blocker → negative → neutral → positive, 상위 4개만 ──
+  const IMPACT_RANK: Record<string, number> = {
+    blocker: 0,
+    negative: 1,
+    neutral: 2,
+    positive: 3,
+  };
+  const topFactors = [...analysis.key_factors]
+    .sort(
+      (a, b) =>
+        (IMPACT_RANK[a.impact] ?? 9) - (IMPACT_RANK[b.impact] ?? 9),
+    )
+    .slice(0, 4);
+
+  // ── 가장 큰 격차 Top 2 만 강조 ──
+  const topRatios = [...ratios].sort((a, b) => b.ratio - a.ratio).slice(0, 2);
+
+  // ── 최선 시나리오 1개 — 확률 가장 높은 (현 상태 제외) ──
+  const bestScenario =
+    [...analysis.scenarios]
+      .filter((s) => !s.label.includes("현 상태"))
+      .sort((a, b) => b.probability_pct - a.probability_pct)[0] ??
+    analysis.scenarios[0];
+
+  // ── AI 추천 목표 — 월·연 6개 ──
+  const rec = analysis.recommended_goals ?? {};
+  const hasMonthly =
+    rec.goal_new_signups_monthly != null ||
+    rec.goal_paid_users_monthly != null ||
+    rec.goal_plc_monthly != null;
+  const hasAnnual =
+    rec.goal_total_members_annual != null ||
+    rec.goal_paid_subscribers_annual != null ||
+    rec.goal_plc_annual != null;
+
   return (
-    <div className="mt-5 border-2 border-ink bg-paper p-5 sm:p-6 space-y-6">
-      {/* 가능성 점수 + summary */}
+    <div className="mt-5 border-2 border-ink bg-paper p-5 sm:p-6 space-y-5">
+      {/* HERO — 큰 숫자 + 한 줄 요약 */}
       <div className="flex items-baseline gap-5 flex-wrap">
-        <div>
-          <p className="kicker mb-1">현 상태 유지 시 달성 가능성</p>
+        <div className="shrink-0">
+          <p className="kicker mb-1">달성 가능성</p>
           <p className={`font-display text-6xl leading-none ${tone}`}>
             {pct}
             <span className="font-mono text-2xl text-ink-soft ml-1">%</span>
           </p>
         </div>
         <p className="text-sm leading-relaxed flex-1 min-w-[16rem]">
-          {analysis.summary}
+          {shortSummary}
         </p>
       </div>
 
-      {/* 목표 격차 inline */}
-      {ratios.length > 0 ? (
-        <div className="pt-5 border-t border-ink-soft/30">
-          <p className="kicker mb-2">목표 격차</p>
-          <ul className="flex flex-wrap gap-x-4 gap-y-1">
-            {ratios.map((r, i) => {
-              const dotColor =
+      {/* AI 추천 목표 — 가장 핵심 (월 위주) */}
+      {hasMonthly || hasAnnual ? (
+        <div className="pt-4 border-t-2 border-ink">
+          <div className="flex items-baseline justify-between gap-3 flex-wrap mb-2">
+            <p className="kicker !text-accent">AI 추천 목표 · 70-80% 달성 가능</p>
+            <span className="label-mono">
+              03 성장 목표 섹션 클릭하면 자동 입력
+            </span>
+          </div>
+          {hasMonthly ? (
+            <div className="mb-2">
+              <p className="label-mono mb-1">월간</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <RecGoalCell
+                  label="신규 가입"
+                  value={rec.goal_new_signups_monthly}
+                  unit="명"
+                />
+                <RecGoalCell
+                  label="유료 사용자"
+                  value={rec.goal_paid_users_monthly}
+                  unit="명"
+                />
+                <RecGoalCell
+                  label="PLC 그룹"
+                  value={rec.goal_plc_monthly}
+                  unit="개"
+                />
+              </div>
+            </div>
+          ) : null}
+          {hasAnnual ? (
+            <div>
+              <p className="label-mono mb-1">연간</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <RecGoalCell
+                  label="누적 회원"
+                  value={rec.goal_total_members_annual}
+                  unit="명"
+                />
+                <RecGoalCell
+                  label="유료 구독자"
+                  value={rec.goal_paid_subscribers_annual}
+                  unit="명"
+                />
+                <RecGoalCell
+                  label="누적 PLC"
+                  value={rec.goal_plc_annual}
+                  unit="개"
+                />
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* 가장 큰 격차 Top 2 */}
+      {topRatios.length > 0 ? (
+        <div className="pt-4 border-t border-ink-soft/30">
+          <p className="kicker mb-2">가장 큰 격차</p>
+          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {topRatios.map((r, i) => {
+              const tone =
                 r.ratio >= 20
-                  ? "bg-signal-red/60"
+                  ? "text-signal-red"
                   : r.ratio >= 5
-                    ? "bg-signal-amber/60"
-                    : "bg-cobalt/50";
+                    ? "text-signal-amber"
+                    : "text-cobalt";
               return (
                 <li
                   key={i}
-                  className="label-mono flex items-baseline gap-2"
+                  className="border border-ink-soft/40 bg-paper-soft px-3 py-2"
                 >
-                  <span
-                    className={`inline-block w-1.5 h-1.5 rounded-full ${dotColor} self-center`}
-                    aria-hidden="true"
-                  />
-                  <span className="text-ink">{r.metric}</span>
-                  <span className="opacity-50">·</span>
-                  <span>
+                  <p className="label-mono mb-0.5">{r.metric}</p>
+                  <p className="font-mono text-sm">
                     {r.current.toLocaleString("ko-KR")} →{" "}
-                    {r.goal.toLocaleString("ko-KR")}
-                  </span>
-                  <span className="opacity-50">·</span>
-                  <span className="font-bold">{r.ratio.toFixed(1)}배</span>
+                    {r.goal.toLocaleString("ko-KR")}{" "}
+                    <span className={`font-bold ${tone} ml-1`}>
+                      {r.ratio.toFixed(1)}배
+                    </span>
+                  </p>
                 </li>
               );
             })}
@@ -511,96 +601,74 @@ function AnalysisResult({
         </div>
       ) : null}
 
-      {/* 핵심 요인 */}
-      <div className="pt-5 border-t border-ink-soft/30">
-        <p className="kicker mb-2">핵심 요인</p>
-        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {analysis.key_factors.map((f, i) => {
-            const t = IMPACT_TONE[f.impact] ?? IMPACT_TONE.neutral;
-            return (
-              <li
-                key={i}
-                className="border-l-4 pl-3 py-2 bg-paper-soft border-ink-soft/40"
-              >
-                <div className="flex items-baseline gap-2 flex-wrap mb-0.5">
-                  <span className={`label-mono ${t.color}`}>{t.label}</span>
-                  <span className="font-mono text-sm text-ink">{f.name}</span>
-                  <span className="label-mono opacity-50">·</span>
-                  <span className="label-mono">{f.value}</span>
-                </div>
-                <p className="label-mono text-ink-soft leading-relaxed">
-                  {f.note}
-                </p>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-
-      {/* 시나리오 */}
-      <div className="pt-5 border-t border-ink-soft/30">
-        <p className="kicker mb-2">시나리오 — 어떻게 가능성을 높일 수 있나</p>
-        <ol className="space-y-3">
-          {analysis.scenarios.map((s, i) => {
-            const p = Math.max(0, Math.min(100, Math.round(s.probability_pct)));
-            const sTone =
-              p >= 60
-                ? "border-signal-green"
-                : p >= 30
-                  ? "border-signal-amber"
-                  : "border-signal-red";
-            const pTone =
-              p >= 60
-                ? "text-signal-green"
-                : p >= 30
-                  ? "text-signal-amber"
-                  : "text-signal-red";
-            return (
-              <li key={i} className={`border-2 ${sTone} bg-paper-soft p-4`}>
-                <div className="flex items-baseline justify-between gap-3 flex-wrap mb-2">
-                  <h4 className="font-display text-base leading-tight">
-                    <span className="text-ink-soft mr-2">시나리오 {i + 1}</span>
-                    {s.label}
-                  </h4>
-                  <span className={`font-display text-xl ${pTone}`}>{p}%</span>
-                </div>
-                <p className="text-sm leading-relaxed mb-2">{s.reasoning}</p>
-                {s.required_actions.length > 0 ? (
-                  <div className="mt-2 pt-2 border-t border-ink-soft/30">
-                    <p className="label-mono mb-1">필요 액션</p>
-                    <ul className="space-y-1">
-                      {s.required_actions.map((a, j) => (
-                        <li
-                          key={j}
-                          className="text-sm leading-relaxed flex items-baseline gap-2"
-                        >
-                          <span className="font-mono text-xs text-accent">
-                            {j + 1}.
-                          </span>
-                          <span>{a}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-              </li>
-            );
-          })}
-        </ol>
-      </div>
-
-      {/* Caveats */}
-      {analysis.caveats.length > 0 ? (
+      {/* 핵심 요인 Top 4 — 부정·차단 우선 */}
+      {topFactors.length > 0 ? (
         <div className="pt-4 border-t border-ink-soft/30">
-          <p className="kicker mb-1">한계·주의</p>
-          <ul className="space-y-1">
-            {analysis.caveats.map((c, i) => (
-              <li key={i} className="label-mono text-ink-soft leading-relaxed">
-                · {c}
-              </li>
-            ))}
+          <p className="kicker mb-2">핵심 요인 · Top {topFactors.length}</p>
+          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {topFactors.map((f, i) => {
+              const t = IMPACT_TONE[f.impact] ?? IMPACT_TONE.neutral;
+              return (
+                <li
+                  key={i}
+                  className="border-l-4 pl-3 py-1.5 bg-paper-soft border-ink-soft/40"
+                >
+                  <div className="flex items-baseline gap-2 flex-wrap mb-0.5">
+                    <span className={`label-mono ${t.color}`}>{t.label}</span>
+                    <span className="font-mono text-sm text-ink">
+                      {f.name}
+                    </span>
+                    <span className="label-mono opacity-50">·</span>
+                    <span className="label-mono">{f.value}</span>
+                  </div>
+                  <p className="label-mono text-ink-soft leading-snug">
+                    {f.note}
+                  </p>
+                </li>
+              );
+            })}
           </ul>
         </div>
+      ) : null}
+
+      {/* 최선 시나리오 1개 */}
+      {bestScenario ? (
+        <div className="pt-4 border-t border-ink-soft/30">
+          <p className="kicker mb-2">권장 시나리오</p>
+          <div className="border-2 border-signal-green bg-soft-green/10 p-3">
+            <div className="flex items-baseline justify-between gap-3 flex-wrap mb-1">
+              <h4 className="font-display text-base leading-tight">
+                {bestScenario.label}
+              </h4>
+              <span className="font-display text-xl text-signal-green">
+                {Math.round(bestScenario.probability_pct)}%
+              </span>
+            </div>
+            {bestScenario.required_actions.length > 0 ? (
+              <ul className="mt-2 space-y-0.5">
+                {bestScenario.required_actions.slice(0, 3).map((a, j) => (
+                  <li
+                    key={j}
+                    className="text-sm leading-snug flex items-baseline gap-2"
+                  >
+                    <span className="font-mono text-xs text-accent shrink-0">
+                      {j + 1}.
+                    </span>
+                    <span>{a}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Caveats — footnote 한 줄로 축약 */}
+      {analysis.caveats.length > 0 ? (
+        <p className="label-mono text-ink-soft leading-snug pt-2 border-t border-ink-soft/20">
+          ⓘ {analysis.caveats[0]}
+          {analysis.caveats.length > 1 ? " · ⋯" : ""}
+        </p>
       ) : null}
 
       {/* 액션 버튼 행 */}
@@ -678,4 +746,49 @@ function AnalysisResult({
       </div>
     </div>
   );
+}
+
+// ============================================================
+// Helper sub-components
+// ============================================================
+
+/** AI 추천 목표 셀 — 깔끔한 큰 숫자 + 라벨 */
+function RecGoalCell({
+  label,
+  value,
+  unit,
+}: {
+  label: string;
+  value: number | null | undefined;
+  unit: string;
+}) {
+  if (value == null || value <= 0) {
+    return (
+      <div className="border border-dashed border-ink-soft/40 bg-paper-soft px-3 py-2 opacity-50">
+        <p className="label-mono mb-0.5">{label}</p>
+        <p className="font-mono text-sm text-ink-soft">데이터 부족</p>
+      </div>
+    );
+  }
+  return (
+    <div className="border border-accent/50 bg-soft-accent/10 px-3 py-2">
+      <p className="label-mono mb-0.5">{label}</p>
+      <p className="font-display text-2xl leading-none">
+        {value.toLocaleString("ko-KR")}
+        <span className="font-mono text-xs text-ink-soft ml-1">{unit}</span>
+      </p>
+    </div>
+  );
+}
+
+/**
+ * 첫 N 문장만 잘라내는 헬퍼.
+ * AI 가 5문장+ 길게 답해도 직원이 한눈에 보게 짧게 자름.
+ * "." "?" "!" 다음 공백·줄바꿈으로 split.
+ */
+function truncateToSentences(text: string, n: number): string {
+  if (!text) return "";
+  const sentences = text.match(/[^.!?]+[.!?]+/g);
+  if (!sentences || sentences.length <= n) return text.trim();
+  return sentences.slice(0, n).join("").trim();
 }

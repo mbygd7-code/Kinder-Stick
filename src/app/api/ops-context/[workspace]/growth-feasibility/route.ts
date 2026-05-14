@@ -76,15 +76,16 @@ ${SERVICE_KNOWLEDGE_KO}
 ## 출력 형식 — JSON 만, 코멘트·설명·코드블록 X
 {
   "feasibility_pct": 0-100,
-  "summary": "한 문단 (3-5 문장) 종합 평가",
+  "summary": "1-2 문장 함축 요약 (직원이 한눈에 핵심 파악) — 80자 내외",
   "key_factors": [
     {
-      "name": "변수명 (예: 월간 성장 투자 가용액)",
+      "name": "변수명 (예: 월간 성장 투자 가용액) — 짧게",
       "value": "현재 값 (예: 1.5억 KRW)",
       "impact": "positive | neutral | negative | blocker",
-      "note": "왜 이 변수가 영향을 주나"
+      "note": "왜 영향 주나 — 1 문장 (50자 내외)"
     }
   ],
+  "// note": "key_factors 4-6 개. blocker/negative 가 있다면 우선 포함.",
   "scenarios": [
     {
       "label": "현 상태 유지 시",

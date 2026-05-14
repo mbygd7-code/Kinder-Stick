@@ -8,6 +8,7 @@ import StartDiagnosisForm from "./_start-form";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { aggregateRespondents, type DiagRowMin } from "@/lib/diagnosis-aggregate";
+import { fetchDiagnosisProfilesBatch } from "@/lib/diagnosis-profile/server-fetch";
 import { getStageLabel } from "@/lib/stage-labels";
 import { relativeKo as daysAgo } from "@/lib/date-utils";
 
@@ -82,6 +83,11 @@ async function fetchAllWorkspaces(): Promise<WorkspaceSummary[]> {
     }
   }
 
+  // 워크스페이스별 진단 적응 프로필 batch fetch (N+1 회피)
+  const profilesByWs = await fetchDiagnosisProfilesBatch(
+    Array.from(groups.keys()),
+  );
+
   // 각 워크스페이스마다 home 과 동일한 aggregate 호출
   const out: WorkspaceSummary[] = [];
   for (const g of groups.values()) {
@@ -93,7 +99,12 @@ async function fetchAllWorkspaces(): Promise<WorkspaceSummary[]> {
           new Date(a.completed_at).getTime(),
       );
     try {
-      const agg = aggregateRespondents(framework, g.rows);
+      const agg = aggregateRespondents(
+        framework,
+        g.rows,
+        [],
+        profilesByWs[g.workspace_id] ?? null,
+      );
       out.push({
         workspace_id: g.workspace_id,
         respondents: g.rows.length,

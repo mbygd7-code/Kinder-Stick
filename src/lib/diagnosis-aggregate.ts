@@ -29,6 +29,12 @@ import {
   type DomainScoreResult,
 } from "@/lib/scoring";
 import type { FrameworkConfig } from "@/lib/framework/loader";
+import type { DiagnosisProfile } from "@/lib/diagnosis-profile/types";
+import {
+  applyWeightMultipliers,
+  buildAddedSubDefs,
+  computeMissingPenaltyForDomain,
+} from "@/lib/diagnosis-profile/apply-scoring";
 
 export interface DiagRowMin {
   respondent_num: number;
@@ -55,13 +61,17 @@ export interface AggregateResult {
  * @param surveyInjections active 설문(NPS/PMF) 가 30+ 응답 모았을 때 자동 evidence.
  *   `getActiveSurveysSummary()` 결과를 미리 fetch 해서 호출자가 전달.
  *   생략하면 진단 응답만으로 계산 (이전 동작 그대로).
+ * @param profile 운영 컨텍스트 기반 진단 적응 프로필 — T1 가중치 + T3 추가 카드 +
+ *   inactive 면제 적용. 생략하면 기본 frame 그대로 (이전 동작 그대로).
  */
 export function aggregateRespondents(
   framework: FrameworkConfig,
   rows: DiagRowMin[],
   surveyInjections: SubItemResponse[] = [],
+  profile: DiagnosisProfile | null = null,
 ): AggregateResult {
-  const subDefs: SubItemDef[] = framework.domains.flatMap((d) =>
+  // 기본 frame + T3 추가 카드를 SubItemDef 로 합성
+  const baseSubDefs: SubItemDef[] = framework.domains.flatMap((d) =>
     d.groups.flatMap((g) =>
       g.sub_items.map((s) => ({
         code: s.code,
@@ -74,6 +84,10 @@ export function aggregateRespondents(
       })),
     ),
   );
+  const addedSubDefs: SubItemDef[] = profile
+    ? buildAddedSubDefs(profile.added_sub_items)
+    : [];
+  const subDefs: SubItemDef[] = [...baseSubDefs, ...addedSubDefs];
   const subDefMap = new Map(subDefs.map((s) => [s.code, s]));
 
   const responses: SubItemResponse[] = [];
@@ -141,14 +155,32 @@ export function aggregateRespondents(
     });
   }
 
+  // 추가 카드의 도메인별 group 추가 (T3)
+  const addedByDomain = new Map<string, SubItemDef[]>();
+  for (const a of addedSubDefs) {
+    const list = addedByDomain.get(a.domain);
+    if (list) list.push(a);
+    else addedByDomain.set(a.domain, [a]);
+  }
   const groupDefs: GroupDef[] = framework.domains.flatMap((d) => {
-    const cnt = d.groups.length || 1;
-    return d.groups.map((g) => ({
+    const hasCustom = addedByDomain.has(d.code);
+    const totalGroups = d.groups.length + (hasCustom ? 1 : 0) || 1;
+    const baseGroups: GroupDef[] = d.groups.map((g) => ({
       code: g.code,
       domain: d.code,
-      weight_within_domain: 1 / cnt,
+      weight_within_domain: 1 / totalGroups,
       is_critical: g.sub_items.some((s) => s.tier === "critical"),
     }));
+    if (hasCustom) {
+      const cs = addedByDomain.get(d.code)!;
+      baseGroups.push({
+        code: `${d.code}.CUSTOM`,
+        domain: d.code,
+        weight_within_domain: 1 / totalGroups,
+        is_critical: cs.some((s) => s.tier === "critical"),
+      });
+    }
+    return baseGroups;
   });
   const subDefsByGroup = new Map<string, SubItemDef[]>();
   for (const s of subDefs) {
@@ -167,29 +199,39 @@ export function aggregateRespondents(
     groupScoreMap.set(code, computeGroupScore(groupDef, defs, subScoreAvg));
   }
 
+  const respondedCodes = new Set(responses.map((r) => r.sub_item_code));
+  // T1 — weight multipliers 적용된 DomainDef
+  const baseDomainDefs: DomainDef[] = framework.domains.map((d) => ({
+    code: d.code,
+    weight: d.weight,
+    tier: d.tier,
+  }));
+  const domainDefs: DomainDef[] = applyWeightMultipliers(
+    baseDomainDefs,
+    profile,
+  );
+  const domainDefByCode = new Map(domainDefs.map((d) => [d.code, d]));
   const domain_scores = framework.domains.map((d) => {
-    const responded = new Set(responses.map((r) => r.sub_item_code));
-    const missingPenalty =
-      d.groups
-        .flatMap((g) => g.sub_items)
-        .filter(
-          (s) =>
-            !responded.has(s.code) && (s.data_quality_required ?? 1) >= 2,
-        ).length * -8;
+    // 비활성 sub-item 은 missing penalty 면제
+    const missingPenalty = computeMissingPenaltyForDomain(
+      d.code,
+      framework,
+      respondedCodes,
+      profile,
+    );
+    const def = domainDefByCode.get(d.code) ?? {
+      code: d.code,
+      weight: d.weight,
+      tier: d.tier,
+    };
     return computeDomainScore(
-      { code: d.code, weight: d.weight, tier: d.tier },
+      def,
       groupDefs.filter((g) => g.domain === d.code),
       groupScoreMap,
       missingPenalty,
       d.thresholds,
     );
   });
-
-  const domainDefs: DomainDef[] = framework.domains.map((d) => ({
-    code: d.code,
-    weight: d.weight,
-    tier: d.tier,
-  }));
   const overall = computeOverallScore(domain_scores, domainDefs);
   const stage = (rows[rows.length - 1]?.stage as Stage) ?? "open_beta";
 

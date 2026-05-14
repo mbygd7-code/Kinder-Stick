@@ -16,6 +16,13 @@ import type {
 } from "@/lib/framework/loader";
 import { EvidenceInputPanel } from "./_evidence-input";
 import { SubItemHelpPopover } from "./_sub-item-help";
+import { useDiagnosisProfile } from "./_diagnosis-profile-provider";
+import type {
+  AddedSubItem,
+  DiagnosisProfile,
+  ReferenceInfo,
+  SubItemAdaptation,
+} from "@/lib/diagnosis-profile/types";
 
 type Tab = "context" | "critical" | "optional";
 
@@ -119,6 +126,16 @@ export function DiagnosisForm({
   const router = useRouter();
   const storageKey = `kso-diag-${workspace}`;
 
+  // Adaptation profile — OpsContext 기반 T1/T2/T3 + inactive
+  const {
+    profile,
+    rejectedAddedCodes,
+    rejectAdded,
+    unrejectAdded,
+    expandedInactiveCodes,
+    toggleInactive,
+  } = useDiagnosisProfile();
+
   const [context, setContext] = useState<Context>(DEFAULT_CONTEXT);
   const [responses, setResponses] = useState<ResponsesMap>({});
   const [hydrated, setHydrated] = useState(false);
@@ -159,21 +176,41 @@ export function DiagnosisForm({
   }, [hydrated, storageKey, context, responses]);
 
   // ---- Compute progress ----
+  // 모든 카드 (활성 + 비활성 + 추가됨 — 거부된 추가는 제외)
   const allSubItems = useMemo(
     () => framework.domains.flatMap((d) => d.groups.flatMap((g) => g.sub_items)),
     [framework],
   );
 
-  const completed = useMemo(
-    () =>
-      allSubItems.filter((s) => {
-        const r = responses[s.code];
-        return r && r.belief && (r.evidence || r.na);
-      }).length,
-    [allSubItems, responses],
-  );
+  // 진행률 분모: 활성 + 추가됨(거부 제외). 비활성은 분모에서도 제외.
+  const totalForProgress = useMemo(() => {
+    const inactiveCount = Object.values(profile.sub_item_adaptations).filter(
+      (a) => a.state === "inactive",
+    ).length;
+    const addedKept = profile.added_sub_items.filter(
+      (a) => !rejectedAddedCodes.has(a.code),
+    ).length;
+    return allSubItems.length - inactiveCount + addedKept;
+  }, [allSubItems, profile, rejectedAddedCodes]);
 
-  const total = allSubItems.length;
+  const completed = useMemo(() => {
+    // 기본 sub-items: 비활성은 제외
+    const baseAnswered = allSubItems.filter((s) => {
+      if (profile.sub_item_adaptations[s.code]?.state === "inactive")
+        return false;
+      const r = responses[s.code];
+      return r && r.belief && (r.evidence || r.na);
+    }).length;
+    // 추가 sub-items: 거부 제외, 응답 있으면 카운트
+    const addedAnswered = profile.added_sub_items.filter((a) => {
+      if (rejectedAddedCodes.has(a.code)) return false;
+      const r = responses[a.code];
+      return r && r.belief && (r.evidence || r.na);
+    }).length;
+    return baseAnswered + addedAnswered;
+  }, [allSubItems, responses, profile, rejectedAddedCodes]);
+
+  const total = totalForProgress;
   const pct = total === 0 ? 0 : Math.round((completed / total) * 100);
   const ready = completed >= 1; // 최소 1개 응답 시 제출 허용 (전체 응답을 강제하지 않음)
   const fullyComplete = completed === total;
@@ -230,6 +267,13 @@ export function DiagnosisForm({
     setError(null);
     startSubmitting(async () => {
       const recordedAt = new Date().toISOString();
+      // 거부된 추가 카드는 profile 에서 제외해 서버 점수 산정에 반영 X
+      const appliedProfile = {
+        ...profile,
+        added_sub_items: profile.added_sub_items.filter(
+          (a) => !rejectedAddedCodes.has(a.code),
+        ),
+      };
       const payload = {
         workspace_id: workspace,
         context,
@@ -254,6 +298,8 @@ export function DiagnosisForm({
               },
             ]),
         ),
+        // 회사 컨텍스트 기반 진단 적응 프로필 — T1/T2/T3 + inactive
+        applied_profile: appliedProfile,
       };
 
       try {
@@ -388,6 +434,12 @@ export function DiagnosisForm({
           setResponse={setResponse}
           onContinue={() => setTab("optional")}
           continueLabel="다음 — Optional →"
+          profile={profile}
+          rejectedAddedCodes={rejectedAddedCodes}
+          rejectAdded={rejectAdded}
+          unrejectAdded={unrejectAdded}
+          expandedInactiveCodes={expandedInactiveCodes}
+          toggleInactive={toggleInactive}
         />
       ) : null}
 
@@ -401,6 +453,12 @@ export function DiagnosisForm({
           setResponse={setResponse}
           onContinue={() => setTab("critical")}
           continueLabel="← Critical 로 돌아가기"
+          profile={profile}
+          rejectedAddedCodes={rejectedAddedCodes}
+          rejectAdded={rejectAdded}
+          unrejectAdded={unrejectAdded}
+          expandedInactiveCodes={expandedInactiveCodes}
+          toggleInactive={toggleInactive}
         />
       ) : null}
 
@@ -611,6 +669,12 @@ function DomainStage({
   setResponse,
   onContinue,
   continueLabel,
+  profile,
+  rejectedAddedCodes,
+  rejectAdded,
+  unrejectAdded,
+  expandedInactiveCodes,
+  toggleInactive,
 }: {
   workspace: string;
   title: string;
@@ -620,6 +684,12 @@ function DomainStage({
   setResponse: (code: string, patch: Partial<Response>) => void;
   onContinue: () => void;
   continueLabel: string;
+  profile: DiagnosisProfile;
+  rejectedAddedCodes: Set<string>;
+  rejectAdded: (code: string) => void;
+  unrejectAdded: (code: string) => void;
+  expandedInactiveCodes: Set<string>;
+  toggleInactive: (code: string) => void;
 }) {
   return (
     <>
@@ -636,6 +706,12 @@ function DomainStage({
             domain={d}
             responses={responses}
             setResponse={setResponse}
+            profile={profile}
+            rejectedAddedCodes={rejectedAddedCodes}
+            rejectAdded={rejectAdded}
+            unrejectAdded={unrejectAdded}
+            expandedInactiveCodes={expandedInactiveCodes}
+            toggleInactive={toggleInactive}
           />
         ))}
       </div>
@@ -664,17 +740,49 @@ function DomainSection({
   domain,
   responses,
   setResponse,
+  profile,
+  rejectedAddedCodes,
+  rejectAdded,
+  unrejectAdded,
+  expandedInactiveCodes,
+  toggleInactive,
 }: {
   workspace: string;
   domain: Domain;
   responses: ResponsesMap;
   setResponse: (code: string, patch: Partial<Response>) => void;
+  profile: DiagnosisProfile;
+  rejectedAddedCodes: Set<string>;
+  rejectAdded: (code: string) => void;
+  unrejectAdded: (code: string) => void;
+  expandedInactiveCodes: Set<string>;
+  toggleInactive: (code: string) => void;
 }) {
   const subs = domain.groups.flatMap((g) => g.sub_items);
-  const answered = subs.filter((s) => {
+  // 비활성 카드는 카운트에서 제외 (UI 진행률 정렬 위해)
+  const visibleSubs = subs.filter(
+    (s) => profile.sub_item_adaptations[s.code]?.state !== "inactive",
+  );
+  const answeredBase = visibleSubs.filter((s) => {
     const r = responses[s.code];
     return r && r.belief && (r.evidence || r.na);
   }).length;
+  // 이 도메인에 속한 추가 카드 (거부된 것 제외)
+  const addedForDomain = profile.added_sub_items.filter(
+    (a) => a.domain === domain.code && !rejectedAddedCodes.has(a.code),
+  );
+  const answeredAdded = addedForDomain.filter((a) => {
+    const r = responses[a.code];
+    return r && r.belief && (r.evidence || r.na);
+  }).length;
+  const answered = answeredBase + answeredAdded;
+  const total = visibleSubs.length + addedForDomain.length;
+  // 비활성된 카드 수 (사용자에게 안내)
+  const inactiveSubs = subs.filter(
+    (s) => profile.sub_item_adaptations[s.code]?.state === "inactive",
+  );
+  // 가중치 multiplier
+  const weightMul = profile.weight_multipliers[domain.code] ?? 1.0;
 
   return (
     <section
@@ -695,10 +803,17 @@ function DomainSection({
         </div>
         <div className="text-right">
           <span className="font-mono text-xs">
-            {answered} / {subs.length}
+            {answered} / {total}
           </span>
           <p className="label-mono">
-            가중치 {domain.weight}% · {domain.tier}
+            가중치 {domain.weight}%
+            {weightMul !== 1.0 ? (
+              <span className="text-accent">
+                {" "}
+                · ×{weightMul.toFixed(2)} (회사 컨텍스트 강조)
+              </span>
+            ) : null}{" "}
+            · {domain.tier}
           </p>
         </div>
       </header>
@@ -710,7 +825,8 @@ function DomainSection({
         </div>
       ) : (
         <div className="mt-6 space-y-8">
-          {subs.map((s) => (
+          {/* 활성 sub-items */}
+          {visibleSubs.map((s) => (
             <SubItemForm
               key={s.code}
               workspace={workspace}
@@ -718,8 +834,87 @@ function DomainSection({
               domain={domain}
               response={responses[s.code]}
               onChange={(patch) => setResponse(s.code, patch)}
+              referenceInfo={profile.reference_info[s.code]}
             />
           ))}
+
+          {/* 비활성 카드 — 접힘 + 사유 + 펼치기 가능 */}
+          {inactiveSubs.map((s) => {
+            const adaptation = profile.sub_item_adaptations[s.code];
+            if (!adaptation) return null;
+            const expanded = expandedInactiveCodes.has(s.code);
+            if (!expanded) {
+              return (
+                <InactiveCollapsedCard
+                  key={s.code}
+                  sub={s}
+                  adaptation={adaptation}
+                  onExpand={() => toggleInactive(s.code)}
+                />
+              );
+            }
+            // 펼침: 일반 SubItemForm + 회수 버튼
+            return (
+              <div key={s.code}>
+                <div className="mb-1 flex items-center justify-between gap-2 text-xs font-mono">
+                  <span className="text-signal-amber">
+                    ⓘ 펼침 — {adaptation.reason}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => toggleInactive(s.code)}
+                    className="text-ink-soft underline hover:text-ink"
+                  >
+                    다시 접기
+                  </button>
+                </div>
+                <SubItemForm
+                  workspace={workspace}
+                  sub={s}
+                  domain={domain}
+                  response={responses[s.code]}
+                  onChange={(patch) => setResponse(s.code, patch)}
+                  referenceInfo={profile.reference_info[s.code]}
+                />
+              </div>
+            );
+          })}
+
+          {/* T3 추가 카드 — "추가됨" 배지 + 거부 ✕ */}
+          {addedForDomain.map((a) => (
+            <AddedSubItemForm
+              key={a.code}
+              added={a}
+              response={responses[a.code]}
+              onChange={(patch) => setResponse(a.code, patch)}
+              onReject={() => rejectAdded(a.code)}
+            />
+          ))}
+
+          {/* 거부된 추가 카드 복구 안내 */}
+          {profile.added_sub_items
+            .filter(
+              (a) =>
+                a.domain === domain.code && rejectedAddedCodes.has(a.code),
+            )
+            .map((a) => (
+              <div
+                key={a.code}
+                className="border border-dashed border-ink-soft px-4 py-3 flex items-center justify-between gap-3"
+              >
+                <p className="text-xs text-ink-soft">
+                  거부됨 — <span className="font-mono">{a.code}</span> ·{" "}
+                  {a.belief_q.slice(0, 30)}…
+                </p>
+                <button
+                  type="button"
+                  onClick={() => unrejectAdded(a.code)}
+                  className="text-xs underline hover:text-ink"
+                >
+                  복구
+                </button>
+              </div>
+            ))}
         </div>
       )}
     </section>
@@ -732,12 +927,14 @@ function SubItemForm({
   domain,
   response,
   onChange,
+  referenceInfo,
 }: {
   workspace: string;
   sub: SubItem;
   domain: Domain;
   response: Response | undefined;
   onChange: (patch: Partial<Response>) => void;
+  referenceInfo?: ReferenceInfo;
 }) {
   const beliefVal = response?.belief;
   const evidenceVal = response?.evidence;
@@ -754,6 +951,9 @@ function SubItemForm({
           <SubItemHelpPopover sub={sub} domain={domain} />
         </div>
       </header>
+
+      {/* T2 — 참고 정보 박스 (보편 / 귀사 컨텍스트 / 벤치마크) */}
+      {referenceInfo ? <ReferenceInfoBox info={referenceInfo} /> : null}
 
       {/* BELIEF */}
       <div className="mt-3">
@@ -843,6 +1043,191 @@ function SubItemForm({
       {/* CITATION */}
       <p className="mt-4 dotted-rule pt-3 label-mono">
         근거: {sub.citation}
+      </p>
+    </article>
+  );
+}
+
+// ============================================================
+// T2 · Reference Info Box — 카드 상단에 보편/컨텍스트/벤치마크 3-layer 정보
+// ============================================================
+
+function ReferenceInfoBox({ info }: { info: ReferenceInfo }) {
+  if (!info.standard && !info.context && !info.benchmark) return null;
+  return (
+    <div className="mt-3 border-l-2 border-accent pl-3 py-1 space-y-1 bg-soft-accent/10">
+      <p className="kicker !text-accent">참고 정보</p>
+      {info.standard ? (
+        <p className="text-xs">
+          <span className="label-mono mr-1">보편 기준</span>
+          {info.standard}
+        </p>
+      ) : null}
+      {info.context ? (
+        <p className="text-xs">
+          <span className="label-mono mr-1">귀사 컨텍스트</span>
+          {info.context}
+        </p>
+      ) : null}
+      {info.benchmark ? (
+        <p className="text-xs">
+          <span className="label-mono mr-1">벤치마크</span>
+          {info.benchmark}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+// ============================================================
+// Inactive Collapsed Card — 비활성 sub-item 의 접힘 상태
+// ============================================================
+
+function InactiveCollapsedCard({
+  sub,
+  adaptation,
+  onExpand,
+}: {
+  sub: SubItem;
+  adaptation: SubItemAdaptation;
+  onExpand: () => void;
+}) {
+  return (
+    <article className="border border-dashed border-ink-soft bg-soft-gray/20 px-5 py-4">
+      <header className="flex items-baseline justify-between gap-3 flex-wrap">
+        <span className="font-mono text-xs text-ink-soft">
+          {sub.code} · <span className="text-signal-amber">비활성</span>
+        </span>
+        <span className="label-mono">이번 분기 우선순위 낮음</span>
+      </header>
+      <p className="mt-2 text-sm text-ink-soft leading-relaxed">
+        <span className="text-ink">ⓘ {adaptation.reason}</span>
+        {adaptation.reactivation_when ? (
+          <>
+            <br />
+            <span className="text-xs">↻ {adaptation.reactivation_when}</span>
+          </>
+        ) : null}
+      </p>
+      <button
+        type="button"
+        onClick={onExpand}
+        className="mt-3 text-xs font-mono underline hover:text-ink"
+      >
+        + 펼쳐서 답하기 (점수 페널티 없음)
+      </button>
+    </article>
+  );
+}
+
+// ============================================================
+// Added SubItem Form — T3 회사 특수 카드
+// ============================================================
+
+function AddedSubItemForm({
+  added,
+  response,
+  onChange,
+  onReject,
+}: {
+  added: AddedSubItem;
+  response: Response | undefined;
+  onChange: (patch: Partial<Response>) => void;
+  onReject: () => void;
+}) {
+  const beliefVal = response?.belief;
+  const evidenceVal = response?.evidence;
+  const na = !!response?.na;
+
+  return (
+    <article className="area-card border-2 border-accent relative">
+      <header className="flex items-baseline justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-xs text-ink-soft">{added.code}</span>
+          <span className="tag bg-accent text-paper px-2 py-0.5 text-[10px] font-mono">
+            추가됨
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className={`tag ${tierTagClass(added.tier)}`}>
+            {added.tier.toUpperCase()}
+          </span>
+          <button
+            type="button"
+            onClick={onReject}
+            title="이 카드 거부하기"
+            className="w-6 h-6 flex items-center justify-center border border-ink-soft hover:border-signal-red hover:text-signal-red text-sm leading-none"
+          >
+            ✕
+          </button>
+        </div>
+      </header>
+
+      {/* 추가 사유 */}
+      <div className="mt-2 border-l-2 border-accent pl-3 py-1">
+        <p className="kicker !text-accent">왜 이 카드가 추가됐나</p>
+        <p className="text-xs mt-1">{added.added_reason}</p>
+      </div>
+
+      {/* BELIEF */}
+      <div className="mt-4">
+        <p className="font-display text-lg leading-snug">{added.belief_q}</p>
+        <div className="mt-3 grid grid-cols-5 gap-2">
+          {added.belief_anchors.map((label, i) => {
+            const v = (i + 1) as Belief;
+            const selected = beliefVal === v;
+            return (
+              <button
+                type="button"
+                key={i}
+                onClick={() => onChange({ belief: v })}
+                className={`likert-option ${selected ? "selected" : ""}`}
+              >
+                <span className="num">{v}</span>
+                <span className="label">{label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* EVIDENCE */}
+      <div className="mt-5">
+        <p className="kicker">Evidence</p>
+        <p className="mt-1 text-sm">{added.evidence_q}</p>
+        <div className="mt-3 grid grid-cols-1 sm:grid-cols-5 gap-2">
+          {added.evidence_options.map((opt) => {
+            const selected = !na && evidenceVal === opt.v;
+            return (
+              <button
+                type="button"
+                key={opt.v}
+                onClick={() =>
+                  onChange({ evidence: opt.v as Evidence, na: false })
+                }
+                className={`likert-option ${selected ? "selected" : ""}`}
+              >
+                <span className="num">{opt.v}</span>
+                <span className="label">{opt.label}</span>
+              </button>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          onClick={() => onChange({ na: !na, evidence: undefined })}
+          className={`mt-2 text-xs font-mono underline-offset-2 ${
+            na ? "text-accent underline" : "text-ink-soft hover:text-ink"
+          }`}
+        >
+          {na
+            ? "✓ 측정/기록 없음 (선택 해제하기)"
+            : "측정/기록 없음으로 표시"}
+        </button>
+      </div>
+
+      <p className="mt-4 dotted-rule pt-3 label-mono">
+        근거: 회사 컨텍스트 기반 자동 추가 · 거부 시 점수 계산에서 제외
       </p>
     </article>
   );

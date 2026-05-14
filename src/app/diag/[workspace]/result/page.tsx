@@ -17,6 +17,13 @@ import {
   type DomainScoreResult,
 } from "@/lib/scoring";
 import { WorklistImpactBanner } from "./_worklist-impact-banner";
+import { fetchDiagnosisProfile } from "@/lib/diagnosis-profile/server-fetch";
+import type { DiagnosisProfile } from "@/lib/diagnosis-profile/types";
+import {
+  applyWeightMultipliers,
+  buildAddedSubDefs,
+  computeMissingPenaltyForDomain,
+} from "@/lib/diagnosis-profile/apply-scoring";
 
 interface Props {
   params: Promise<{ workspace: string }>;
@@ -98,7 +105,14 @@ export default async function ResultPage({ params, searchParams }: Props) {
   const surveyInjections = await injectActiveSurveyResults(workspace).catch(
     () => [],
   );
-  const aggregate = aggregateRespondents(framework, rows, surveyInjections);
+  // 운영 컨텍스트 적응 프로필 — T1 가중치 / T3 추가 / inactive 면제
+  const adaptationProfile = await fetchDiagnosisProfile(workspace);
+  const aggregate = aggregateRespondents(
+    framework,
+    rows,
+    surveyInjections,
+    adaptationProfile,
+  );
 
   // Quarterly diagnosis check — surface a banner if the latest response is > 90d old
   const latestRow = rows[rows.length - 1];
@@ -394,9 +408,10 @@ function aggregateRespondents(
   framework: ReturnType<typeof loadFramework>,
   rows: DiagnosisRow[],
   surveyInjections: SubItemResponse[] = [],
+  profile: DiagnosisProfile | null = null,
 ): AggregateResult {
   // 모든 응답자의 sub-item 응답을 합쳐 SubItemResponse[]로 변환
-  const subDefs: SubItemDef[] = framework.domains.flatMap((d) =>
+  const baseSubDefs: SubItemDef[] = framework.domains.flatMap((d) =>
     d.groups.flatMap((g) =>
       g.sub_items.map((s) => ({
         code: s.code,
@@ -409,6 +424,10 @@ function aggregateRespondents(
       })),
     ),
   );
+  const addedSubDefs: SubItemDef[] = profile
+    ? buildAddedSubDefs(profile.added_sub_items)
+    : [];
+  const subDefs: SubItemDef[] = [...baseSubDefs, ...addedSubDefs];
   const subDefMap = new Map(subDefs.map((s) => [s.code, s]));
 
   const responses: SubItemResponse[] = [];
@@ -478,15 +497,33 @@ function aggregateRespondents(
     });
   }
 
-  // Group + Domain
+  // Group + Domain — T3 추가 카드는 도메인 내 {code}.CUSTOM 으로 합치고
+  // weight 는 기존 group + 1 로 균등 재배분.
+  const addedByDomain = new Map<string, SubItemDef[]>();
+  for (const a of addedSubDefs) {
+    const list = addedByDomain.get(a.domain);
+    if (list) list.push(a);
+    else addedByDomain.set(a.domain, [a]);
+  }
   const groupDefs: GroupDef[] = framework.domains.flatMap((d) => {
-    const cnt = d.groups.length || 1;
-    return d.groups.map((g) => ({
+    const hasCustom = addedByDomain.has(d.code);
+    const totalGroups = d.groups.length + (hasCustom ? 1 : 0) || 1;
+    const baseGroups: GroupDef[] = d.groups.map((g) => ({
       code: g.code,
       domain: d.code,
-      weight_within_domain: 1 / cnt,
+      weight_within_domain: 1 / totalGroups,
       is_critical: g.sub_items.some((s) => s.tier === "critical"),
     }));
+    if (hasCustom) {
+      const cs = addedByDomain.get(d.code)!;
+      baseGroups.push({
+        code: `${d.code}.CUSTOM`,
+        domain: d.code,
+        weight_within_domain: 1 / totalGroups,
+        is_critical: cs.some((s) => s.tier === "critical"),
+      });
+    }
+    return baseGroups;
   });
   const subDefsByGroup = new Map<string, SubItemDef[]>();
   for (const s of subDefs) {
@@ -505,17 +542,33 @@ function aggregateRespondents(
     groupScoreMap.set(code, computeGroupScore(groupDef, defs, subScoreAvg));
   }
 
+  // T1 — weight multipliers 적용된 DomainDef
+  const baseDomainDefs: DomainDef[] = framework.domains.map((d) => ({
+    code: d.code,
+    weight: d.weight,
+    tier: d.tier,
+  }));
+  const domainDefs: DomainDef[] = applyWeightMultipliers(
+    baseDomainDefs,
+    profile,
+  );
+  const domainDefByCode = new Map(domainDefs.map((d) => [d.code, d]));
+  const respondedCodes = new Set(responses.map((r) => r.sub_item_code));
   const domainScores = framework.domains.map((d) => {
-    const responded = new Set(responses.map((r) => r.sub_item_code));
-    const missingPenalty =
-      d.groups
-        .flatMap((g) => g.sub_items)
-        .filter(
-          (s) =>
-            !responded.has(s.code) && (s.data_quality_required ?? 1) >= 2,
-        ).length * -8;
+    // 비활성 sub-item 은 missing penalty 면제
+    const missingPenalty = computeMissingPenaltyForDomain(
+      d.code,
+      framework,
+      respondedCodes,
+      profile,
+    );
+    const def = domainDefByCode.get(d.code) ?? {
+      code: d.code,
+      weight: d.weight,
+      tier: d.tier,
+    };
     return computeDomainScore(
-      { code: d.code, weight: d.weight, tier: d.tier },
+      def,
       groupDefs.filter((g) => g.domain === d.code),
       groupScoreMap,
       missingPenalty,
@@ -523,25 +576,14 @@ function aggregateRespondents(
     );
   });
 
-  const overall = computeOverallScore(
-    domainScores,
-    framework.domains.map((d) => ({
-      code: d.code,
-      weight: d.weight,
-      tier: d.tier,
-    })),
-  );
+  const overall = computeOverallScore(domainScores, domainDefs);
 
   // Stage: 가장 흔한 stage (혹은 최신 응답자)
   const stage = (rows[rows.length - 1]?.stage as Stage) ?? "open_beta";
 
   const fp = computeFailureProbability(
     domainScores,
-    framework.domains.map((d) => ({
-      code: d.code,
-      weight: d.weight,
-      tier: d.tier,
-    })),
+    domainDefs,
     responses,
     stage,
     buildScoringConfig(framework),

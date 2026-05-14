@@ -12,8 +12,16 @@ import {
   type SubItemDef,
   type SubItemResponse,
   type GroupDef,
+  type DomainDef,
   type DomainScoreResult,
 } from "@/lib/scoring";
+import { fetchDiagnosisProfile } from "@/lib/diagnosis-profile/server-fetch";
+import type { DiagnosisProfile } from "@/lib/diagnosis-profile/types";
+import {
+  applyWeightMultipliers,
+  buildAddedSubDefs,
+  computeMissingPenaltyForDomain,
+} from "@/lib/diagnosis-profile/apply-scoring";
 
 interface Props {
   params: Promise<{ workspace: string }>;
@@ -93,7 +101,10 @@ export default async function TimelinePage({ params }: Props) {
   }
 
   const framework = loadFramework();
-  const aggs = buildQuarterlyAggregates(framework, rows);
+  // 적응 프로필 — 현재 분기 (마지막 분기) 에만 적용. 과거 분기에 동일 적응을
+  // 적용하면 stale OpsContext 로 잘못된 시계열을 만들 수 있어 의도적으로 분리.
+  const adaptationProfile = await fetchDiagnosisProfile(workspace);
+  const aggs = buildQuarterlyAggregates(framework, rows, adaptationProfile);
 
   // For sparkline-style mini visualizations
   const allQuarterLabels = aggs.map((a) => a.quarter_label);
@@ -369,6 +380,7 @@ export default async function TimelinePage({ params }: Props) {
 function buildQuarterlyAggregates(
   framework: ReturnType<typeof loadFramework>,
   rows: DiagnosisRow[],
+  currentProfile: DiagnosisProfile | null = null,
 ): QuarterAgg[] {
   // 1. Bucket rows by quarter_label
   const byQuarter = new Map<string, DiagnosisRow[]>();
@@ -382,12 +394,16 @@ function buildQuarterlyAggregates(
 
   // 2. Sort labels chronologically
   const labels = Array.from(byQuarter.keys()).sort();
+  const lastLabel = labels[labels.length - 1];
 
   return labels.map((lbl) => {
     const grpRows = byQuarter.get(lbl)!;
     const firstDate = new Date(grpRows[0].completed_at);
     const range = quarterRange(firstDate);
-    const agg = aggregateRespondents(framework, grpRows);
+    // 현재 분기에만 profile 적용 (과거 분기는 당시 OpsContext 가 다를 수 있으므로
+    // baseline 그대로 — 시계열 비교 무결성 보존)
+    const profileForGroup = lbl === lastLabel ? currentProfile : null;
+    const agg = aggregateRespondents(framework, grpRows, profileForGroup);
     return {
       quarter_label: lbl,
       bucket_start: range.start,
@@ -417,8 +433,9 @@ function buildQuarterlyAggregates(
 function aggregateRespondents(
   framework: ReturnType<typeof loadFramework>,
   rows: DiagnosisRow[],
+  profile: DiagnosisProfile | null = null,
 ) {
-  const subDefs: SubItemDef[] = framework.domains.flatMap((d) =>
+  const baseSubDefs: SubItemDef[] = framework.domains.flatMap((d) =>
     d.groups.flatMap((g) =>
       g.sub_items.map((s) => ({
         code: s.code,
@@ -431,6 +448,10 @@ function aggregateRespondents(
       })),
     ),
   );
+  const addedSubDefs: SubItemDef[] = profile
+    ? buildAddedSubDefs(profile.added_sub_items)
+    : [];
+  const subDefs: SubItemDef[] = [...baseSubDefs, ...addedSubDefs];
   const subDefMap = new Map(subDefs.map((s) => [s.code, s]));
 
   const responses: SubItemResponse[] = [];
@@ -452,14 +473,32 @@ function aggregateRespondents(
     }
   }
 
+  // T3 추가 카드의 도메인별 group 추가
+  const addedByDomain = new Map<string, SubItemDef[]>();
+  for (const a of addedSubDefs) {
+    const list = addedByDomain.get(a.domain);
+    if (list) list.push(a);
+    else addedByDomain.set(a.domain, [a]);
+  }
   const groupDefs: GroupDef[] = framework.domains.flatMap((d) => {
-    const cnt = d.groups.length || 1;
-    return d.groups.map((g) => ({
+    const hasCustom = addedByDomain.has(d.code);
+    const totalGroups = d.groups.length + (hasCustom ? 1 : 0) || 1;
+    const baseGroups: GroupDef[] = d.groups.map((g) => ({
       code: g.code,
       domain: d.code,
-      weight_within_domain: 1 / cnt,
+      weight_within_domain: 1 / totalGroups,
       is_critical: g.sub_items.some((s) => s.tier === "critical"),
     }));
+    if (hasCustom) {
+      const cs = addedByDomain.get(d.code)!;
+      baseGroups.push({
+        code: `${d.code}.CUSTOM`,
+        domain: d.code,
+        weight_within_domain: 1 / totalGroups,
+        is_critical: cs.some((s) => s.tier === "critical"),
+      });
+    }
+    return baseGroups;
   });
 
   // Per-respondent sub-item scores → average per sub-item
@@ -515,23 +554,33 @@ function aggregateRespondents(
     groupScoreMap.set(code, computeGroupScore(groupDef, defs, subScoreAvg));
   }
 
-  const domainDefs = framework.domains.map((d) => ({
+  // T1 — weight multipliers
+  const baseDomainDefs: DomainDef[] = framework.domains.map((d) => ({
     code: d.code,
     weight: d.weight,
     tier: d.tier,
   }));
+  const domainDefs: DomainDef[] = applyWeightMultipliers(
+    baseDomainDefs,
+    profile,
+  );
+  const domainDefByCode = new Map(domainDefs.map((d) => [d.code, d]));
+  const respondedCodes = new Set(responses.map((r) => r.sub_item_code));
 
   const domain_scores = framework.domains.map((d) => {
-    const responded = new Set(responses.map((r) => r.sub_item_code));
-    const missingPenalty =
-      d.groups
-        .flatMap((g) => g.sub_items)
-        .filter(
-          (s) =>
-            !responded.has(s.code) && (s.data_quality_required ?? 1) >= 2,
-        ).length * -8;
+    const missingPenalty = computeMissingPenaltyForDomain(
+      d.code,
+      framework,
+      respondedCodes,
+      profile,
+    );
+    const def = domainDefByCode.get(d.code) ?? {
+      code: d.code,
+      weight: d.weight,
+      tier: d.tier,
+    };
     return computeDomainScore(
-      { code: d.code, weight: d.weight, tier: d.tier },
+      def,
       groupDefs.filter((g) => g.domain === d.code),
       groupScoreMap,
       missingPenalty,
