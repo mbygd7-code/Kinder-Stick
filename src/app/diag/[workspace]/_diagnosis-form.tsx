@@ -679,7 +679,8 @@ function DomainSection({
   return (
     <section
       id={`domain-${domain.code}`}
-      className="border-t border-ink-soft pt-8"
+      data-domain={domain.code}
+      className="border-t border-ink-soft pt-8 transition-all"
     >
       <header className="flex items-baseline justify-between gap-4 flex-wrap">
         <div>

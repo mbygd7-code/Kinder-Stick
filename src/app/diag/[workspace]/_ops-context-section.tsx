@@ -641,37 +641,68 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             type="button"
             onClick={applyToDiagnosis}
             disabled={applying || filled === 0}
-            className="btn-primary disabled:opacity-50 shrink-0"
+            className="btn-primary disabled:opacity-50 shrink-0 inline-flex items-center gap-2"
+            aria-busy={applying}
           >
-            {applying ? "반영 중…" : "진단에 반영"}
-            <span className="font-mono text-xs">→</span>
+            {applying ? (
+              <>
+                <span
+                  aria-hidden="true"
+                  className="inline-block w-3 h-3 border-2 border-paper border-t-transparent rounded-full animate-spin"
+                />
+                <span>반영 중…</span>
+              </>
+            ) : (
+              <>
+                <span>
+                  {serverSnapshot && serverSnapshot.revision > 0
+                    ? "진단에 다시 반영"
+                    : "진단에 반영"}
+                </span>
+                <span className="font-mono text-xs">→</span>
+              </>
+            )}
           </button>
         </div>
 
-        {applyMsg ? (
-          <p className="mt-2 font-mono text-xs text-signal-green">
-            ✓ {applyMsg}
-          </p>
-        ) : null}
-        {applyErr ? (
-          <p className="mt-2 font-mono text-xs text-signal-red">
-            ⚠ {applyErr}
-          </p>
-        ) : null}
+        {/* 반영 결과 상세 — 성공/실패/현재 상태 */}
+        <div className="mt-2 space-y-1">
+          {applyMsg ? (
+            <p className="font-mono text-xs text-signal-green">✓ {applyMsg}</p>
+          ) : null}
+          {applyErr ? (
+            <p className="font-mono text-xs text-signal-red">⚠ {applyErr}</p>
+          ) : null}
 
-        {serverSnapshot && serverSnapshot.revision > 0 ? (
-          <p className="mt-3 label-mono text-ink-soft">
-            최근 반영:{" "}
-            {serverSnapshot.applied_by_name ??
-              serverSnapshot.applied_by_email?.split("@")[0] ??
-              "익명"}{" "}
-            ·{" "}
-            {serverSnapshot.applied_at
-              ? formatRelative(new Date(serverSnapshot.applied_at))
-              : "—"}{" "}
-            · revision {serverSnapshot.revision}
-          </p>
-        ) : null}
+          {serverSnapshot && serverSnapshot.revision > 0 ? (
+            <div className="mt-2 border border-signal-green/50 bg-soft-green/15 px-3 py-2 inline-flex items-baseline gap-2 flex-wrap">
+              <span className="kicker !text-signal-green">✓ 반영됨</span>
+              <span className="font-mono text-sm text-ink">
+                {serverSnapshot.applied_at
+                  ? formatDateTime(new Date(serverSnapshot.applied_at))
+                  : "—"}
+              </span>
+              <span className="label-mono opacity-50">·</span>
+              <span className="label-mono">
+                {serverSnapshot.applied_by_name ??
+                  serverSnapshot.applied_by_email?.split("@")[0] ??
+                  "익명"}
+              </span>
+              <span className="label-mono opacity-50">·</span>
+              <span className="label-mono">
+                revision {serverSnapshot.revision}
+              </span>
+              <span className="label-mono opacity-50">·</span>
+              <span className="label-mono text-ink-soft">
+                {formatRelative(new Date(serverSnapshot.applied_at!))}
+              </span>
+            </div>
+          ) : (
+            <p className="mt-2 label-mono text-ink-soft">
+              아직 반영 안 됨 — 위 버튼을 눌러야 진단·워크리스트에 적용됩니다.
+            </p>
+          )}
+        </div>
       </div>
 
       {/* ── Footer ── */}
@@ -1051,4 +1082,15 @@ function formatRelative(d: Date): string {
   if (sec < 3600) return `${Math.floor(sec / 60)}분 전`;
   if (sec < 86400) return `${Math.floor(sec / 3600)}시간 전`;
   return d.toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" });
+}
+
+function formatDateTime(d: Date): string {
+  return d.toLocaleString("ko-KR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
 }

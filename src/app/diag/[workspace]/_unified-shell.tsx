@@ -21,6 +21,7 @@ import {
 import { OpsContextSection } from "./_ops-context-section";
 import { HistorySection } from "./_history-section";
 import { AdaptationBanner } from "./_adaptation-banner";
+import { DiagnosisAdaptEmphasisApplier } from "./_diagnosis-adapt-emphasis";
 
 interface Props {
   workspace: string;
@@ -84,6 +85,9 @@ export function UnifiedDiagnosisShell({ workspace, framework }: Props) {
 
       {/* (D) 이전 진단 이력 — 항상 표시 (첫 진단이면 자동 숨김) */}
       <HistorySection workspace={workspace} />
+
+      {/* CLIENT — OpsContext 강조 도메인의 진단 sub-item section 에 시각 강조 */}
+      <DiagnosisAdaptEmphasisApplier workspace={workspace} />
     </>
   );
 }
