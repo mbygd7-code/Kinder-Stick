@@ -7,13 +7,14 @@
  *   <PinField id="cur_pin" label="현재 PIN" value={curPin} onChange={setCurPin} />
  *
  * 특징:
- *   - 기본 type="password" 가운데 정렬 + 0.4em tracking + 큰 글자
- *   - 우측에 eye 토글 버튼 (visible 시 type="text" 로 전환)
+ *   - 기본 type="password" — 항상 숨김 상태로 시작 (보안 기본값)
+ *   - 우측 eye 버튼 클릭 시 type="text" 로 일시 전환
+ *   - blur (포커스 떠남) 시 자동으로 다시 숨김 처리 (실수로 화면에 남는 거 방지)
  *   - 숫자 외 입력 자동 제거, maxLength 4
  *   - 라벨/도움말 텍스트 통합 — settings/login/signup 일관성
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 interface Props {
   id: string;
@@ -41,7 +42,20 @@ export function PinField({
   size = "md",
   className,
 }: Props) {
+  // 기본값은 항상 히든 — 사용자가 명시적으로 눈을 켜야만 표시.
   const [visible, setVisible] = useState(false);
+
+  // 추가 안전장치: 입력란이 포커스를 잃으면 자동으로 다시 히든으로 복귀.
+  // 사용자가 PIN 을 노출한 채로 자리를 비울 위험을 줄임.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const el = document.getElementById(id);
+    if (!el) return;
+    const onBlur = () => setVisible(false);
+    el.addEventListener("blur", onBlur);
+    return () => el.removeEventListener("blur", onBlur);
+  }, [id]);
+
   const textSize = size === "lg" ? "!text-2xl" : "!text-xl";
 
   // placeholder 가 visibility 에 따라 다르게 보여야 사용자가 입력 상태를
