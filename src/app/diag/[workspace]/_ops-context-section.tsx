@@ -21,7 +21,8 @@ export interface OpsContext {
   wau?: number;
   new_signups_monthly?: number;
   churn_monthly?: number;
-  nps?: number;
+  /** 월 유료 사용자 수 — 매출 직결 지표 */
+  paid_users_monthly?: number;
   monthly_goal?: string;
   annual_goal?: string;
   context_note?: string;
@@ -86,7 +87,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
       ctx.wau,
       ctx.new_signups_monthly,
       ctx.churn_monthly,
-      ctx.nps,
+      ctx.paid_users_monthly,
       ctx.monthly_goal,
       ctx.annual_goal,
       ctx.context_note,
@@ -108,6 +109,13 @@ export function OpsContextSection({ workspace, onChange }: Props) {
     ctx.mau !== undefined &&
     ctx.mau > 0
       ? Math.round((ctx.wau / ctx.mau) * 100)
+      : null;
+  /** 유료 전환율 = 유료 / MAU. 영유아 EdTech 기준 5–15% 가 healthy. */
+  const derivedPaidRate =
+    ctx.paid_users_monthly !== undefined &&
+    ctx.mau !== undefined &&
+    ctx.mau > 0
+      ? Math.round((ctx.paid_users_monthly / ctx.mau) * 100)
       : null;
 
   return (
@@ -152,7 +160,9 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             <span className="section-num">01 · </span>지금
           </p>
           <span className="label-mono">현재 운영 숫자</span>
-          {derivedChurnRate !== null || derivedWauMauRatio !== null ? (
+          {derivedChurnRate !== null ||
+          derivedWauMauRatio !== null ||
+          derivedPaidRate !== null ? (
             <span className="label-mono opacity-50">·</span>
           ) : null}
           {derivedChurnRate !== null ? (
@@ -171,6 +181,19 @@ export function OpsContextSection({ workspace, onChange }: Props) {
           {derivedWauMauRatio !== null ? (
             <span className="label-mono">
               · WAU/MAU {derivedWauMauRatio}%
+            </span>
+          ) : null}
+          {derivedPaidRate !== null ? (
+            <span
+              className={`label-mono ${
+                derivedPaidRate >= 10
+                  ? "!text-signal-green"
+                  : derivedPaidRate >= 5
+                    ? "!text-cobalt"
+                    : "!text-signal-amber"
+              }`}
+            >
+              · 유료 전환 {derivedPaidRate}%
             </span>
           ) : null}
         </div>
@@ -211,11 +234,12 @@ export function OpsContextSection({ workspace, onChange }: Props) {
           />
         </div>
 
-        {/* NPS — 단독, 강조 (-100 ~ +100 시각화) */}
+        {/* 월 유료 사용자 — 단독 강조 (매출 직결 지표) */}
         <div className="mt-7 pt-7 dotted-rule">
-          <NpsField
-            value={ctx.nps}
-            onChange={(v) => update("nps", v)}
+          <PaidUsersField
+            value={ctx.paid_users_monthly}
+            onChange={(v) => update("paid_users_monthly", v)}
+            mau={ctx.mau}
           />
         </div>
       </div>
@@ -352,29 +376,31 @@ function EditorialNumField({
   );
 }
 
-function NpsField({
+function PaidUsersField({
   value,
   onChange,
+  mau,
 }: {
   value: number | undefined;
   onChange: (v: number | undefined) => void;
+  mau: number | undefined;
 }) {
   const filled = value !== undefined && !Number.isNaN(value);
-  // -100 ~ 100 시각적 위치 (0~100%)
-  const pct =
-    filled && value !== undefined
-      ? Math.max(0, Math.min(100, (value + 100) / 2))
+  // 유료 전환율 (영유아 EdTech freemium 기준 5–15% 가 healthy)
+  const paidRate =
+    filled && value !== undefined && mau !== undefined && mau > 0
+      ? Math.round((value / mau) * 100)
       : null;
   const band =
-    !filled || value === undefined
+    paidRate === null
       ? "neutral"
-      : value >= 60
+      : paidRate >= 15
         ? "excellent"
-        : value >= 40
+        : paidRate >= 10
           ? "good"
-          : value >= 20
+          : paidRate >= 5
             ? "ok"
-            : value >= 0
+            : paidRate >= 2
               ? "weak"
               : "bad";
   const bandLabel: Record<string, string> = {
@@ -382,85 +408,61 @@ function NpsField({
     good: "양호",
     ok: "보통",
     weak: "주의",
-    bad: "위험",
+    bad: "낮음",
     neutral: "—",
   };
   const bandTone: Record<string, string> = {
     excellent: "!text-signal-green",
-    good: "!text-cobalt",
-    ok: "!text-ink",
+    good: "!text-signal-green",
+    ok: "!text-cobalt",
     weak: "!text-signal-amber",
     bad: "!text-signal-red",
     neutral: "!text-ink-soft",
   };
 
   return (
-    <label className="block">
-      <div className="flex items-baseline gap-2 mb-1.5">
-        <span className="label-mono">NPS</span>
+    <label className="block group">
+      <div className="flex items-baseline gap-2 mb-1.5 flex-wrap">
+        <span className="label-mono">PAID</span>
         <span className="label-mono opacity-40">·</span>
         <span className="text-sm font-medium leading-tight">
-          교사 추천 의향 점수
+          월 유료 사용자 수
         </span>
-        {filled ? (
+        {paidRate !== null ? (
           <span className={`label-mono ml-2 ${bandTone[band]}`}>
-            {bandLabel[band]}
+            유료 전환 {paidRate}% · {bandLabel[band]}
           </span>
         ) : null}
       </div>
       <p className="label-mono text-ink-soft mb-3 leading-relaxed">
-        −100 (전부 비추천) ~ +100 (전부 추천) — Promoter(9–10) % − Detractor(0–6) %
+        이번 달 유료 결제·구독을 유지 중인 사용자 수 — 매출 직결 지표
+        {mau === undefined ? null : ` · 영유아 EdTech freemium 5–15% 가 healthy`}
       </p>
-
-      <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-5 items-end">
-        {/* 슬라이더 시각화 */}
-        <div className="relative">
-          <input
-            type="range"
-            min={-100}
-            max={100}
-            step={1}
-            value={value ?? 0}
-            onChange={(e) => onChange(Number(e.target.value))}
-            className="w-full appearance-none cursor-pointer h-2 bg-ink-soft/20 rounded-none accent-ink"
-          />
-          {pct !== null ? (
-            <span
-              className="absolute -top-2 -translate-x-1/2 font-mono text-xs bg-ink text-paper px-1 leading-tight"
-              style={{ left: `${pct}%` }}
-            >
-              {value !== undefined && value >= 0 ? "+" : ""}
-              {value}
-            </span>
-          ) : null}
-          <div className="mt-2 flex justify-between label-mono">
-            <span>−100</span>
-            <span>0</span>
-            <span>+100</span>
-          </div>
-        </div>
-
-        {/* 직접 입력 */}
-        <div className="flex items-baseline gap-2 border-b-2 border-ink-soft/40 focus-within:border-ink sm:min-w-[7rem]">
-          <input
-            type="number"
-            inputMode="numeric"
-            min={-100}
-            max={100}
-            value={value === undefined || Number.isNaN(value) ? "" : value}
-            onChange={(e) => {
-              const v = e.target.value.trim();
-              if (v === "") onChange(undefined);
-              else {
-                const n = Number(v);
-                if (Number.isFinite(n)) onChange(n);
-              }
-            }}
-            placeholder="32"
-            className="flex-1 bg-transparent font-display text-3xl py-1 focus:outline-none text-right placeholder:font-display placeholder:text-ink-soft/30"
-          />
-          <span className="label-mono shrink-0">점</span>
-        </div>
+      <div
+        className={`flex items-baseline gap-2 border-b-2 transition-colors ${
+          filled
+            ? "border-ink"
+            : "border-ink-soft/40 group-focus-within:border-ink"
+        }`}
+      >
+        <input
+          type="number"
+          inputMode="numeric"
+          min={0}
+          value={value === undefined || Number.isNaN(value) ? "" : value}
+          onChange={(e) => {
+            const v = e.target.value.trim();
+            if (v === "") onChange(undefined);
+            else {
+              const n = Number(v);
+              if (Number.isFinite(n) && n >= 0) onChange(n);
+            }
+          }}
+          placeholder="800"
+          className="flex-1 bg-transparent font-display text-3xl py-2 focus:outline-none placeholder:font-display placeholder:text-ink-soft/30"
+        />
+        <span className="label-mono shrink-0">명</span>
+        {filled ? <span className="label-mono shrink-0">✓</span> : null}
       </div>
     </label>
   );
