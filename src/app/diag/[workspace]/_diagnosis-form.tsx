@@ -96,6 +96,30 @@ const DEFAULT_CONTEXT: Context = {
   team_size: "",
 };
 
+/**
+ * 회원 프로필의 team → 진단 폼의 perspective 매핑.
+ * director = 대표·경영진, planning/design/engineering = 제품·엔지니어링,
+ * marketing = 마케팅·영업·CS, operations = 운영·재무.
+ */
+const TEAM_TO_PERSPECTIVE: Record<string, Context["perspective"]> = {
+  director: "founder",
+  planning: "product",
+  design: "product",
+  engineering: "product",
+  marketing: "growth",
+  operations: "ops",
+};
+
+/** 회원 프로필의 team → "역할" 필드 자유 기재 prefill 라벨. */
+const TEAM_TO_ROLE_LABEL: Record<string, string> = {
+  director: "대표·경영진",
+  planning: "기획팀",
+  design: "디자인팀",
+  engineering: "개발팀",
+  marketing: "마케팅팀",
+  operations: "운영팀",
+};
+
 const STORAGE_VERSION = 1;
 
 // ============================================================
@@ -144,6 +168,7 @@ export function DiagnosisForm({
 
   // ---- Hydrate from localStorage ----
   useEffect(() => {
+    let restoredRole = "";
     try {
       const raw = localStorage.getItem(storageKey);
       if (raw) {
@@ -151,12 +176,52 @@ export function DiagnosisForm({
         if (parsed.v === STORAGE_VERSION) {
           setContext(parsed.context);
           setResponses(parsed.responses);
+          restoredRole = parsed.context?.role ?? "";
         }
       }
     } catch {
       // ignore corrupt storage
     } finally {
       setHydrated(true);
+    }
+
+    // 로그인된 사용자가 있으면 회원가입 정보로 role·perspective 미리 채움 (수정 가능).
+    // 사용자가 이미 입력한 값이 있으면 (restoredRole 비어있지 않으면) 덮어쓰지 않음.
+    if (!restoredRole) {
+      void (async () => {
+        try {
+          const res = await fetch("/api/auth/pin/me");
+          if (!res.ok) return;
+          const data = (await res.json()) as {
+            profile: {
+              display_name: string | null;
+              team: string | null;
+              email: string;
+            } | null;
+          };
+          const p = data.profile;
+          if (!p) return;
+          const teamLabel = p.team ? TEAM_TO_ROLE_LABEL[p.team] : null;
+          const prefilledRole =
+            p.display_name && teamLabel
+              ? `${p.display_name} · ${teamLabel}`
+              : (p.display_name ?? teamLabel ?? "");
+          const prefilledPerspective: Context["perspective"] = p.team
+            ? (TEAM_TO_PERSPECTIVE[p.team] ?? "founder")
+            : "founder";
+          setContext((c) => ({
+            ...c,
+            // 이미 사용자가 손댄 값은 절대 덮어쓰지 않음 (수정 가능 보장)
+            role: c.role || prefilledRole,
+            perspective:
+              c.perspective === DEFAULT_CONTEXT.perspective
+                ? prefilledPerspective
+                : c.perspective,
+          }));
+        } catch {
+          // 인증 안 됨 / 네트워크 실패 — 그대로 빈 상태로 둠
+        }
+      })();
     }
   }, [storageKey]);
 
