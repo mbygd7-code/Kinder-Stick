@@ -294,14 +294,11 @@ export function OpsContextSection({ workspace, onChange }: Props) {
 
       {/* ── 01 · 회사 정체성 + 가용 자원 (Foundation) ── */}
       <div className="mb-10">
-        <div className="flex items-baseline gap-3 mb-3 flex-wrap">
-          <p className="kicker">
-            <span className="section-num">01 · </span>회사 정체성 · 가용 자원
-          </p>
-          <span className="label-mono">
-            출시 시점 · 실행 capacity · 자본 · 경쟁 위치
-          </span>
-        </div>
+        <MajorSectionHeader
+          num="01"
+          title="회사 정체성 · 가용 자원"
+          subtitle="출시 시점 · 실행 capacity · 자본 · 경쟁 위치"
+        />
         <p className="label-mono text-ink-soft mb-5 leading-relaxed">
           진단 가능성 분석의 기초 변수 — 회사가 어디서 시작했고, 누구·얼마로
           움직이며, 시장에서 어디 위치하는지. AI 가능성 분석 (아래 패널) 도
@@ -404,12 +401,11 @@ export function OpsContextSection({ workspace, onChange }: Props) {
 
       {/* ── 02 · 지금 — 운영 현황 (Current State) ── */}
       <div className="mb-10 pt-8 border-t border-ink-soft/30">
-        <div className="flex items-baseline gap-3 mb-3 flex-wrap">
-          <p className="kicker">
-            <span className="section-num">02 · </span>지금 — 운영 현황
-          </p>
-          <span className="label-mono">현재 시점 핵심 운영 지표</span>
-        </div>
+        <MajorSectionHeader
+          num="02"
+          title="지금 — 운영 현황"
+          subtitle="현재 시점 핵심 운영 지표"
+        />
 
         {/* Derived 라인 — 입력될수록 채워짐 */}
         <DerivedLine
@@ -542,17 +538,18 @@ export function OpsContextSection({ workspace, onChange }: Props) {
         id="section-growth-goals"
         className="mb-10 pt-8 border-t border-ink-soft/30 transition-all"
       >
-        <div className="flex items-baseline gap-3 mb-3 flex-wrap">
-          <p className="kicker">
-            <span className="section-num">03 · </span>성장 목표
-          </p>
-          <span className="label-mono">월간 · 연간 핵심 지표 목표</span>
-          {Object.keys(recommendedGoals).length > 0 ? (
-            <span className="label-mono !text-accent">
-              · AI 추천값이 각 필드 아래 노출됨 (클릭 = 자동 채움)
-            </span>
-          ) : null}
-        </div>
+        <MajorSectionHeader
+          num="03"
+          title="성장 목표"
+          subtitle="월간 · 연간 핵심 지표 목표"
+          extra={
+            Object.keys(recommendedGoals).length > 0 ? (
+              <span className="label-mono !text-accent">
+                AI 추천값이 각 필드 아래 노출됨 (클릭 = 자동 채움)
+              </span>
+            ) : null
+          }
+        />
 
         {/* 통합 격차 라인 — 월·연 둘 다 표시 */}
         <GoalGapLine
@@ -901,6 +898,42 @@ function EditorialNumField({
         </div>
       ) : null}
     </label>
+  );
+}
+
+// ─── Major section header — 01/02/03 큰 디스플레이 헤딩 ───
+function MajorSectionHeader({
+  num,
+  title,
+  subtitle,
+  extra,
+}: {
+  num: string;
+  title: string;
+  subtitle?: string;
+  extra?: React.ReactNode;
+}) {
+  return (
+    <div className="mb-5">
+      <div className="flex items-baseline gap-3 flex-wrap">
+        <span className="kicker !text-accent !text-sm">
+          <span className="section-num">No. </span>
+          {num}
+        </span>
+        {extra ? (
+          <>
+            <span className="label-mono opacity-40">·</span>
+            {extra}
+          </>
+        ) : null}
+      </div>
+      <h3 className="mt-1 font-display text-3xl sm:text-4xl leading-tight tracking-tight text-accent">
+        {title}
+      </h3>
+      {subtitle ? (
+        <p className="mt-1 label-mono">{subtitle}</p>
+      ) : null}
+    </div>
   );
 }
 
