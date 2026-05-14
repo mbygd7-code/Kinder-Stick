@@ -146,6 +146,15 @@ export function OpsContextSection({ workspace, onChange }: Props) {
     onChange?.(payload);
   }, [ctx, hydrated, storageKey, onChange]);
 
+  /** 현재 draft 가 서버 commit 과 다른지 — 버튼 라벨 결정에 사용 */
+  const isDirty = useMemo(() => {
+    if (!serverSnapshot || serverSnapshot.revision === 0) {
+      // 첫 commit 전: 입력값이 하나라도 있으면 dirty
+      return Object.keys(stripMeta(ctx)).length > 0;
+    }
+    return diffKeys(ctx, serverSnapshot.data).length > 0;
+  }, [ctx, serverSnapshot]);
+
   // 변경이 서버 commit 과 차이 나는지 감지 → 안내 메시지
   useEffect(() => {
     if (!hydrated || !serverSnapshot || serverSnapshot.revision === 0) {
@@ -159,7 +168,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
         serverSnapshot.applied_by_email?.split("@")[0] ??
         "이전 직원";
       setChangeWarning(
-        `${editor} 가 적용한 값 ${diffFields.length}개를 변경 중입니다. "진단에 반영" 을 눌러 저장하세요.`,
+        `${editor} 가 적용한 값 ${diffFields.length}개를 변경 중입니다. "진단에 다시 반영" 을 눌러 저장하세요.`,
       );
     } else {
       setChangeWarning(null);
@@ -640,9 +649,14 @@ export function OpsContextSection({ workspace, onChange }: Props) {
           <button
             type="button"
             onClick={applyToDiagnosis}
-            disabled={applying || filled === 0}
+            disabled={applying || filled === 0 || !isDirty}
             className="btn-primary disabled:opacity-50 shrink-0 inline-flex items-center gap-2"
             aria-busy={applying}
+            title={
+              !isDirty && serverSnapshot && serverSnapshot.revision > 0
+                ? "현재 입력값이 이미 반영되어 있습니다"
+                : undefined
+            }
           >
             {applying ? (
               <>
@@ -651,6 +665,10 @@ export function OpsContextSection({ workspace, onChange }: Props) {
                   className="inline-block w-3 h-3 border-2 border-paper border-t-transparent rounded-full animate-spin"
                 />
                 <span>반영 중…</span>
+              </>
+            ) : !isDirty && serverSnapshot && serverSnapshot.revision > 0 ? (
+              <>
+                <span>✓ 진단에 반영됨</span>
               </>
             ) : (
               <>

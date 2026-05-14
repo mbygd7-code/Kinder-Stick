@@ -83,36 +83,90 @@ export function AdaptationBanner({ workspace, context = "diagnosis" }: Props) {
   if (!adapt || !adapt.has_signal) return null;
 
   const top = adapt.emphasized.slice(0, 5);
+  const realism = adapt.realism_warnings;
 
   return (
-    <section className="max-w-5xl mx-auto px-6 sm:px-10 mt-8">
-      <div className="border-2 border-ink bg-paper-soft p-5 sm:p-6">
-        <div className="flex items-baseline justify-between gap-3 flex-wrap mb-3">
-          <div>
-            <p className="kicker mb-1">회사 컨디션 반영</p>
-            <h3 className="font-display text-xl sm:text-2xl leading-tight">
-              이 {context === "diagnosis" ? "진단" : "워크리스트"} 는 다음
-              영역을{" "}
-              <span className="italic font-light">우선</span> 점검하세요
-            </h3>
+    <section className="max-w-5xl mx-auto px-6 sm:px-10 mt-8 space-y-4">
+      {/* 강조 도메인 카드 */}
+      {top.length > 0 ? (
+        <div className="border-2 border-ink bg-paper-soft p-5 sm:p-6">
+          <div className="flex items-baseline justify-between gap-3 flex-wrap mb-3">
+            <div>
+              <p className="kicker mb-1">회사 컨디션 반영</p>
+              <h3 className="font-display text-xl sm:text-2xl leading-tight">
+                이 {context === "diagnosis" ? "진단" : "워크리스트"} 는 다음
+                영역을{" "}
+                <span className="italic font-light">우선</span> 점검하세요
+              </h3>
+            </div>
+            <span className="label-mono">
+              {top.length}개 영역 강조 · 운영 숫자·목표 기반
+            </span>
           </div>
-          <span className="label-mono">
-            {top.length}개 영역 강조 · 운영 숫자·목표 기반
-          </span>
+
+          <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-4">
+            {top.map((d) => (
+              <DomainCard key={d.domain} d={d} />
+            ))}
+          </ul>
+
+          <p className="mt-4 label-mono text-ink-soft leading-relaxed">
+            ↳ 위 영역의{" "}
+            {context === "diagnosis" ? "진단 sub-item" : "워크리스트 업무"} 가
+            자동으로 강조됩니다. 운영 숫자나 목표를 수정하면 즉시 갱신됨.
+          </p>
         </div>
+      ) : null}
 
-        <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-4">
-          {top.map((d) => (
-            <DomainCard key={d.domain} d={d} />
-          ))}
-        </ul>
-
-        <p className="mt-4 label-mono text-ink-soft leading-relaxed">
-          ↳ 위 영역의{" "}
-          {context === "diagnosis" ? "진단 sub-item" : "워크리스트 업무"} 가
-          자동으로 강조됩니다. 운영 숫자나 목표를 수정하면 즉시 갱신됨.
-        </p>
-      </div>
+      {/* 현실성 경고 */}
+      {realism.length > 0 ? (
+        <div className="border-2 border-signal-amber bg-soft-amber/30 p-5">
+          <div className="flex items-baseline gap-2 flex-wrap mb-2">
+            <p className="kicker !text-signal-amber">⚠ 목표 현실성 경고</p>
+            <span className="label-mono">{realism.length}건</span>
+          </div>
+          <p className="text-sm leading-relaxed mb-3">
+            아래 목표는 현재 규모 대비 과도해 진단 결과의 신뢰도가 떨어질 수
+            있습니다. 진단 점수가 빨강이라도 실제 위험이 아닐 수 있으니
+            목표 재현실화 또는 점수 보정 권장.
+          </p>
+          <ul className="space-y-2">
+            {realism.map((w, i) => (
+              <li
+                key={i}
+                className={`border-l-4 pl-3 py-1.5 bg-paper ${
+                  w.severity === "extreme"
+                    ? "border-signal-red"
+                    : "border-signal-amber"
+                }`}
+              >
+                <div className="flex items-baseline gap-2 flex-wrap mb-0.5">
+                  <span
+                    className={`label-mono ${
+                      w.severity === "extreme"
+                        ? "!text-signal-red"
+                        : "!text-signal-amber"
+                    }`}
+                  >
+                    {w.severity === "extreme" ? "✕ 매우 비현실적" : "⚠ 도전적"}
+                  </span>
+                  <span className="font-mono text-sm text-ink">
+                    {w.metric}
+                  </span>
+                  <span className="label-mono opacity-50">·</span>
+                  <span className="label-mono">
+                    {w.current.toLocaleString("ko-KR")} →{" "}
+                    {w.goal.toLocaleString("ko-KR")} ({w.ratio.toFixed(1)}배)
+                  </span>
+                </div>
+                <p className="label-mono text-ink-soft leading-relaxed">
+                  {w.message}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </section>
   );
 }

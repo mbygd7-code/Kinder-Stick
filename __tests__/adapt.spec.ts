@@ -10,6 +10,10 @@ interface Case {
   ctx: Parameters<typeof computeOpsContextAdaptation>[0];
   expectedDomains: Array<{ domain: string; severity: string }>;
   expectedRuleIds?: string[];
+  /** 현실성 경고 개수 (옵션 — 명시 안 하면 검증 X) */
+  expectedRealismCount?: number;
+  /** 현실성 경고 중 extreme 개수 */
+  expectedExtremeCount?: number;
 }
 
 const cases: Case[] = [
@@ -105,6 +109,35 @@ const cases: Case[] = [
     },
     expectedDomains: [],
   },
+  // ─── 현실성 경고 케이스 ───
+  {
+    name: "현실성: 월 신규 가입 20배 → extreme 1건",
+    ctx: { new_signups_monthly: 100, goal_new_signups_monthly: 2000 },
+    expectedDomains: [{ domain: "A6", severity: "high" }],
+    expectedRealismCount: 1,
+    expectedExtremeCount: 1,
+  },
+  {
+    name: "현실성: 월 신규 가입 6배 → high 1건",
+    ctx: { new_signups_monthly: 100, goal_new_signups_monthly: 600 },
+    expectedDomains: [{ domain: "A6", severity: "high" }],
+    expectedRealismCount: 1,
+    expectedExtremeCount: 0,
+  },
+  {
+    name: "현실성: 연 누적 회원 60배 → extreme",
+    ctx: { total_members: 1000, goal_total_members_annual: 60000 },
+    expectedDomains: [{ domain: "A6", severity: "high" }],
+    expectedRealismCount: 1,
+    expectedExtremeCount: 1,
+  },
+  {
+    name: "현실성: 합리적 목표 (3배) → 경고 없음",
+    ctx: { new_signups_monthly: 100, goal_new_signups_monthly: 300 },
+    expectedDomains: [{ domain: "A6", severity: "high" }],
+    expectedRealismCount: 0,
+    expectedExtremeCount: 0,
+  },
 ];
 
 let passed = 0;
@@ -142,7 +175,19 @@ for (const c of cases) {
     }
   }
 
-  if (domainsMatch && ruleMatch) {
+  // 3. realism warnings 개수 검증 (optional)
+  let realismMatch = true;
+  if (c.expectedRealismCount !== undefined) {
+    realismMatch = out.realism_warnings.length === c.expectedRealismCount;
+  }
+  if (c.expectedExtremeCount !== undefined) {
+    const extremeCount = out.realism_warnings.filter(
+      (w) => w.severity === "extreme",
+    ).length;
+    if (extremeCount !== c.expectedExtremeCount) realismMatch = false;
+  }
+
+  if (domainsMatch && ruleMatch && realismMatch) {
     console.log(`✓ ${c.name}`);
     passed++;
   } else {
@@ -154,6 +199,14 @@ for (const c of cases) {
       console.log(
         "    actual rule ids:",
         out.emphasized.flatMap((d) => d.rule_ids),
+      );
+    }
+    if (!realismMatch) {
+      console.log("    expected realism count:", c.expectedRealismCount);
+      console.log("    expected extreme count:", c.expectedExtremeCount);
+      console.log(
+        "    actual realism:",
+        out.realism_warnings.map((w) => `${w.metric}=${w.severity}`),
       );
     }
     failed++;

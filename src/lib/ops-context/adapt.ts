@@ -25,11 +25,26 @@ export interface AdaptedDomain {
   reasons: string[];
 }
 
+export interface RealismWarning {
+  /** 어떤 비교에서 경고가 났는지 */
+  metric: string;
+  /** 현재값 */
+  current: number;
+  /** 목표값 */
+  goal: number;
+  /** ratio (goal/current) */
+  ratio: number;
+  severity: "high" | "extreme";
+  message: string;
+}
+
 export interface AdaptationOutput {
   /** severity 내림차순으로 정렬된 강조 domains */
   emphasized: AdaptedDomain[];
   /** 어떤 규칙이라도 발화됐는지 */
   has_signal: boolean;
+  /** 목표가 비현실적으로 큰 경우 — 진단 신뢰도 ↓ 경고 */
+  realism_warnings: RealismWarning[];
   /** 마지막 평가 시각 (cache 키 등) */
   evaluated_at: string;
 }
@@ -188,6 +203,77 @@ const GOAL_RULES: Rule[] = [
 
 const ALL_RULES: Rule[] = [...STATE_RULES, ...GOAL_RULES];
 
+// ─── 현실성 체크 ───
+/**
+ * 목표/현재 ratio 가 너무 크면 진단 신뢰도 ↓.
+ * 10배 = high, 100배 = extreme.
+ * 영유아 EdTech 운영 1년 사이클에서 합리적 성장은 2-5배. 10배+는 비현실적.
+ */
+function checkRealism(ctx: OpsContext): RealismWarning[] {
+  const out: RealismWarning[] = [];
+  const checks: Array<{
+    metric: string;
+    current: number | undefined;
+    goal: number | undefined;
+    period: "month" | "year";
+  }> = [
+    {
+      metric: "월 신규 가입",
+      current: ctx.new_signups_monthly,
+      goal: ctx.goal_new_signups_monthly,
+      period: "month",
+    },
+    {
+      metric: "월 유료 사용자",
+      current: ctx.paid_users_monthly,
+      goal: ctx.goal_paid_users_monthly,
+      period: "month",
+    },
+    {
+      metric: "누적 회원",
+      current: ctx.total_members ?? ctx.mau,
+      goal: ctx.goal_total_members_annual,
+      period: "year",
+    },
+    {
+      metric: "유료 구독자",
+      current: ctx.paid_users_monthly,
+      goal: ctx.goal_paid_subscribers_annual,
+      period: "year",
+    },
+  ];
+
+  for (const c of checks) {
+    if (c.current === undefined || c.goal === undefined || c.current <= 0)
+      continue;
+    const r = c.goal / c.current;
+    // 월 목표 vs 현재 → 5배+ 부터 high, 20배+ 부터 extreme
+    // 연 목표 vs 현재 → 10배+ 부터 high, 50배+ 부터 extreme
+    const threshHigh = c.period === "month" ? 5 : 10;
+    const threshExtreme = c.period === "month" ? 20 : 50;
+    if (r >= threshExtreme) {
+      out.push({
+        metric: c.metric,
+        current: c.current,
+        goal: c.goal,
+        ratio: r,
+        severity: "extreme",
+        message: `${c.metric} 목표가 현재의 ${r.toFixed(1)}배 — 1${c.period === "month" ? "개월" : "년"} 내 달성 가능성 매우 낮음. 진단 결과 해석 시 목표 재현실화 권장.`,
+      });
+    } else if (r >= threshHigh) {
+      out.push({
+        metric: c.metric,
+        current: c.current,
+        goal: c.goal,
+        ratio: r,
+        severity: "high",
+        message: `${c.metric} 목표가 현재의 ${r.toFixed(1)}배 — 도전적. 진단 점수 해석 시 격차 인지 권장.`,
+      });
+    }
+  }
+  return out;
+}
+
 // ─── 메인 함수 ───
 export function computeOpsContextAdaptation(
   ctx: OpsContext | null | undefined,
@@ -196,6 +282,7 @@ export function computeOpsContextAdaptation(
     return {
       emphasized: [],
       has_signal: false,
+      realism_warnings: [],
       evaluated_at: new Date().toISOString(),
     };
   }
@@ -233,9 +320,12 @@ export function computeOpsContextAdaptation(
     (a, b) => severityRank(b.severity) - severityRank(a.severity),
   );
 
+  const realism_warnings = checkRealism(ctx);
+
   return {
     emphasized,
-    has_signal: emphasized.length > 0,
+    has_signal: emphasized.length > 0 || realism_warnings.length > 0,
+    realism_warnings,
     evaluated_at: new Date().toISOString(),
   };
 }
