@@ -82,8 +82,14 @@ export default async function WorklistPage({ params }: Props) {
 
   let baseline: DiagnosisBaseline | null = null;
   if (diagListRaw.length > 0) {
-    // 동일 helper 로 도메인 점수·stage 산출
-    const agg = aggregateRespondents(framework, diagListRaw);
+    // 동일 helper 로 도메인 점수·stage 산출 (active NPS·PMF 설문 결과 자동 inject)
+    const { injectActiveSurveyResults } = await import(
+      "@/lib/surveys/inject"
+    );
+    const surveyInjections = await injectActiveSurveyResults(workspace).catch(
+      () => [],
+    );
+    const agg = aggregateRespondents(framework, diagListRaw, surveyInjections);
 
     // sub-item defs + domain defs (computeFailureProbability 입력)
     const subDefs: SubItemDef[] = framework.domains.flatMap((d) =>

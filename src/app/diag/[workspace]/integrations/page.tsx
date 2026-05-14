@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { resolveOrgWithBackfill } from "@/lib/org";
 import { integrationsStatus } from "@/lib/integrations/dispatch";
+import { SurveysSection } from "./_surveys-section";
 
 interface Props {
   params: Promise<{ workspace: string }>;
@@ -115,6 +116,9 @@ export default async function IntegrationsPage({ params }: Props) {
           ]}
         />
       </section>
+
+      {/* 자체 NPS·PMF 설문 관리 — Notion/Slack 과 별개 섹션 */}
+      <SurveysSection workspace={workspace} />
 
       <div className="max-w-6xl mx-auto px-6 sm:px-10 mt-12">
         <div className="divider-ornament">

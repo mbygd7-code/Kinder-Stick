@@ -51,9 +51,15 @@ export interface AggregateResult {
   stage: Stage;
 }
 
+/**
+ * @param surveyInjections active 설문(NPS/PMF) 가 30+ 응답 모았을 때 자동 evidence.
+ *   `getActiveSurveysSummary()` 결과를 미리 fetch 해서 호출자가 전달.
+ *   생략하면 진단 응답만으로 계산 (이전 동작 그대로).
+ */
 export function aggregateRespondents(
   framework: FrameworkConfig,
   rows: DiagRowMin[],
+  surveyInjections: SubItemResponse[] = [],
 ): AggregateResult {
   const subDefs: SubItemDef[] = framework.domains.flatMap((d) =>
     d.groups.flatMap((g) =>
@@ -87,6 +93,13 @@ export function aggregateRespondents(
         evidence_recorded_at: new Date(r.evidence_recorded_at),
       });
     }
+  }
+
+  // 자동 설문 결과 합산 (NPS · PMF) — 30+ 응답 모인 active 설문이 있을 때만.
+  // 익명 응답자와 같은 가중치로 합산되어 consensus 평균에 들어간다.
+  for (const inj of surveyInjections) {
+    if (!subDefMap.has(inj.sub_item_code)) continue;
+    responses.push(inj);
   }
 
   const now = new Date();

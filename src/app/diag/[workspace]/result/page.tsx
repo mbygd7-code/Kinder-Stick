@@ -92,7 +92,13 @@ export default async function ResultPage({ params, searchParams }: Props) {
   }
 
   const framework = loadFramework();
-  const aggregate = aggregateRespondents(framework, rows);
+  const { injectActiveSurveyResults } = await import(
+    "@/lib/surveys/inject"
+  );
+  const surveyInjections = await injectActiveSurveyResults(workspace).catch(
+    () => [],
+  );
+  const aggregate = aggregateRespondents(framework, rows, surveyInjections);
 
   // Quarterly diagnosis check — surface a banner if the latest response is > 90d old
   const latestRow = rows[rows.length - 1];
@@ -387,6 +393,7 @@ interface AggregateResult {
 function aggregateRespondents(
   framework: ReturnType<typeof loadFramework>,
   rows: DiagnosisRow[],
+  surveyInjections: SubItemResponse[] = [],
 ): AggregateResult {
   // 모든 응답자의 sub-item 응답을 합쳐 SubItemResponse[]로 변환
   const subDefs: SubItemDef[] = framework.domains.flatMap((d) =>
@@ -421,6 +428,11 @@ function aggregateRespondents(
         evidence_recorded_at: new Date(r.evidence_recorded_at),
       });
     }
+  }
+  // active 설문 (NPS·PMF) 자동 응답 합산
+  for (const inj of surveyInjections) {
+    if (!subDefMap.has(inj.sub_item_code)) continue;
+    responses.push(inj);
   }
 
   const now = new Date();

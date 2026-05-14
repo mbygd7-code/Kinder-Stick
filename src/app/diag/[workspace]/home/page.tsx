@@ -183,7 +183,13 @@ export default async function HomePage({ params, searchParams }: Props) {
       ];
 
   const framework = loadFramework();
-  const aggregate = aggregateRespondents(framework, rows);
+  const { injectActiveSurveyResults } = await import(
+    "@/lib/surveys/inject"
+  );
+  const surveyInjections = await injectActiveSurveyResults(workspace).catch(
+    () => [],
+  );
+  const aggregate = aggregateRespondents(framework, rows, surveyInjections);
 
   // Quarterly check
   const latestRow = rows[rows.length - 1];
