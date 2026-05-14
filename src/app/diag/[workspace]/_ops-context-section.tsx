@@ -39,8 +39,10 @@ export interface OpsContext {
   service_launched_at?: string;
   /** 팀 규모 (정규직·풀타임 기준) */
   team_size?: number;
-  /** 자금 런웨이 개월 — 현재 자금으로 운영 가능한 개월 수 */
-  funding_runway_months?: number;
+  /** 월간 성장 투자 가용액 (KRW) — 목표 달성을 위해 월 단위로
+   *  마케팅·신규 채용·제품 확장에 투자 가능한 예산. 런웨이가 아닌
+   *  '의지 + 가용 자본' 합산. (예: 월 1.5억원 가용 → 빠른 채널 실험 가능) */
+  monthly_growth_budget_krw?: number;
   /** 경쟁 압박 — low(독점) / medium(유사 1-3) / high(다수 추격) */
   competitive_pressure?: "low" | "medium" | "high";
 
@@ -684,19 +686,18 @@ export function OpsContextSection({ workspace, onChange }: Props) {
           />
 
           <EditorialNumField
-            label="자금 런웨이"
-            kicker="RUNWAY"
-            hint="현재 자금·매출로 운영 가능한 개월 수 (성장 속도 상한 결정)"
-            value={ctx.funding_runway_months}
-            onChange={(v) => update("funding_runway_months", v)}
-            placeholder="14"
-            unit="개월"
+            label="월간 성장 투자 가용액"
+            kicker="GROWTH BUDGET"
+            hint="목표 달성을 위해 월 단위로 마케팅·신규 채용·제품 확장에 투자 가능한 KRW (런웨이가 아닌 회사의 의지 + 가용 자본 합산)"
+            value={ctx.monthly_growth_budget_krw}
+            onChange={(v) => update("monthly_growth_budget_krw", v)}
+            placeholder="150,000,000"
+            unit="₩"
             min={0}
-            max={120}
             onShowHistory={openHistory(
-              "funding_runway_months",
-              "자금 런웨이",
-              "개월",
+              "monthly_growth_budget_krw",
+              "월간 성장 투자 가용액",
+              "₩",
             )}
           />
 
