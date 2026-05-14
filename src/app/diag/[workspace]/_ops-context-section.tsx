@@ -591,7 +591,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             placeholder="2,500"
             unit="명"
             min={0}
-            recommendation={recommendedGoals.goal_new_signups_monthly}
+            recommendation={recommendedGoals.goal_new_signups_monthly ?? null}
             onShowHistory={openHistory(
               "goal_new_signups_monthly",
               "이번 달 신규 가입자 수 목표",
@@ -607,7 +607,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             placeholder="1,500"
             unit="명"
             min={0}
-            recommendation={recommendedGoals.goal_paid_users_monthly}
+            recommendation={recommendedGoals.goal_paid_users_monthly ?? null}
             onShowHistory={openHistory(
               "goal_paid_users_monthly",
               "이번 달 유료 사용자 수 목표",
@@ -623,7 +623,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             placeholder="20"
             unit="개"
             min={0}
-            recommendation={recommendedGoals.goal_plc_monthly}
+            recommendation={recommendedGoals.goal_plc_monthly ?? null}
             onShowHistory={openHistory(
               "goal_plc_monthly",
               "이번 달 PLC 수 목표",
@@ -644,7 +644,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             placeholder="50,000"
             unit="명"
             min={0}
-            recommendation={recommendedGoals.goal_total_members_annual}
+            recommendation={recommendedGoals.goal_total_members_annual ?? null}
             onShowHistory={openHistory(
               "goal_total_members_annual",
               "올해 누적 회원수 목표",
@@ -660,7 +660,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             placeholder="10,000"
             unit="명"
             min={0}
-            recommendation={recommendedGoals.goal_paid_subscribers_annual}
+            recommendation={recommendedGoals.goal_paid_subscribers_annual ?? null}
             onShowHistory={openHistory(
               "goal_paid_subscribers_annual",
               "올해 유료 구독자 수 목표",
@@ -676,7 +676,7 @@ export function OpsContextSection({ workspace, onChange }: Props) {
             placeholder="200"
             unit="개"
             min={0}
-            recommendation={recommendedGoals.goal_plc_annual}
+            recommendation={recommendedGoals.goal_plc_annual ?? null}
             onShowHistory={openHistory(
               "goal_plc_annual",
               "올해 PLC 수 목표",
@@ -878,29 +878,45 @@ function EditorialNumField({
         ) : null}
       </div>
 
-      {/* AI 추천 hint — 클릭 시 자동 채움 */}
-      {recommendation !== undefined &&
-      recommendation !== null &&
-      !Number.isNaN(recommendation) ? (
-        <div className="mt-1.5 flex items-baseline gap-1.5 flex-wrap">
-          <span className="label-mono text-ink-soft">↳ AI 추천</span>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              onChange(recommendation);
-            }}
-            className={`label-mono border border-accent/40 hover:border-accent hover:bg-soft-amber/40 px-2 py-0.5 transition-colors !text-accent font-bold ${
-              value === recommendation ? "bg-soft-amber/30" : ""
-            }`}
-            title="클릭하면 이 값으로 자동 채움"
+      {/* AI 추천 hint — 클릭 시 자동 채움.
+       *
+       * 3-state semantics:
+       *   prop === undefined → slot 자체 미렌더 (01·02 섹션 — 추천 개념 없음)
+       *   prop === null       → invisible spacer (03 섹션 — 같은 row 의 baseline 정렬용)
+       *   prop === number     → 실제 칩 렌더 + 클릭 자동 채움
+       */}
+      {recommendation !== undefined ? (
+        recommendation !== null && !Number.isNaN(recommendation) ? (
+          <div className="mt-1.5 flex items-baseline gap-1.5 flex-wrap">
+            <span className="label-mono text-ink-soft">↳ AI 추천</span>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                onChange(recommendation);
+              }}
+              className={`label-mono border border-accent/40 hover:border-accent hover:bg-soft-amber/40 px-2 py-0.5 transition-colors !text-accent font-bold ${
+                value === recommendation ? "bg-soft-amber/30" : ""
+              }`}
+              title="클릭하면 이 값으로 자동 채움"
+            >
+              {isCurrency
+                ? `₩${recommendation.toLocaleString("ko-KR")}`
+                : `${recommendation.toLocaleString("ko-KR")}${unit ? ` ${unit}` : ""}`}
+              {value === recommendation ? " · 적용됨" : " →"}
+            </button>
+          </div>
+        ) : (
+          // Invisible spacer — 같은 row 카드들의 input baseline 정렬용.
+          // 실제 칩과 동일 높이를 유지하되 시각/접근성에서 완전히 숨김.
+          <div
+            className="mt-1.5 flex items-baseline gap-1.5 flex-wrap invisible"
+            aria-hidden="true"
           >
-            {isCurrency
-              ? `₩${recommendation.toLocaleString("ko-KR")}`
-              : `${recommendation.toLocaleString("ko-KR")}${unit ? ` ${unit}` : ""}`}
-            {value === recommendation ? " · 적용됨" : " →"}
-          </button>
-        </div>
+            <span className="label-mono">↳ AI 추천</span>
+            <span className="label-mono border px-2 py-0.5">—</span>
+          </div>
+        )
       ) : null}
     </label>
   );
