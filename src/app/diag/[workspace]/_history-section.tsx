@@ -65,7 +65,7 @@ export function HistorySection({ workspace }: { workspace: string }) {
 
   if (loading) {
     return (
-      <section className="max-w-5xl mx-auto px-6 sm:px-10 mt-8">
+      <section className="max-w-5xl mx-auto px-6 sm:px-10 mt-8 pb-40">
         <p className="label-mono">이전 진단 불러오는 중…</p>
       </section>
     );
@@ -73,7 +73,7 @@ export function HistorySection({ workspace }: { workspace: string }) {
 
   if (error) {
     return (
-      <section className="max-w-5xl mx-auto px-6 sm:px-10 mt-8">
+      <section className="max-w-5xl mx-auto px-6 sm:px-10 mt-8 pb-40">
         <p className="label-mono text-signal-red">⚠ {error}</p>
       </section>
     );
@@ -83,8 +83,10 @@ export function HistorySection({ workspace }: { workspace: string }) {
     return null; // 첫 진단이면 이력 섹션 숨김
   }
 
+  // pb-40: sticky submit bar (대략 96px = h-24 + safe margin) 보다
+  // 더 큰 bottom padding 으로 마지막 카드가 가려지지 않게 한다.
   return (
-    <section className="max-w-5xl mx-auto px-6 sm:px-10 mt-12">
+    <section className="max-w-5xl mx-auto px-6 sm:px-10 mt-12 pb-40">
       <h2 className="font-display text-2xl sm:text-3xl leading-tight mb-1">
         이전 진단 이력
       </h2>
