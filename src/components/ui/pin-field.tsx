@@ -98,6 +98,7 @@ export function PinField({
         />
         <button
           type="button"
+          onMouseDown={(e) => e.preventDefault()}
           onClick={() => setVisible((v) => !v)}
           className={`absolute top-1/2 -translate-y-1/2 right-2 w-7 h-7 flex items-center justify-center border transition-colors ${
             visible

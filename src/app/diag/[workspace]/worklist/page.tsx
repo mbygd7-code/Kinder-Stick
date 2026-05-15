@@ -391,6 +391,7 @@ export default async function WorklistPage({ params }: Props) {
                                         tier={t.tier}
                                         domain={t.domain}
                                         task={t}
+                                        workspace={workspace}
                                       />
                                       <TaskEditButton
                                         workspace={workspace}
@@ -400,6 +401,7 @@ export default async function WorklistPage({ params }: Props) {
                                         workspace={workspace}
                                         taskId={t.id}
                                         autoStatus={auto}
+                                        task={t}
                                       />
                                     </div>
                                   </div>

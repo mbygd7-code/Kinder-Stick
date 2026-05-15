@@ -16,6 +16,9 @@ interface Body {
   domain?: string;
   hint?: string;
   ai_leverage?: string;
+  /** 사용자가 진단 전에 입력한 회사 현황·목표 (Ops Context).
+   *  AI 가 사용자의 실제 MAU·매출·목표 회원 수 등을 기반으로 맞춤 플레이북을 생성하도록 사용됨. */
+  ops_context?: Record<string, unknown>;
 }
 
 /**
@@ -55,6 +58,10 @@ export async function POST(req: Request) {
     domain: body.domain?.slice(0, 30),
     hint: body.hint?.slice(0, 400),
     ai_leverage: body.ai_leverage?.slice(0, 400),
+    ops_context:
+      body.ops_context && typeof body.ops_context === "object"
+        ? body.ops_context
+        : undefined,
   };
 
   try {

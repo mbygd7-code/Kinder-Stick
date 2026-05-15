@@ -202,7 +202,7 @@ export function ImpactPanel({ workspace, baseline, workspaceMeta }: Props) {
                   <span className="text-xl text-ink-soft font-light">%</span>
                 </p>
                 <p className="mt-1 label-mono">
-                  아무것도 안 하면 6개월 안에
+                  아무것도 안 하면 6개월 안에 회사가 심각한 어려움을 겪을 가능성
                 </p>
               </div>
 
@@ -223,7 +223,7 @@ export function ImpactPanel({ workspace, baseline, workspaceMeta }: Props) {
                   <span className="text-xl text-ink-soft font-light">%</span>
                 </p>
                 <p className="mt-1 label-mono">
-                  이론적 최저 ({dropPotentialPct}%p 감소 가능)
+                  필수 업무를 모두 끝냈을 때의 이론적 최저 위험 ({dropPotentialPct}%p 감소 가능)
                 </p>
               </div>
             </div>

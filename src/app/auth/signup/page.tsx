@@ -37,6 +37,14 @@ export default function SignupPage() {
     }
   }, [pin, pin2.length]);
 
+  // 이전에 입력/사용한 이메일 prefill
+  useEffect(() => {
+    try {
+      const last = window.localStorage.getItem(LS_LAST);
+      if (last) setEmail(last);
+    } catch {}
+  }, []);
+
   const validEmail = EMAIL_PATTERN.test(email);
   const validPin = PIN_PATTERN.test(pin);
   const matched = pin === pin2 && validPin;
@@ -119,7 +127,13 @@ export default function SignupPage() {
               type="email"
               autoComplete="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value.trim().toLowerCase())}
+              onChange={(e) => {
+                const v = e.target.value.trim().toLowerCase();
+                setEmail(v);
+                try {
+                  window.localStorage.setItem(LS_LAST, v);
+                } catch {}
+              }}
               className="evidence-input"
               placeholder="you@example.com"
               required

@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "generate:defaults": "node scripts/generate-default-playbooks.mjs",
+    "generate:defaults:incremental": "node scripts/generate-default-playbooks.mjs --only-missing"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.95.0",

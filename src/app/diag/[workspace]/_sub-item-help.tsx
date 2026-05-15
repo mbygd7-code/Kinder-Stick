@@ -47,10 +47,11 @@ function detectGlossaryTerms(...texts: (string | undefined)[]): Array<{
   entry: TermEntry;
 }> {
   const joined = texts.filter(Boolean).join(" \n ");
+  const joinedLower = joined.toLowerCase();
   const hits: Array<{ key: string; entry: TermEntry }> = [];
   for (const key of Object.keys(GLOSSARY)) {
     const entry = GLOSSARY[key];
-    // 키 OR 전문용어 OR 평이한 한국어 OR 영문 약어 매칭
+    // 키 OR 전문용어 OR 평이한 한국어 OR 영문 약어 매칭 (대소문자 무시)
     const candidates = [
       key,
       entry.professional,
@@ -58,7 +59,7 @@ function detectGlossaryTerms(...texts: (string | undefined)[]): Array<{
     ].filter(Boolean);
     for (const cand of candidates) {
       if (cand.length < 2) continue;
-      if (joined.includes(cand)) {
+      if (joinedLower.includes(cand.toLowerCase())) {
         hits.push({ key, entry });
         break;
       }
@@ -77,19 +78,22 @@ export function SubItemHelpPopover({ sub, domain }: Props) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // 본문에서 사전 매칭 — open 시점에만 계산
+  // 본문에서 사전 매칭 — open 시점에만 계산.
+  // citation/failure_trigger/domain.framework 같은 메타데이터는 제외 → 사용자가
+  // 화면에서 실제로 읽는 질문 본문(belief.q, belief.help, evidence.q, evidence options)
+  // 에 등장하는 용어만 노출 (질문과 무관한 용어 풀이 차단).
   const matchedTerms = useMemo(() => {
     if (!open) return [];
+    const evidenceOptionLabels = (sub.evidence.options ?? [])
+      .map((o) => o.label)
+      .join(" \n ");
     return detectGlossaryTerms(
       sub.belief.q,
       sub.belief.help,
       sub.evidence.q,
-      sub.citation,
-      sub.failure_trigger,
-      domain.name_ko,
-      domain.framework,
+      evidenceOptionLabels,
     );
-  }, [open, sub, domain]);
+  }, [open, sub]);
 
   // 외부 클릭 + ESC 닫기
   useEffect(() => {
@@ -236,6 +240,13 @@ export function SubItemHelpPopover({ sub, domain }: Props) {
                       <dd className="mt-1 text-sm text-ink-soft leading-relaxed">
                         {entry.explain}
                       </dd>
+                      {entry.details && entry.details.length > 0 ? (
+                        <ol className="mt-2 ml-5 list-decimal text-sm text-ink leading-relaxed space-y-1">
+                          {entry.details.map((d, i) => (
+                            <li key={i}>{d}</li>
+                          ))}
+                        </ol>
+                      ) : null}
                       {entry.link ? (
                         <a
                           href={entry.link}

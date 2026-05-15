@@ -9,29 +9,14 @@ import {
   type Task,
   type Tier,
 } from "@/lib/worklist/catalog";
-
-interface PlaybookKPI {
-  name: string;
-  threshold: string;
-  method: string;
-}
-interface PlaybookStep {
-  title: string;
-  detail: string;
-  owner?: string;
-  estimated_hours?: number;
-}
-interface PlaybookData {
-  summary: string;
-  output: string;
-  steps: PlaybookStep[];
-  kpis: PlaybookKPI[];
-  sample: string;
-  pitfalls: string[];
-  references: string[];
-  model: string;
-  generated_at: string;
-}
+import {
+  loadPlaybook as loadPlaybookCache,
+  savePlaybook as savePlaybookCache,
+  removePlaybook as removePlaybookCache,
+  uploadPlaybookToSharedCache,
+  type PlaybookData,
+} from "@/lib/worklist/playbook-cache";
+import { loadOpsContextFromLocalStorage } from "@/lib/ops-context/adapt";
 
 interface Props {
   description?: string;
@@ -43,37 +28,8 @@ interface Props {
   tier: Tier;
   domain?: string;
   task?: Task;
-}
-
-const CACHE_VERSION = "v4"; // v4: 본문 마크다운 sanitize
-
-function cacheKey(taskId: string): string {
-  return `worklist:playbook:${CACHE_VERSION}:${taskId}`;
-}
-
-function loadPlaybook(taskId: string): PlaybookData | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(cacheKey(taskId));
-    if (!raw) return null;
-    return JSON.parse(raw) as PlaybookData;
-  } catch {
-    return null;
-  }
-}
-
-function savePlaybook(taskId: string, p: PlaybookData): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(cacheKey(taskId), JSON.stringify(p));
-  } catch {
-    /* quota */
-  }
-}
-
-function removePlaybook(taskId: string): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.removeItem(cacheKey(taskId));
+  /** 사용자의 진단 전 회사 현황·목표를 AI 프롬프트에 주입하기 위해 필요. */
+  workspace?: string;
 }
 
 export function TaskDescriptionPopover({
@@ -86,6 +42,7 @@ export function TaskDescriptionPopover({
   tier,
   domain,
   task,
+  workspace,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [playbook, setPlaybook] = useState<PlaybookData | null>(null);
@@ -95,7 +52,7 @@ export function TaskDescriptionPopover({
 
   useEffect(() => {
     if (!open || !task) return;
-    const cached = loadPlaybook(task.id);
+    const cached = loadPlaybookCache(task);
     if (cached) setPlaybook(cached);
   }, [open, task]);
 
@@ -104,6 +61,12 @@ export function TaskDescriptionPopover({
     setError(null);
     setLoading(true);
     try {
+      // 사용자가 진단 전에 입력한 회사 현황·목표를 AI 프롬프트에 주입.
+      // 없으면 generic 프롬프트로 fallback (이전 버전과 동일 동작).
+      const opsContext = workspace
+        ? loadOpsContextFromLocalStorage(workspace)
+        : null;
+
       const r = await fetch("/api/worklist/playbook", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -119,6 +82,7 @@ export function TaskDescriptionPopover({
           domain: task.domain,
           hint: task.hint,
           ai_leverage: getAiLeverage(task),
+          ops_context: opsContext ?? undefined,
         }),
       });
       const data = (await r.json()) as
@@ -131,17 +95,33 @@ export function TaskDescriptionPopover({
         return;
       }
       setPlaybook(data);
-      savePlaybook(task.id, data);
+      savePlaybookCache(task, data);
+      // Supabase 공유 — ops_context 가 있으면 ops_hash 를 분리, 없으면 'generic'
+      if (workspace) {
+        const opsHash = opsContext
+          ? // 단순 stable hash: JSON 직렬화 → 동일 객체면 동일 hash
+            (() => {
+              const s = JSON.stringify(opsContext);
+              let h = 0x811c9dc5;
+              for (let i = 0; i < s.length; i++) {
+                h ^= s.charCodeAt(i);
+                h = Math.imul(h, 0x01000193);
+              }
+              return ("00000000" + (h >>> 0).toString(16)).slice(-8);
+            })()
+          : "generic";
+        uploadPlaybookToSharedCache(workspace, task, data, opsHash);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "네트워크 오류");
     } finally {
       setLoading(false);
     }
-  }, [task]);
+  }, [task, workspace]);
 
   const regenerate = useCallback(async () => {
     if (!task) return;
-    removePlaybook(task.id);
+    removePlaybookCache(task);
     setPlaybook(null);
     await generate();
   }, [task, generate]);

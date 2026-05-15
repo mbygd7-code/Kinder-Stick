@@ -2,18 +2,23 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Task } from "@/lib/worklist/catalog";
+import { loadPlaybook } from "@/lib/worklist/playbook-cache";
 import { Emphasize } from "./_emphasize";
 
 /* ------------------------------------------------------------------
  * Storage shape:
- *   worklist:playbook:v4:{taskId}                  → PlaybookData (AI 생성)
+ *   worklist:playbook:v5:{taskId}:{taskHash}       → PlaybookData (AI 생성, content-hashed)
  *   worklist:{workspace}:{taskId}:kpis             → { checked: number[] }
  *
- *   체크 상태가 바뀌면 `worklist:kpi-change` + `worklist:change` 모두 발행.
- *   StatusPill 이 후자를 듣고 자동으로 % 갱신.
+ *   체크 상태가 바뀌면:
+ *     1) localStorage 즉시 저장 (instant)
+ *     2) Supabase 비동기 업로드 (팀 공유, fire-and-forget)
+ *     3) `worklist:change` 발행 → StatusPill 이 자동 % 갱신.
+ *
+ *   페이지 mount 시 hydrateKpiChecksFromShared() 가 Supabase → localStorage
+ *   재시드 → 다른 기기·다른 멤버의 체크가 즉시 반영.
  * ------------------------------------------------------------------ */
 
-const PLAYBOOK_KEY = (taskId: string) => `worklist:playbook:v4:${taskId}`;
 const KPI_KEY = (ws: string, taskId: string) =>
   `worklist:${ws}:${taskId}:kpis`;
 
@@ -25,16 +30,12 @@ interface KpiCheckState {
   checked: number[];
 }
 
-function loadPlaybookKpis(taskId: string): PlaybookLite["kpis"] | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(PLAYBOOK_KEY(taskId));
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { kpis?: PlaybookLite["kpis"] };
-    return Array.isArray(parsed.kpis) ? parsed.kpis : null;
-  } catch {
-    return null;
-  }
+function loadPlaybookKpis(task: Task): PlaybookLite["kpis"] | null {
+  // 새 캐시 모듈(playbook-cache.ts)은 task content hash 를 cache key 에 포함 →
+  // task 객체 전체를 받아 hash 매칭으로 정확한 cache slot 을 찾는다.
+  const data = loadPlaybook(task);
+  if (!data) return null;
+  return Array.isArray(data.kpis) ? data.kpis : null;
 }
 
 function loadKpiChecks(workspace: string, taskId: string): number[] {
@@ -64,19 +65,112 @@ function saveKpiChecks(
       detail: { workspace, taskId, kpi: true },
     }),
   );
+  // Supabase 공유 캐시 — fire-and-forget. 실패해도 localStorage 는 이미 저장됨.
+  void uploadKpiChecksToShared(workspace, taskId, checked);
+}
+
+/**
+ * Supabase 의 kso_worklist_kpi_checks 테이블에 upsert.
+ * - PIN 세션이 없거나 Supabase 미설정이면 graceful no-op (서버가 200 + shared:false 반환)
+ * - 네트워크 오류 시 silent — UX 차단 금지
+ */
+async function uploadKpiChecksToShared(
+  workspace: string,
+  taskId: string,
+  checked: number[],
+): Promise<void> {
+  if (typeof window === "undefined") return;
+  try {
+    await fetch("/api/worklist/kpi-checks", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ workspace, task_id: taskId, checked }),
+      // bulk 자동 생성 등으로 다수 동시 호출 시에도 keepalive 로 페이지 unload 견딤
+      keepalive: true,
+    });
+  } catch {
+    // 무시 — localStorage 는 이미 안전하게 저장됨
+  }
+}
+
+/**
+ * 워크리스트 페이지 mount 시 1회 호출.
+ * Supabase 의 모든 KPI 체크를 fetch → localStorage 시드.
+ * - 다른 기기/시크릿 모드에서도 진행 상태 복원
+ * - 같은 팀 다른 멤버의 체크가 즉시 반영
+ *
+ * 정책:
+ *  - 항상 Supabase 가 truth-of-source — 로컬 값을 덮어씀.
+ *  - 단, Supabase entry 가 없는 task 는 로컬 값을 그대로 유지 (오프라인 보호).
+ *  - hydrate 후 worklist:change 한 번 발행 → StatusPill, 카드들이 자동 갱신.
+ *
+ * 반환: { hydrated: number, total: number, shared: bool }
+ */
+export async function hydrateKpiChecksFromShared(
+  workspace: string,
+): Promise<{ hydrated: number; total: number; shared: boolean }> {
+  if (typeof window === "undefined") {
+    return { hydrated: 0, total: 0, shared: false };
+  }
+  let res: Response;
+  try {
+    res = await fetch(
+      `/api/worklist/kpi-checks?workspace=${encodeURIComponent(workspace)}`,
+      { method: "GET" },
+    );
+  } catch {
+    return { hydrated: 0, total: 0, shared: false };
+  }
+  if (!res.ok) return { hydrated: 0, total: 0, shared: false };
+  let body: { entries?: Array<{ task_id: string; checked: number[] }>; shared?: boolean };
+  try {
+    body = await res.json();
+  } catch {
+    return { hydrated: 0, total: 0, shared: false };
+  }
+  const entries = Array.isArray(body.entries) ? body.entries : [];
+  const total = entries.length;
+  let hydrated = 0;
+  for (const e of entries) {
+    if (!e.task_id || !Array.isArray(e.checked)) continue;
+    const sanitized = e.checked.filter(
+      (i): i is number => typeof i === "number" && Number.isInteger(i) && i >= 0,
+    );
+    try {
+      window.localStorage.setItem(
+        KPI_KEY(workspace, e.task_id),
+        JSON.stringify({ checked: sanitized }),
+      );
+      hydrated++;
+    } catch {
+      // quota exceeded 등 — 무시
+    }
+  }
+  if (hydrated > 0) {
+    // detail.taskId 없음 → 모든 카드의 KPI 체크리스트가 1회 refresh
+    // (handler 가 detail 없는 이벤트는 무시하므로, 의도적으로 hydrate 전용 신호 추가)
+    window.dispatchEvent(
+      new CustomEvent("worklist:change", {
+        detail: { workspace, kpi: true, source: "kpi-hydrate" },
+      }),
+    );
+  }
+  return { hydrated, total, shared: !!body.shared };
 }
 
 /**
  * 외부에서 (StatusPill 등) KPI 진행률을 가져갈 수 있도록 export.
  * total > 0 이면 percent 계산 가능, 0 이면 KPI 체크 기능 미사용 상태.
+ *
+ * 시그니처: 새 캐시는 task content hash 가 필요하므로 Task 객체 전체를 받는다.
  */
 export function readKpiProgress(
   workspace: string,
-  taskId: string,
+  task: Task,
 ): { checked: number; total: number; percent: number } | null {
-  const kpis = loadPlaybookKpis(taskId);
+  const kpis = loadPlaybookKpis(task);
   if (!kpis || kpis.length === 0) return null;
-  const checks = loadKpiChecks(workspace, taskId);
+  const checks = loadKpiChecks(workspace, task.id);
   const validChecked = checks.filter((i) => i >= 0 && i < kpis.length).length;
   return {
     checked: validChecked,
@@ -104,7 +198,7 @@ export function TaskKpiChecklist({ task, workspace }: Props) {
   useEffect(() => {
     setMounted(true);
     const refresh = () => {
-      const k = loadPlaybookKpis(task.id) ?? [];
+      const k = loadPlaybookKpis(task) ?? [];
       setKpis(k);
       const c = loadKpiChecks(workspace, task.id);
       setChecked(new Set(c));
@@ -112,9 +206,16 @@ export function TaskKpiChecklist({ task, workspace }: Props) {
     refresh();
     // 다른 컴포넌트(특히 playbook popover, bulk generator)가 KPI를 새로 만들면 알림.
     // taskId 매칭 — 다른 카드의 변경은 무시해서 138개 동시 재렌더를 방지.
+    // 단, source === "kpi-hydrate" 는 워크스페이스 전체 hydrate 신호 →
+    // taskId 없어도 모든 카드 refresh 필요.
     const handler = (e: Event) => {
-      const ce = e as CustomEvent<{ taskId?: string }>;
+      const ce = e as CustomEvent<{ taskId?: string; source?: string }>;
       const tid = ce.detail?.taskId;
+      const src = ce.detail?.source;
+      if (src === "kpi-hydrate") {
+        refresh();
+        return;
+      }
       // detail 이 없는 이벤트는 (호환성) 일단 무시 — 진짜 갱신은 detail 필수
       if (tid && tid !== task.id) return;
       if (!tid) return;

@@ -903,47 +903,9 @@ function DomainSection({
             />
           ))}
 
-          {/* 비활성 카드 — 접힘 + 사유 + 펼치기 가능 */}
-          {inactiveSubs.map((s) => {
-            const adaptation = profile.sub_item_adaptations[s.code];
-            if (!adaptation) return null;
-            const expanded = expandedInactiveCodes.has(s.code);
-            if (!expanded) {
-              return (
-                <InactiveCollapsedCard
-                  key={s.code}
-                  sub={s}
-                  adaptation={adaptation}
-                  onExpand={() => toggleInactive(s.code)}
-                />
-              );
-            }
-            // 펼침: 일반 SubItemForm + 회수 버튼
-            return (
-              <div key={s.code}>
-                <div className="mb-1 flex items-center justify-between gap-2 text-xs font-mono">
-                  <span className="text-signal-amber">
-                    ⓘ 펼침 — {adaptation.reason}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => toggleInactive(s.code)}
-                    className="text-ink-soft underline hover:text-ink"
-                  >
-                    다시 접기
-                  </button>
-                </div>
-                <SubItemForm
-                  workspace={workspace}
-                  sub={s}
-                  domain={domain}
-                  response={responses[s.code]}
-                  onChange={(patch) => setResponse(s.code, patch)}
-                  referenceInfo={profile.reference_info[s.code]}
-                />
-              </div>
-            );
-          })}
+          {/* 비활성 카드 — 사용자 혼란 방지를 위해 화면에서 숨김 처리.
+              내부 데이터/adaptation 은 그대로 유지되며 결과/통계에는 영향 없음.
+              필요 시 inactiveSubs.map(...) 블록을 복원하면 다시 노출됩니다. */}
 
           {/* T3 추가 카드 — "추가됨" 배지 + 거부 ✕ */}
           {addedForDomain.map((a) => (

@@ -7,10 +7,25 @@ import {
   getAiLeverage,
   type Task,
 } from "@/lib/worklist/catalog";
+import {
+  hasPlaybook as hasPlaybookCache,
+  hydrateSharedPlaybookCache,
+  playbookCacheKey,
+  pruneOldPlaybookEntries,
+  seedPlaybookDefaultsFromBundle,
+  uploadPlaybookToSharedCache,
+} from "@/lib/worklist/playbook-cache";
+import { hydrateKpiChecksFromShared } from "./_task-kpi-checklist";
 
 /**
  * Bulk Playbook Generator — 진단 완료 후 모든 업무 카드의 실무 자료(playbook)를
- * 백그라운드에서 동시 3개씩 생성한다.
+ * 백그라운드에서 동시 N개씩 생성한다.
+ *
+ * 캐시 전략 (v5):
+ *  - cache key 가 task **콘텐츠 해시** 를 포함하므로 task 정의가 바뀌지 않은
+ *    카드는 절대 재생성되지 않음 → 진단 다시 해도 변경된 카드만 새로 생성.
+ *  - 일부 카드만 수정되면 → 해당 카드만 cache miss → 빠른 부분 재생성.
+ *  - mount 시 pruneOldPlaybookEntries 로 이전 hash/version 의 잔여 캐시 정리.
  *
  * 동작:
  *  1. mount 시 hasDiagnosis 이고, 자동 시작 플래그가 없으면 자동으로 시작
@@ -20,10 +35,9 @@ import {
  *  5. localStorage 키:
  *      worklist:bulk:auto-started:{ws}  → 자동 시작 1회 플래그
  *      worklist:bulk:dismissed:{ws}     → 사용자가 닫기 누르면 더 안 보임
- *      worklist:playbook:v4:{taskId}    → 개별 결과 (TaskDescriptionPopover와 공유)
+ *      worklist:playbook:v5:{taskId}:{taskHash}  → 개별 결과 (TaskDescriptionPopover 와 공유)
  */
 
-const PLAYBOOK_CACHE = (taskId: string) => `worklist:playbook:v4:${taskId}`;
 const AUTO_FLAG = (ws: string) => `worklist:bulk:auto-started:${ws}`;
 const DISMISS_FLAG = (ws: string) => `worklist:bulk:dismissed:${ws}`;
 /** 생성이 시작되어 아직 끝나지 않았음을 표시 — 페이지 재방문 시 자동 재개에 사용. */
@@ -43,9 +57,8 @@ interface Props {
 
 type Phase = "idle" | "running" | "paused" | "complete" | "dismissed";
 
-function hasPlaybook(taskId: string): boolean {
-  if (typeof window === "undefined") return false;
-  return window.localStorage.getItem(PLAYBOOK_CACHE(taskId)) !== null;
+function hasPlaybook(task: Task): boolean {
+  return hasPlaybookCache(task);
 }
 
 /**
@@ -92,6 +105,11 @@ function buildPayload(task: Task): PlaybookPayload {
 }
 
 async function generateOne(task: Task, workspace: string): Promise<void> {
+  // bulk 생성은 의도적으로 ops_context 를 보내지 않음 →
+  //   - 모든 워크스페이스가 같은 generic 결과를 공유 가능
+  //   - taskHash 만으로 cache key 결정 → 한 번 생성하면 영구 재사용
+  // 사용자가 자기 회사 데이터 반영을 원하면 카드에서 [재생성] 클릭 시
+  // ops_context 가 자동 주입됨 (TaskDescriptionPopover.generate 참고).
   const r = await fetch("/api/worklist/playbook", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -101,8 +119,11 @@ async function generateOne(task: Task, workspace: string): Promise<void> {
     throw new Error(`HTTP ${r.status}`);
   }
   const data = await r.json();
-  window.localStorage.setItem(PLAYBOOK_CACHE(task.id), JSON.stringify(data));
-  // 이벤트에 task.id 를 포함 → 해당 카드 리스너만 반응, 138개 모두 깨우지 않음.
+  // 1) localStorage 즉시 저장 (instant cache)
+  window.localStorage.setItem(playbookCacheKey(task), JSON.stringify(data));
+  // 2) Supabase 공유 캐시 업로드 (팀원과 즉시 공유, fire-and-forget)
+  uploadPlaybookToSharedCache(workspace, task, data, "generic");
+  // 3) 이벤트에 task.id 를 포함 → 해당 카드 리스너만 반응, 164개 모두 깨우지 않음.
   window.dispatchEvent(
     new CustomEvent("worklist:change", {
       detail: { workspace, taskId: task.id, source: "bulk" },
@@ -127,9 +148,42 @@ export function BulkPlaybookGenerator({ workspace, hasDiagnosis }: Props) {
     if (initRef.current) return;
     initRef.current = true;
 
+    // 옛 hash·옛 CACHE_VERSION 의 잔여 캐시 제거 (storage quota 확보).
+    pruneOldPlaybookEntries(TASKS);
+
     const tot = TASKS.length;
-    const initialDone = TASKS.filter((t) => hasPlaybook(t.id)).length;
     setTotal(tot);
+
+    // 시드 순서:
+    //   (a) 번들된 default playbook → AI 호출 0회, 즉시 적용
+    //   (b) Supabase 공유 캐시 → 팀원이 이전에 생성한 결과 hydrate (네트워크 1회)
+    // 두 시드 모두 already-cached 항목은 건드리지 않음 → 사용자 ops_context 결과 보존.
+    void (async () => {
+      const dStat = await seedPlaybookDefaultsFromBundle(TASKS);
+      const hStat = await hydrateSharedPlaybookCache(workspace, TASKS);
+      // 팀 공유 KPI 체크 상태도 함께 hydrate — playbook 과 독립적으로 진행 가능.
+      // 다른 기기·다른 멤버의 체크 진행이 즉시 보임.
+      const kStat = await hydrateKpiChecksFromShared(workspace);
+      const initialDone = TASKS.filter((t) => hasPlaybook(t)).length;
+      setDone(initialDone);
+      const totalSeeded = dStat.seeded + hStat.hydrated;
+      if (totalSeeded > 0) {
+        window.dispatchEvent(
+          new CustomEvent("worklist:change", {
+            detail: {
+              workspace,
+              source: "seed",
+              count: totalSeeded,
+              defaults: dStat.seeded,
+              shared: hStat.hydrated,
+              kpi_hydrated: kStat.hydrated,
+            },
+          }),
+        );
+      }
+    })();
+
+    const initialDone = TASKS.filter((t) => hasPlaybook(t)).length;
     setDone(initialDone);
 
     const isDismissed =
@@ -156,7 +210,7 @@ export function BulkPlaybookGenerator({ workspace, hasDiagnosis }: Props) {
     notifyBulkState(true, workspace);
 
     // Find tasks that need playbook
-    const todo = TASKS.filter((t) => !hasPlaybook(t.id));
+    const todo = TASKS.filter((t) => !hasPlaybook(t));
     let localDone = TASKS.length - todo.length;
 
     // Worker pool
@@ -197,7 +251,7 @@ export function BulkPlaybookGenerator({ workspace, hasDiagnosis }: Props) {
         // 사용자가 일시 중지 → 자동 재개 안 되게 플래그 제거
         window.localStorage.removeItem(RUNNING_FLAG(workspace));
       } else {
-        const remaining = TASKS.filter((t) => !hasPlaybook(t.id)).length;
+        const remaining = TASKS.filter((t) => !hasPlaybook(t)).length;
         if (remaining === 0) {
           setPhase("complete");
           window.localStorage.removeItem(RUNNING_FLAG(workspace));

@@ -52,6 +52,9 @@ export interface PlaybookInput {
   domain?: string;
   hint?: string;
   ai_leverage?: string;
+  /** 사용자가 진단 전에 입력한 회사 현황·목표 (Ops Context).
+   *  AI 프롬프트에 [회사 현황] 블록으로 주입되어 사용자의 실제 숫자에 맞춤 플레이북 생성. */
+  ops_context?: Record<string, unknown>;
 }
 
 export interface PlaybookKPI {
@@ -384,11 +387,79 @@ function parseMarkdown(raw: string): {
   return { summary, output, steps, kpis, sample, pitfalls, references };
 }
 
+/**
+ * Ops Context 를 사람이 읽기 좋은 [회사 현황] 블록으로 변환.
+ * 비어 있거나 의미있는 값이 없으면 null 을 반환해 prompt 에 포함되지 않게 함.
+ */
+function formatOpsContextBlock(
+  ctx: Record<string, unknown> | undefined,
+): string | null {
+  if (!ctx || typeof ctx !== "object") return null;
+
+  const fmtKrw = (v: unknown) => {
+    const n = Number(v);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    if (n >= 100_000_000) return `${(n / 100_000_000).toFixed(1)}억 원`;
+    if (n >= 10_000) return `${(n / 10_000).toFixed(0)}만 원`;
+    return `${n.toLocaleString()} 원`;
+  };
+  const fmtNum = (v: unknown, suffix = "") => {
+    const n = Number(v);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return `${n.toLocaleString()}${suffix}`;
+  };
+  const fmtPct = (v: unknown) => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return null;
+    return `${n}%`;
+  };
+
+  const lines: string[] = [];
+  const push = (label: string, val: string | null | undefined) => {
+    if (val) lines.push(`- ${label}: ${val}`);
+  };
+
+  // 회사 / 팀
+  push("서비스 출시일", typeof ctx.service_launched_at === "string" ? ctx.service_launched_at : null);
+  push("팀 규모 (전임)", fmtNum(ctx.team_size, "명"));
+  push("월간 성장 예산", fmtKrw(ctx.monthly_growth_budget_krw));
+  push(
+    "경쟁 압력",
+    typeof ctx.competitive_pressure === "string"
+      ? { low: "낮음", medium: "보통", high: "높음" }[ctx.competitive_pressure as string] ?? null
+      : null,
+  );
+
+  // 현재 운영 지표
+  push("월간 활성 사용자 (MAU)", fmtNum(ctx.mau, "명"));
+  push("주간 활성 사용자 (WAU)", fmtNum(ctx.wau, "명"));
+  push("누적 회원 수", fmtNum(ctx.total_members, "명"));
+  push("월 신규 가입", fmtNum(ctx.new_signups_monthly, "명"));
+  push("월 이탈", fmtNum(ctx.churn_monthly, "명"));
+  push("D1 활성화율", fmtPct(ctx.d1_activation_rate));
+  push("월 매출", fmtKrw(ctx.revenue_monthly_krw));
+  push("월 유료 사용자", fmtNum(ctx.paid_users_monthly, "명"));
+  push("매출 유지율 (NRR)", fmtPct(ctx.nrr_rate));
+
+  // 목표
+  push("[월 목표] 신규 가입", fmtNum(ctx.goal_new_signups_monthly, "명"));
+  push("[월 목표] 유료 사용자", fmtNum(ctx.goal_paid_users_monthly, "명"));
+  push("[월 목표] PLC (개월)", fmtNum(ctx.goal_plc_monthly));
+  push("[연간 목표] 누적 회원", fmtNum(ctx.goal_total_members_annual, "명"));
+  push("[연간 목표] 유료 구독자", fmtNum(ctx.goal_paid_subscribers_annual, "명"));
+  push("[연간 목표] PLC (개월)", fmtNum(ctx.goal_plc_annual));
+
+  if (lines.length === 0) return null;
+  return ["[회사 현황 — 사용자가 진단 전에 입력한 실제 데이터]", ...lines].join("\n");
+}
+
 export async function generatePlaybook(
   input: PlaybookInput,
 ): Promise<PlaybookOutput> {
   const model = "claude-haiku-4-5-20251001";
   const generated_at = new Date().toISOString();
+
+  const opsBlock = formatOpsContextBlock(input.ops_context);
 
   const userMessage = [
     `[업무 ID] ${input.task_id}`,
@@ -402,8 +473,12 @@ export async function generatePlaybook(
     input.domain ? `[도메인] ${input.domain}` : null,
     input.hint ? `[힌트] ${input.hint}` : null,
     input.ai_leverage ? `[AI 활용 메모] ${input.ai_leverage}` : null,
+    opsBlock ? "" : null,
+    opsBlock,
     "",
-    "위 업무를 실행하는 직원이 바로 참고해서 액션할 수 있도록 풍부한 자료를 마크다운 섹션 형식으로 생성해주세요. (JSON 아님)",
+    opsBlock
+      ? "위 업무를 실행하는 직원이 바로 참고해서 액션할 수 있도록 풍부한 자료를 마크다운 섹션 형식으로 생성해주세요. **반드시 위 [회사 현황] 의 실제 숫자·목표를 KPI threshold·sample 템플릿·산출물·단계 추정치에 반영하세요. '기본 시나리오 예시' 같은 일반론 대신 사용자 회사의 구체적 수치를 사용.** (JSON 아님)"
+      : "위 업무를 실행하는 직원이 바로 참고해서 액션할 수 있도록 풍부한 자료를 마크다운 섹션 형식으로 생성해주세요. (JSON 아님)",
   ]
     .filter(Boolean)
     .join("\n");

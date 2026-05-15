@@ -20,6 +20,10 @@ export interface TermEntry {
   professional: string;
   /** 호버 시 보여줄 1–2문장 풀이 */
   explain: string;
+  /** (선택) 프레임워크의 세부 항목 — 예: Nielsen 10원칙의 10개 항목.
+   * 도움말 popover 에서 번호 매긴 리스트로 표시되어 사용자가 외부 검색 없이
+   * 바로 질문을 이해·답변할 수 있게 한다. */
+  details?: string[];
   /** 외부 학습 자료 (선택) */
   link?: string;
   /** 카테고리 — 자동 분류용 */
@@ -438,6 +442,188 @@ export const GLOSSARY: Record<string, TermEntry> = {
     explain:
       "한국 개인정보 보호 법령. 영유아 정보는 만 14세 미만 특별 조항(22조의 2) 으로 더 엄격.",
     category: "compliance",
+  },
+
+  // ──────────────────────────── UX / Audit / Heuristics ─────────────
+  Nielsen: {
+    friendly: "Nielsen 사용성 10원칙",
+    professional: "Nielsen 10 Usability Heuristics",
+    explain:
+      "Jakob Nielsen 이 1994년에 정리한 UI 설계의 10가지 원칙. 각 원칙으로 화면을 1–5점 채점해 사용성을 진단한다 (10원칙 × 5점 = 50점 만점).",
+    details: [
+      "시스템 상태 가시성 — 지금 무슨 일이 일어나는지 사용자에게 즉시 알려준다 (로딩·진행률·저장 완료 등).",
+      "현실 세계와의 일치 — 사용자 언어로 말한다 (전문용어 X, 익숙한 메타포 O).",
+      "사용자 통제·자유 — 실수해도 쉽게 되돌릴 수 있다 (취소·뒤로가기·되돌리기).",
+      "일관성·표준 — 같은 행동은 같은 결과를. 플랫폼 관습을 따른다.",
+      "오류 방지 — 오류가 나기 전에 막는다 (확인 단계·기본값·자동완성).",
+      "기억보다 인식 — 사용자가 외우게 하지 말고 보여준다 (옵션 노출·최근 항목).",
+      "유연성·효율 — 초보자엔 쉽게, 숙련자엔 단축키·매크로 제공.",
+      "심미·미니멀 — 꼭 필요한 정보만. 부가 정보는 시각적으로 약하게.",
+      "오류 인식·진단·복구 — 오류 메시지는 평이한 말로, 원인과 해결책을 함께.",
+      "도움말·문서 — 필요하지 않게 설계하되, 필요할 땐 검색·맥락에 맞게 제공.",
+    ],
+    link: "https://www.nngroup.com/articles/ten-usability-heuristics/",
+    category: "ux",
+  },
+  audit: {
+    friendly: "점검·감사",
+    professional: "Audit",
+    explain:
+      "정해진 기준(체크리스트·표준) 으로 현재 상태를 객관적으로 평가하는 절차. 예: '사용성 audit' = 화면을 10가지 원칙으로 채점.",
+    category: "ops",
+  },
+
+  // ──────────────────────────── Engineering / DevOps ─────────────────
+  DORA: {
+    friendly: "DORA 4대 지표",
+    professional: "DORA · DevOps Research and Assessment",
+    explain:
+      "엔지니어링 성과를 측정하는 4지표: 배포 빈도·리드 타임·변경 실패율·복구 시간. Google Cloud DORA 리포트 기준.",
+    link: "https://dora.dev/",
+    category: "metric",
+  },
+  "Lean Startup": {
+    friendly: "린 스타트업",
+    professional: "Lean Startup",
+    explain:
+      "Eric Ries 의 방법론. '만들고-측정하고-배운다(Build-Measure-Learn)' 사이클로 가설을 빠르게 검증.",
+    link: "https://theleanstartup.com/",
+    category: "framework",
+  },
+  "Build-Measure-Learn": {
+    friendly: "만들고-측정-학습 사이클",
+    professional: "Build–Measure–Learn",
+    explain:
+      "Lean Startup 의 핵심 루프. MVP 만들기 → 사용자 데이터 측정 → 가설 학습 → 다음 사이클.",
+    category: "framework",
+  },
+  "Shape Up": {
+    friendly: "Shape Up 개발 사이클",
+    professional: "Shape Up (Basecamp)",
+    explain:
+      "Basecamp 가 만든 6주 단위 제품 개발 방법론. 정해진 시간 안에 범위를 조정하며 마무리.",
+    link: "https://basecamp.com/shapeup",
+    category: "framework",
+  },
+  AARRR: {
+    friendly: "해적 지표 5단계",
+    professional: "AARRR · Pirate Metrics",
+    explain:
+      "Dave McClure 의 스타트업 분석 프레임. Acquisition → Activation → Retention → Revenue → Referral 5단계 깔때기.",
+    category: "framework",
+  },
+
+  // ──────────────────────────── Team / Org ─────────────────────────
+  "Lencioni 5 Dysfunctions": {
+    friendly: "팀 5가지 역기능",
+    professional: "Lencioni 5 Dysfunctions of a Team",
+    explain:
+      "Patrick Lencioni 모델. 신뢰 부재 → 갈등 회피 → 헌신 부재 → 책임 회피 → 결과 무관심 5단계 누적 실패. 팀 정렬 진단의 표준.",
+    category: "ops",
+  },
+  Edmondson: {
+    friendly: "심리적 안전감 (Edmondson)",
+    professional: "Amy Edmondson · Psychological Safety",
+    explain:
+      "Harvard 교수 Edmondson 의 연구. 팀원이 실수·반대 의견을 두려움 없이 말할 수 있는 분위기 = 학습·혁신의 전제 조건.",
+    link: "https://hbr.org/2023/04/what-is-psychological-safety",
+    category: "ops",
+  },
+  Christensen: {
+    friendly: "JTBD 창시자 Christensen",
+    professional: "Clayton Christensen",
+    explain:
+      "Harvard 교수, '혁신의 딜레마'와 JTBD(Jobs To Be Done) 이론의 창시자.",
+    category: "framework",
+  },
+
+  // ──────────────────────────── 우선순위 / 의사결정 ────────────────
+  RICE: {
+    friendly: "RICE 우선순위 점수",
+    professional: "RICE Score (Reach·Impact·Confidence·Effort)",
+    explain:
+      "Intercom 이 만든 백로그 우선순위 공식. (Reach × Impact × Confidence) ÷ Effort. 직관 대신 숫자로 비교.",
+    category: "framework",
+  },
+  ICE: {
+    friendly: "ICE 점수",
+    professional: "ICE Score (Impact·Confidence·Ease)",
+    explain:
+      "Sean Ellis 그로스 해킹 우선순위. Impact × Confidence × Ease 평균. RICE 보다 단순.",
+    category: "framework",
+  },
+  MVP: {
+    friendly: "최소 기능 제품",
+    professional: "MVP · Minimum Viable Product",
+    explain:
+      "가설을 검증할 수 있는 최소한의 기능만 갖춘 초기 버전. 빠르게 시장 반응을 보고 학습.",
+    category: "framework",
+  },
+
+  // ──────────────────────────── 매출 / SaaS ────────────────────────
+  MRR: {
+    friendly: "월 반복 매출",
+    professional: "MRR · Monthly Recurring Revenue",
+    explain:
+      "구독·반복 결제로 매월 안정적으로 들어오는 매출. SaaS 의 가장 기본 KPI.",
+    category: "metric",
+  },
+  ARR: {
+    friendly: "연 반복 매출",
+    professional: "ARR · Annual Recurring Revenue",
+    explain: "MRR × 12. 연간 기준 반복 매출 규모.",
+    category: "metric",
+  },
+  LTV: {
+    friendly: "고객 생애 가치",
+    professional: "LTV · Customer Lifetime Value",
+    explain:
+      "한 고객이 평생 동안 우리에게 지불할 매출 합계 추정. CAC 와 비교해 LTV/CAC ≥ 3 을 권장.",
+    category: "metric",
+  },
+  CSAT: {
+    friendly: "고객 만족도 점수",
+    professional: "CSAT · Customer Satisfaction Score",
+    explain:
+      "특정 경험 직후 '얼마나 만족하셨나요?'(1–5점) 평균. NPS 가 충성도라면 CSAT 는 즉각적 만족도.",
+    category: "metric",
+  },
+
+  // ──────────────────────────── 데이터 분석 ───────────────────────
+  Funnel: {
+    friendly: "전환 깔때기",
+    professional: "Conversion Funnel",
+    explain:
+      "사용자가 가입 → 활성 → 구매 등 단계별로 좁아지는 흐름. 각 단계 전환율을 측정하면 어디서 막히는지 보임.",
+    category: "metric",
+  },
+  CRM: {
+    friendly: "고객 관계 관리 시스템",
+    professional: "CRM · Customer Relationship Management",
+    explain:
+      "고객 정보·소통 이력·매출을 한 곳에서 관리하는 도구. 예: HubSpot, Salesforce.",
+    category: "ops",
+  },
+  GA4: {
+    friendly: "Google Analytics 4",
+    professional: "GA4",
+    explain:
+      "Google 의 웹/앱 행동 분석 도구 최신판. 이벤트 기반으로 사용자 흐름 추적.",
+    category: "metric",
+  },
+  Mixpanel: {
+    friendly: "Mixpanel 사용자 분석 도구",
+    professional: "Mixpanel",
+    explain:
+      "이벤트 기반 제품 분석 SaaS. cohort retention·funnel 분석에 강함.",
+    category: "metric",
+  },
+  Amplitude: {
+    friendly: "Amplitude 사용자 분석 도구",
+    professional: "Amplitude",
+    explain:
+      "이벤트·세션 기반 제품 분석 SaaS. 사용자 여정·retention·실험 분석에 사용.",
+    category: "metric",
   },
 };
 

@@ -71,6 +71,15 @@ export function EvidenceInputPanel({
   const files = state.evidence_files ?? [];
   const ai = state.ai_analysis;
 
+  // 패널 펼침/접힘 — 기본 접힘, 사용자가 헤더 클릭 시 펼침.
+  // 단, 이미 입력값/파일/AI 결과가 있다면 자동으로 펼친 상태로 시작 (저장된 데이터 가시성 확보).
+  const initialOpen =
+    !!state.actual_value?.trim() ||
+    !!state.notes?.trim() ||
+    (state.evidence_files?.length ?? 0) > 0 ||
+    !!state.ai_analysis;
+  const [open, setOpen] = useState(initialOpen);
+
   // 수치 입력 placeholder — evidence options 로부터 추론
   const numericHint = makeNumericHint(sub);
 
@@ -171,13 +180,24 @@ export function EvidenceInputPanel({
 
   return (
     <div className="mt-5 border-2 border-ink-soft/40 bg-paper-soft/60 p-4 sm:p-5">
-      <div className="flex items-baseline justify-between gap-2 flex-wrap mb-3">
-        <p className="kicker">증거 입력</p>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="w-full flex items-baseline justify-between gap-2 flex-wrap mb-0 cursor-pointer text-left hover:opacity-80 transition-opacity"
+      >
+        <p className="kicker flex items-center gap-2">
+          <span className="font-mono text-xs">{open ? "▾" : "▸"}</span>
+          증거 입력
+        </p>
         <span className="label-mono">
-          {hasInput ? "✓ 입력됨" : "권장 — 조작 방지·자동 추론"}
+          {hasInput ? "✓ 입력됨" : open ? "권장 — 조작 방지·자동 추론" : "클릭하여 펼치기"}
         </span>
-      </div>
+      </button>
 
+      {open ? (
+        <>
+      <div className="mt-3" />
       {/* 실측 값 + 노트 */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <label className="block">
@@ -337,6 +357,8 @@ export function EvidenceInputPanel({
             </p>
           )}
         </div>
+      ) : null}
+        </>
       ) : null}
     </div>
   );

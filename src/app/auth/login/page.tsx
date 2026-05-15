@@ -143,7 +143,13 @@ export default function LoginPage() {
                 type="email"
                 autoComplete="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value.trim().toLowerCase())}
+                onChange={(e) => {
+                  const v = e.target.value.trim().toLowerCase();
+                  setEmail(v);
+                  try {
+                    window.localStorage.setItem(LS_LAST, v);
+                  } catch {}
+                }}
                 onFocus={() =>
                   historyEmails.length > 0 && setShowHistory(true)
                 }

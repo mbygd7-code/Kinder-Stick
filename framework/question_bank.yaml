@@ -75,9 +75,9 @@ domains:
           belief:
             q: "교사 인터뷰에서 이 문제를 'urgent(급하다)'로 분류한 비율이 50% 이상이다."
             anchors: ["전혀 아니다", "10–20%", "20–35%", "35–50%", "50% 이상"]
-            help: "Important과 Urgent는 다르다. Urgent만 지갑을 연다."
+            help: "중요 (Important) 와 시급 (Urgent) 은 다르다. 시급한 문제만 사용자가 지갑을 연다."
           evidence:
-            q: "최근 6개월 인터뷰에서 'urgent' 분류된 응답자 비율"
+            q: "최근 6개월 인터뷰에서 '급하다 (urgent)' 로 분류된 응답자 비율"
             type: choice
             options:
               - { v: 1, label: "측정 안 함 또는 < 10%" }
@@ -116,7 +116,7 @@ domains:
             q: "사용자가 '이 문제를 풀기 위해 직전에 시도한 것'이 무엇인지 5명 이상에게서 들었다."
             anchors: ["듣지 못함", "1–2명", "3–4명", "5–6명", "7명 이상"]
           evidence:
-            q: "Push-Pull-Anxiety-Habit 분석을 한 인터뷰 수"
+            q: "사용자 동기 분석 (Push-Pull-Anxiety-Habit) 을 진행한 인터뷰 수"
             type: choice
             options:
               - { v: 1, label: "0건" }
@@ -149,10 +149,10 @@ domains:
           tier: critical
           weight_within_group: 0.45
           belief:
-            q: "지난 90일 안에 Sean Ellis 40% 테스트(n≥30)를 직접 돌리고 결과를 안다."
+            q: "지난 90일 안에 사용자 만족도 테스트 (Sean Ellis 40%, n≥30) 를 직접 돌리고 결과를 안다."
             anchors: ["테스트가 뭔지 모른다", "들어봤지만 안 돌렸다", "비공식 n<30으로 1회", "n≥30 1회 실시", "분기마다 추적"]
           evidence:
-            q: "최근 Sean Ellis 테스트의 'Very Disappointed' 비율"
+            q: "최근 만족도 테스트 (Sean Ellis) 에서 '매우 아쉽다 (Very Disappointed)' 응답 비율"
             type: choice
             options:
               - { v: 1, label: "< 15% 또는 미측정" }
@@ -173,10 +173,10 @@ domains:
           tier: critical
           weight_within_group: 0.4
           belief:
-            q: "가입 3개월 후에도 활성 상태인 교사 비율이 우리 핵심 KPI 보드에 매주 표시된다."
+            q: "가입 3개월 후에도 활성 상태인 교사 비율이 우리 핵심 지표 (KPI) 보드에 매주 표시된다."
             anchors: ["측정 안 함", "분기 1회 본다", "월 1회", "주 1회", "실시간 대시보드"]
           evidence:
-            q: "가장 최근 cohort의 M3 retention (가입 3개월 후 weekly active)"
+            q: "가장 최근 가입 동기 그룹 (cohort) 의 3개월 유지율 (M3 retention, 가입 3개월 후 주간 활성)"
             type: choice
             options:
               - { v: 1, label: "< 15%" }
@@ -197,10 +197,10 @@ domains:
           tier: critical
           weight_within_group: 0.5
           belief:
-            q: "우리는 '어떤 기관, 어떤 역할, 어떤 상황'에서 PMF를 찾았다고 한 문장으로 답할 수 있다."
+            q: "우리는 '어떤 기관, 어떤 역할, 어떤 상황'에서 제품-시장 적합성 (PMF) 을 찾았다고 한 문장으로 답할 수 있다."
             anchors: ["전혀", "추측 수준", "가설 있음", "데이터로 검증된 가설", "한 문장 명문화 + 분기 검증"]
           evidence:
-            q: "ICP 정의 문서가 존재하고 90일 이내 갱신됐는가?"
+            q: "이상적 고객 (ICP) 정의 문서가 존재하고 90일 이내 갱신됐는가?"
             type: choice
             options:
               - { v: 1, label: "없음" }
@@ -250,9 +250,9 @@ domains:
           tier: critical
           weight_within_group: 0.35
           belief:
-            q: "교사가 우리를 계속 쓰는 ROI 산정식(예: 주당 시간 절약 × 시급 환산)을 한 페이지로 보여줄 수 있다."
+            q: "교사가 우리를 계속 쓰는 투자 대비 효과 (ROI) 산정식(예: 주당 시간 절약 × 시급 환산)을 한 페이지로 보여줄 수 있다."
           evidence:
-            q: "교사 ROI 한 페이지 자료 최신 갱신일"
+            q: "교사 투자 대비 효과 (ROI) 한 페이지 자료 최신 갱신일"
             type: choice
             options:
               - { v: 1, label: "없음" }
@@ -283,7 +283,7 @@ domains:
           belief:
             q: "신규 가입자 중 D1(가입 다음날)에 핵심 액션을 한 비율을 매일 본다."
           evidence:
-            q: "최근 30일 D1 activation rate"
+            q: "최근 30일 가입 다음날 활성화율 (D1 activation rate)"
             type: choice
             options:
               - { v: 1, label: "< 20% 또는 측정 안 함" }
@@ -304,7 +304,7 @@ domains:
           tier: important
           weight_within_group: 0.15
           belief:
-            q: "WAU/MAU 비율이 우리 제품의 사용 습관을 보여준다."
+            q: "주간/월간 활성 비율 (WAU/MAU) 이 우리 제품의 사용 습관을 보여준다."
           evidence:
             q: "WAU/MAU"
             type: choice
@@ -331,12 +331,12 @@ domains:
           tier: important
           weight_within_group: 0.10
           belief:
-            q: "분기 1회 Nielsen 10 usability heuristics 기준으로 핵심 화면(교사 대시보드·알림장 작성·학급 관리) 을 audit 한다."
+            q: "분기 1회 Nielsen 사용성 10원칙 (Nielsen 10 Usability Heuristics) 기준으로 핵심 화면(교사 대시보드·알림장 작성·학급 관리) 을 점검 (audit) 한다."
           evidence:
-            q: "최근 audit 점수 (10개 원칙 × 5점 만점)"
+            q: "최근 점검 (audit) 점수 (10개 원칙 × 5점 만점)"
             type: choice
             options:
-              - { v: 1, label: "audit 안 함 또는 < 25" }
+              - { v: 1, label: "점검 (audit) 안 함 또는 < 25" }
               - { v: 2, label: "25–34" }
               - { v: 3, label: "35–39" }
               - { v: 4, label: "40–44" }
@@ -349,7 +349,7 @@ domains:
           tier: important
           weight_within_group: 0.08
           belief:
-            q: "교사 5명 이상을 대상으로 한 사용성 테스트(think-aloud) 를 분기마다 진행하고 발견된 이슈를 다음 분기 백로그에 반영한다."
+            q: "교사 5명 이상을 대상으로 한 사용성 테스트 (think-aloud · 소리내어 생각하기) 를 분기마다 진행하고 발견된 이슈를 다음 분기 일감 (백로그) 에 반영한다."
           evidence:
             q: "지난 90일 진행한 사용성 테스트 세션 수"
             type: choice
@@ -369,7 +369,7 @@ domains:
           belief:
             q: "핵심 화면의 오류 메시지가 (a) 무엇이 잘못됐는지 (b) 어떻게 복구하는지 한 줄로 명확히 알려준다."
           evidence:
-            q: "오류 화면 명확성 audit 결과 (전체 중 명확 비율)"
+            q: "오류 화면 명확성 점검 (audit) 결과 (전체 중 명확 비율)"
             type: choice
             options:
               - { v: 1, label: "< 30% 또는 점검 안 함" }
@@ -388,9 +388,9 @@ domains:
           tier: important
           weight_within_group: 0.10
           belief:
-            q: "핵심 화면이 WCAG 2.2 AA 기준(색대비 4.5:1, 키보드 내비게이션, 타깃 크기 24×24px, focus 표시) 을 충족한다."
+            q: "핵심 화면이 웹 접근성 표준 (WCAG 2.2 AA) 기준(색대비 4.5:1, 키보드만으로 이동 가능, 누름 영역 24×24px, 포커스 표시) 을 충족한다."
           evidence:
-            q: "axe-core / Lighthouse 접근성 점수 평균"
+            q: "접근성 자동 검사 도구 (axe-core / Lighthouse) 점수 평균"
             type: choice
             options:
               - { v: 1, label: "< 70 또는 점검 안 함" }
@@ -407,16 +407,16 @@ domains:
           tier: supporting
           weight_within_group: 0.05
           belief:
-            q: "공공·B2G 채널 진입 시 필요한 한국형 웹 접근성(KWCAG 2.2) 인증 또는 자체 점검을 6개월 이내 완료했다."
+            q: "공공·정부 영업 (B2G) 채널 진입 시 필요한 한국형 웹 접근성 (KWCAG 2.2) 인증 또는 자체 점검을 6개월 이내 완료했다."
           evidence:
-            q: "KWCAG 자체점검 결과 또는 인증 상태"
+            q: "한국형 웹 접근성 (KWCAG) 자체점검 결과 또는 인증 상태"
             type: choice
             options:
               - { v: 1, label: "미점검" }
               - { v: 2, label: "자체점검 50% 미만 통과" }
               - { v: 3, label: "자체점검 50–84% 통과" }
               - { v: 4, label: "자체점검 ≥ 85% 통과" }
-              - { v: 5, label: "WA 인증 또는 동등 등급 보유" }
+              - { v: 5, label: "웹 접근성 (WA) 인증 또는 동등 등급 보유" }
             refresh_period_days: 180
           citation: "한국지능정보사회진흥원 KWCAG 2.2; 장애인차별금지법 21조"
           failure_trigger: "evidence.v <= 2"
@@ -428,9 +428,9 @@ domains:
           tier: important
           weight_within_group: 0.08
           belief:
-            q: "교사 핵심 페이지의 75%ile LCP (Largest Contentful Paint) 가 2.5초 이하다."
+            q: "교사 핵심 페이지의 첫 화면이 보이는 시간 (LCP · Largest Contentful Paint, 상위 75% 기준) 이 2.5초 이하다."
           evidence:
-            q: "최근 28일 P75 LCP"
+            q: "최근 28일 첫 화면이 보이는 시간 (LCP) 의 75% 분위 (P75)"
             type: choice
             options:
               - { v: 1, label: "≥ 6.0s 또는 측정 안 함" }
@@ -447,9 +447,9 @@ domains:
           tier: important
           weight_within_group: 0.08
           belief:
-            q: "P75 INP (Interaction to Next Paint, 2024년부터 FID 대체) 가 200ms 이하다 — 클릭·입력·탭이 답답하지 않다."
+            q: "버튼 응답 속도 (INP · Interaction to Next Paint, 2024년부터 FID 대체) 의 75% 분위가 200ms 이하다 — 클릭·입력·탭이 답답하지 않다."
           evidence:
-            q: "최근 28일 P75 INP"
+            q: "최근 28일 버튼 응답 속도 (INP) 의 75% 분위 (P75)"
             type: choice
             options:
               - { v: 1, label: "≥ 500ms 또는 측정 안 함" }
@@ -466,9 +466,9 @@ domains:
           tier: supporting
           weight_within_group: 0.05
           belief:
-            q: "P75 CLS (Cumulative Layout Shift) 가 0.1 이하다 — 화면이 갑자기 튀지 않는다."
+            q: "화면 튀는 정도 (CLS · Cumulative Layout Shift) 의 75% 분위가 0.1 이하다 — 화면이 갑자기 튀지 않는다."
           evidence:
-            q: "최근 28일 P75 CLS"
+            q: "최근 28일 화면 튀는 정도 (CLS) 의 75% 분위 (P75)"
             type: choice
             options:
               - { v: 1, label: "≥ 0.5 또는 측정 안 함" }
@@ -488,9 +488,9 @@ domains:
           tier: supporting
           weight_within_group: 0.06
           belief:
-            q: "디자인 토큰(색·간격·타이포)·핵심 컴포넌트 라이브러리·다크모드/터치 사이즈 가이드가 한 곳에 문서화되어 있다."
+            q: "디자인 토큰(색·간격·글꼴)·핵심 컴포넌트 라이브러리·다크모드/터치 크기 가이드가 한 곳에 문서화되어 있다."
           evidence:
-            q: "디자인 시스템 성숙도 단계 (Brad Frost atomic design)"
+            q: "디자인 시스템 성숙도 단계 (Brad Frost 의 Atomic Design 5단계)"
             type: choice
             options:
               - { v: 1, label: "1단계 — 토큰 미정의" }
@@ -506,9 +506,9 @@ domains:
           tier: important
           weight_within_group: 0.05
           belief:
-            q: "교사가 휴대폰으로 쓸 때 (a) 터치 타깃 최소 44×44px (b) 가로 스크롤 없음 (c) 입력 키보드 자연스러움 이 충족된다."
+            q: "교사가 휴대폰으로 쓸 때 (a) 누름 영역 최소 44×44px (b) 가로 스크롤 없음 (c) 입력 키보드 자연스러움 이 충족된다."
           evidence:
-            q: "모바일 UX audit 통과 항목 비율"
+            q: "모바일 화면 점검 (UX audit) 통과 항목 비율"
             type: choice
             options:
               - { v: 1, label: "< 50%" }
@@ -577,9 +577,9 @@ domains:
           tier: critical
           weight_within_group: 0.15
           belief:
-            q: "KISA 정보보호 자기점검을 6개월 이내에 완료하고 미흡 항목을 패치했다."
+            q: "한국인터넷진흥원 정보보호 자기점검 (KISA ISMS-P) 을 6개월 이내에 완료하고 미흡 항목을 보완했다."
           evidence:
-            q: "KISA 자기점검 최근 결과 (만점 100)"
+            q: "한국인터넷진흥원 자기점검 (KISA) 최근 결과 (만점 100)"
             type: choice
             options:
               - { v: 1, label: "안 함" }
@@ -799,7 +799,7 @@ domains:
           tier: important
           weight_within_group: 0.5
           belief:
-            q: "직전 분기 동안 'hypothesis → experiment → decision' 사이클을 세 번 이상 완주했다."
+            q: "직전 분기 동안 '가설 (hypothesis) → 실험 (experiment) → 의사결정 (decision)' 사이클을 세 번 이상 완주했다."
           evidence:
             q: "직전 분기 완료한 가설 검증 사이클 수"
             type: choice
@@ -832,16 +832,16 @@ domains:
           tier: critical
           weight_within_group: 0.5
           belief:
-            q: "AI 출력 품질을 모니터링하는 자동 평가 루프(Eval set + 회귀 테스트)가 작동한다."
+            q: "AI 출력 품질을 모니터링하는 자동 평가 루프 (평가 데이터셋 Eval set + 회귀 테스트) 가 작동한다."
           evidence:
-            q: "AI Eval 자동 실행 빈도"
+            q: "AI 자동 평가 (Eval) 실행 빈도"
             type: choice
             options:
               - { v: 1, label: "없음" }
               - { v: 2, label: "수동, 월 1회" }
               - { v: 3, label: "수동, 주 1회" }
               - { v: 4, label: "자동, 주 1회" }
-              - { v: 5, label: "자동, PR마다" }
+              - { v: 5, label: "자동, 코드 변경 (PR) 마다" }
           citation: "Anthropic 'Building effective agents' (2024); Hamel Husain 'LLMs as judges'"
           failure_trigger: "evidence.v <= 2"
           cadence: monthly
@@ -883,9 +883,9 @@ domains:
           tier: important
           weight_within_group: 0.5
           belief:
-            q: "랜딩페이지·이메일·세일즈 데크의 헤드라인을 ICP에게 직접 테스트해서 가장 잘 먹는 한 문장을 안다."
+            q: "랜딩페이지·이메일·세일즈 자료의 첫 한 줄 (헤드라인) 을 이상적 고객 (ICP) 에게 직접 테스트해서 가장 잘 먹는 한 문장을 안다."
           evidence:
-            q: "최근 90일 메시지 테스트 횟수 (Wynter / Five Second Test / 인터뷰)"
+            q: "최근 90일 메시지 테스트 횟수 (Wynter / Five Second Test / 1대1 인터뷰)"
             type: choice
             options:
               - { v: 1, label: "0회" }
@@ -915,7 +915,7 @@ domains:
           tier: critical
           weight_within_group: 0.4
           belief:
-            q: "핵심 의사결정권자 간 비전·역할·equity·exit 시점에 대한 정렬도가 4점(5점 만점) 이상이다."
+            q: "핵심 의사결정권자 간 비전·역할·지분 (equity)·매각 시점 (exit) 에 대한 정렬도가 4점(5점 만점) 이상이다."
           evidence:
             q: "최근 분기 리더십 정렬 자가평가 (5점 평균)"
             type: choice
@@ -935,9 +935,9 @@ domains:
           tier: critical
           weight_within_group: 0.3
           belief:
-            q: "1on1에서 핵심 인재 5명에게 '다음 12개월 우리 팀에서 일할 의향'을 묻고 그 답을 안다."
+            q: "1대1 면담 (1on1) 에서 핵심 인재 5명에게 '다음 12개월 우리 팀에서 일할 의향'을 묻고 그 답을 안다."
           evidence:
-            q: "핵심 인재 stay-intent 평균 (% who say YES with confidence)"
+            q: "핵심 인재 머물 의사 (stay-intent) 평균 (자신있게 YES 라고 답한 비율 %)"
             type: choice
             options:
               - { v: 1, label: "< 50% 또는 안 물음" }
@@ -957,7 +957,7 @@ domains:
           belief:
             q: "팀에서 나쁜 소식을 빠르고 솔직하게 공유하고, 책임을 묻기보다 학습으로 연결한다."
           evidence:
-            q: "분기 Westrum 5문항 평균 점수 (0–100)"
+            q: "분기 팀 정보 흐름 점수 (Westrum 5문항) 평균 (0–100)"
             type: choice
             options:
               - { v: 1, label: "< 40 (Pathological)" }
@@ -987,9 +987,9 @@ domains:
           tier: important
           weight_within_group: 0.4
           belief:
-            q: "분기마다 NPS 설문을 돌리고 Promoter/Passive/Detractor 분포를 본다."
+            q: "분기마다 추천 의향 설문 (NPS) 을 돌리고 추천자 (Promoter, 9–10점) / 중립 (Passive, 7–8점) / 비추천자 (Detractor, 0–6점) 분포를 본다."
           evidence:
-            q: "최근 분기 NPS"
+            q: "최근 분기 추천 의향 점수 (NPS)"
             type: choice
             options:
               - { v: 1, label: "< 0 또는 측정 안 함" }
@@ -1008,9 +1008,9 @@ domains:
           tier: important
           weight_within_group: 0.4
           belief:
-            q: "기존 고객 매출의 확장-이탈 잔액 NRR을 매월 계산한다."
+            q: "기존 고객 매출의 확장-이탈 잔액 (NRR · Net Revenue Retention, 고객 매출 유지율) 을 매월 계산한다."
           evidence:
-            q: "TTM NRR"
+            q: "최근 12개월 (TTM) 매출 유지율 (NRR)"
             type: choice
             options:
               - { v: 1, label: "< 85%" }
@@ -1041,9 +1041,9 @@ domains:
           tier: critical
           weight_within_group: 0.5
           belief:
-            q: "경쟁 거래 win-rate를 분기마다 계산하고 win/loss 인터뷰를 한다."
+            q: "경쟁 거래 승률 (win-rate) 을 분기마다 계산하고 수주·실주 (win/loss) 인터뷰를 한다."
           evidence:
-            q: "지난 분기 win-rate (경쟁 노출 거래 중 우리 win 비율)"
+            q: "지난 분기 승률 (win-rate, 경쟁 노출 거래 중 우리 수주 비율)"
             type: choice
             options:
               - { v: 1, label: "< 20% 또는 측정 안 함" }
@@ -1061,9 +1061,9 @@ domains:
           tier: important
           weight_within_group: 0.3
           belief:
-            q: "우리 moat 3가지를 한 문장씩 명문화하고 12개월 내 갱신했다."
+            q: "우리 진입장벽 (moat · 경쟁사가 따라오기 어려운 차별점) 3가지를 한 문장씩 명문화하고 12개월 내 갱신했다."
           evidence:
-            q: "moat 명문화 + 검증 상태"
+            q: "진입장벽 (moat) 명문화 + 검증 상태"
             type: choice
             options:
               - { v: 1, label: "정의 안 됨" }

@@ -5,6 +5,7 @@ import {
   STATUS_LABEL,
   STATUS_ORDER,
   type Status,
+  type Task,
 } from "@/lib/worklist/catalog";
 import type { AutoStatus } from "@/lib/worklist/derive";
 import { readKpiProgress } from "./_task-kpi-checklist";
@@ -13,6 +14,8 @@ interface Props {
   workspace: string;
   taskId: string;
   autoStatus: AutoStatus; // server-derived; "unknown" for manual_only
+  /** Task content hash 기반 KPI 캐시 lookup 에 필요. 없으면 KPI 진행률 표시 안 함. */
+  task?: Task;
 }
 
 interface OverrideEntry {
@@ -70,7 +73,7 @@ const STATUS_TONE: Record<Status, string> = {
   done: "bg-green text-paper border-green",
 };
 
-export function StatusPill({ workspace, taskId, autoStatus }: Props) {
+export function StatusPill({ workspace, taskId, autoStatus, task }: Props) {
   const [override, setOverride] = useState<Status | null>(null);
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -86,7 +89,7 @@ export function StatusPill({ workspace, taskId, autoStatus }: Props) {
     const refresh = () => {
       const ov = readOverride(workspace, taskId);
       setOverride(ov?.status ?? null);
-      setKpiProgress(readKpiProgress(workspace, taskId));
+      setKpiProgress(task ? readKpiProgress(workspace, task) : null);
     };
     refresh();
 
@@ -113,7 +116,7 @@ export function StatusPill({ workspace, taskId, autoStatus }: Props) {
       window.removeEventListener("worklist:change", handler);
       window.removeEventListener("storage", refresh);
     };
-  }, [workspace, taskId]);
+  }, [workspace, taskId, task]);
 
   // KPI-derived status takes effect ONLY if user hasn't manually overridden.
   // Manual override always wins so the user can mark "done" even before
