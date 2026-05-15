@@ -206,13 +206,15 @@ export function TaskKpiChecklist({ task, workspace }: Props) {
     refresh();
     // 다른 컴포넌트(특히 playbook popover, bulk generator)가 KPI를 새로 만들면 알림.
     // taskId 매칭 — 다른 카드의 변경은 무시해서 138개 동시 재렌더를 방지.
-    // 단, source === "kpi-hydrate" 는 워크스페이스 전체 hydrate 신호 →
-    // taskId 없어도 모든 카드 refresh 필요.
+    // 단, 워크스페이스 전체 hydrate 신호는 taskId 없어도 모든 카드 refresh 필요:
+    //   - "kpi-hydrate" : Supabase KPI 체크 일괄 hydrate
+    //   - "seed"        : bulk generator 의 번들/공유 캐시 시드 완료 →
+    //                     KPI 섹션이 "다 생성되면 나타나는" 증상 방지.
     const handler = (e: Event) => {
       const ce = e as CustomEvent<{ taskId?: string; source?: string }>;
       const tid = ce.detail?.taskId;
       const src = ce.detail?.source;
-      if (src === "kpi-hydrate") {
+      if (src === "kpi-hydrate" || src === "seed") {
         refresh();
         return;
       }

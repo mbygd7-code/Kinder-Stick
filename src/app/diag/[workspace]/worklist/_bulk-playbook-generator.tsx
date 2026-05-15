@@ -138,6 +138,11 @@ export function BulkPlaybookGenerator({ workspace, hasDiagnosis }: Props) {
   const [total, setTotal] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
+  // seeded: 번들 defaults + Supabase hydrate 가 모두 끝났음을 표시.
+  // Auto-start 효과는 이 플래그가 true 가 되기 전에는 절대 트리거되지 않음 →
+  // 새 브라우저(localStorage 비어있음) 에서 production 진입 시 Supabase 에 이미
+  // 캐시된 결과를 hydrate 받기 전에 AI 재생성이 잘못 시작되는 race 방지.
+  const [seeded, setSeeded] = useState(false);
   const cancelRef = useRef(false);
   const startedAtRef = useRef(0);
   const initRef = useRef(false);
@@ -166,21 +171,26 @@ export function BulkPlaybookGenerator({ workspace, hasDiagnosis }: Props) {
       const kStat = await hydrateKpiChecksFromShared(workspace);
       const initialDone = TASKS.filter((t) => hasPlaybook(t)).length;
       setDone(initialDone);
+      // seed 가 끝났음을 알림 → auto-start 효과가 이제 안전하게 평가 가능.
+      // 이 시점에 Supabase 에 캐시된 결과까지 모두 localStorage 에 시드되어 있음 →
+      // initialDone === total 이면 auto-start 가 자동으로 skip.
+      setSeeded(true);
       const totalSeeded = dStat.seeded + hStat.hydrated;
-      if (totalSeeded > 0) {
-        window.dispatchEvent(
-          new CustomEvent("worklist:change", {
-            detail: {
-              workspace,
-              source: "seed",
-              count: totalSeeded,
-              defaults: dStat.seeded,
-              shared: hStat.hydrated,
-              kpi_hydrated: kStat.hydrated,
-            },
-          }),
-        );
-      }
+      // 이벤트는 KPI checklist 등 외부 컴포넌트가 캐시 갱신을 즉시 반영하도록.
+      // count 가 0 이어도 항상 발행 → 새 브라우저에서 hydrate 됐을 때 KPI 섹션이
+      // "다 생성되면 나타나는" 증상 해결.
+      window.dispatchEvent(
+        new CustomEvent("worklist:change", {
+          detail: {
+            workspace,
+            source: "seed",
+            count: totalSeeded,
+            defaults: dStat.seeded,
+            shared: hStat.hydrated,
+            kpi_hydrated: kStat.hydrated,
+          },
+        }),
+      );
     })();
 
     const initialDone = TASKS.filter((t) => hasPlaybook(t)).length;
@@ -284,9 +294,15 @@ export function BulkPlaybookGenerator({ workspace, hasDiagnosis }: Props) {
   //      → 자동 재개 (사용자가 일시 중지하지 않은 한)
   //   2) 진단이 막 끝나서 첫 방문 (AUTO_FLAG 없음 + DISMISS 없음)
   //      → 최초 자동 시작
+  //
+  // CRITICAL: seed (defaults bundle + Supabase hydrate) 가 끝난 뒤에만 평가.
+  // 그렇지 않으면 새 브라우저(또는 production 첫 진입) 에서 localStorage 가
+  // 비어있어 done=0 으로 잘못 판정되어 이미 캐시된 카드까지 재생성하는
+  // race condition 이 발생함.
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (!hasDiagnosis) return;
+    if (!seeded) return; // ← seed 완료 전에는 자동 시작 금지
     if (phase !== "idle") return;
     if (done >= total && total > 0) return;
 
@@ -306,7 +322,7 @@ export function BulkPlaybookGenerator({ workspace, hasDiagnosis }: Props) {
     // 최초 자동 시작
     window.localStorage.setItem(AUTO_FLAG(workspace), Date.now().toString());
     void start();
-  }, [hasDiagnosis, phase, done, total, workspace, start]);
+  }, [hasDiagnosis, phase, done, total, workspace, start, seeded]);
 
   const pause = useCallback(() => {
     if (typeof window === "undefined") return;
