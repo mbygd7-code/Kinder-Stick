@@ -28,6 +28,12 @@ interface PlaybookLite {
 
 interface KpiCheckState {
   checked: number[];
+  /**
+   * KPI index → 사용자가 입력한 측정값 (자유 텍스트).
+   * 예: "+18%", "42", "85점". threshold 와 비교는 시각적으로만 (자동 파싱 X).
+   * 진단 evidence 로 흘러갈 때는 checked 여부만 신뢰 신호로 사용.
+   */
+  values?: Record<number, string>;
 }
 
 function loadPlaybookKpis(task: Task): PlaybookLite["kpis"] | null {
@@ -38,27 +44,39 @@ function loadPlaybookKpis(task: Task): PlaybookLite["kpis"] | null {
   return Array.isArray(data.kpis) ? data.kpis : null;
 }
 
-function loadKpiChecks(workspace: string, taskId: string): number[] {
-  if (typeof window === "undefined") return [];
+function loadKpiState(
+  workspace: string,
+  taskId: string,
+): { checked: number[]; values: Record<number, string> } {
+  if (typeof window === "undefined") return { checked: [], values: {} };
   try {
     const raw = window.localStorage.getItem(KPI_KEY(workspace, taskId));
-    if (!raw) return [];
+    if (!raw) return { checked: [], values: {} };
     const parsed = JSON.parse(raw) as KpiCheckState;
-    return Array.isArray(parsed.checked) ? parsed.checked : [];
+    return {
+      checked: Array.isArray(parsed.checked) ? parsed.checked : [],
+      values:
+        parsed.values && typeof parsed.values === "object" ? parsed.values : {},
+    };
   } catch {
-    return [];
+    return { checked: [], values: {} };
   }
 }
 
-function saveKpiChecks(
+function loadKpiChecks(workspace: string, taskId: string): number[] {
+  return loadKpiState(workspace, taskId).checked;
+}
+
+function saveKpiState(
   workspace: string,
   taskId: string,
   checked: number[],
+  values: Record<number, string>,
 ): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(
     KPI_KEY(workspace, taskId),
-    JSON.stringify({ checked }),
+    JSON.stringify({ checked, values }),
   );
   window.dispatchEvent(
     new CustomEvent("worklist:change", {
@@ -66,6 +84,7 @@ function saveKpiChecks(
     }),
   );
   // Supabase 공유 캐시 — fire-and-forget. 실패해도 localStorage 는 이미 저장됨.
+  // values 는 Phase 2 에서 evidence API 로 별도 전송됨 (체크 동기화와 분리).
   void uploadKpiChecksToShared(workspace, taskId, checked);
 }
 
@@ -191,6 +210,7 @@ interface Props {
 export function TaskKpiChecklist({ task, workspace }: Props) {
   const [kpis, setKpis] = useState<PlaybookLite["kpis"]>([]);
   const [checked, setChecked] = useState<Set<number>>(new Set());
+  const [values, setValues] = useState<Record<number, string>>({});
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -200,8 +220,9 @@ export function TaskKpiChecklist({ task, workspace }: Props) {
     const refresh = () => {
       const k = loadPlaybookKpis(task) ?? [];
       setKpis(k);
-      const c = loadKpiChecks(workspace, task.id);
-      setChecked(new Set(c));
+      const s = loadKpiState(workspace, task.id);
+      setChecked(new Set(s.checked));
+      setValues(s.values);
     };
     refresh();
     // 다른 컴포넌트(특히 playbook popover, bulk generator)가 KPI를 새로 만들면 알림.
@@ -258,12 +279,42 @@ export function TaskKpiChecklist({ task, workspace }: Props) {
   const toggle = useCallback(
     (idx: number) => {
       const next = new Set(checked);
+      const willBeChecked = !next.has(idx);
       if (next.has(idx)) next.delete(idx);
       else next.add(idx);
       setChecked(next);
-      saveKpiChecks(workspace, task.id, Array.from(next));
+      saveKpiState(workspace, task.id, Array.from(next), values);
+      // Phase 2: KPI 토글을 sub_item evidence 로 동기화 (fire-and-forget).
+      // 실패해도 UI 차단 X — 로컬 체크는 이미 저장됨.
+      void fetch("/api/worklist/kpi-evidence", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          workspace,
+          task_id: task.id,
+          kpi_index: idx,
+          kpi_name: kpis[idx]?.name,
+          checked: willBeChecked,
+          measured_value: values[idx],
+        }),
+        keepalive: true,
+      }).catch(() => {});
     },
-    [checked, workspace, task.id],
+    [checked, values, kpis, workspace, task.id],
+  );
+
+  const updateValue = useCallback(
+    (idx: number, value: string) => {
+      const next = { ...values };
+      if (value.trim() === "") {
+        delete next[idx];
+      } else {
+        next[idx] = value;
+      }
+      setValues(next);
+      saveKpiState(workspace, task.id, Array.from(checked), next);
+    },
+    [checked, values, workspace, task.id],
   );
 
   if (!mounted) return null;
@@ -339,30 +390,46 @@ export function TaskKpiChecklist({ task, workspace }: Props) {
                     aria-label={`${k.name} 체크`}
                   />
                 </label>
-                <label
-                  className="cursor-pointer min-w-0"
-                  onClick={() => toggle(i)}
-                >
-                  <p
-                    className={`t-display-4 text-ink ${
-                      isChecked ? "line-through decoration-2 text-ink/60" : ""
-                    }`}
+                <div className="min-w-0">
+                  <label
+                    className="cursor-pointer block"
+                    onClick={() => toggle(i)}
                   >
-                    {k.name}
-                  </p>
-                  <p className="t-body-sm mt-1.5">
-                    <span className="t-label mr-1.5 align-middle">목표</span>
-                    <strong className="font-semibold text-accent">
-                      <Emphasize text={k.threshold} />
-                    </strong>
-                  </p>
-                  {k.method ? (
-                    <p className="t-meta mt-1">
-                      <span className="t-label mr-1.5 align-middle">측정</span>
-                      <Emphasize text={k.method} />
+                    <p
+                      className={`t-display-4 text-ink ${
+                        isChecked ? "line-through decoration-2 text-ink/60" : ""
+                      }`}
+                    >
+                      {k.name}
                     </p>
-                  ) : null}
-                </label>
+                    <p className="t-body-sm mt-1.5">
+                      <span className="t-label mr-1.5 align-middle">목표</span>
+                      <strong className="font-semibold text-accent">
+                        <Emphasize text={k.threshold} />
+                      </strong>
+                    </p>
+                    {k.method ? (
+                      <p className="t-meta mt-1">
+                        <span className="t-label mr-1.5 align-middle">측정</span>
+                        <Emphasize text={k.method} />
+                      </p>
+                    ) : null}
+                  </label>
+                  {/* 측정값 입력 — Phase 1: 자유 텍스트, evidence API 로 흘러감.
+                       라벨 클릭이 toggle 을 발동시키지 않도록 div 안에 분리. */}
+                  <div className="mt-2 flex items-baseline gap-2 flex-wrap">
+                    <span className="t-label">실측값</span>
+                    <input
+                      type="text"
+                      value={values[i] ?? ""}
+                      onChange={(e) => updateValue(i, e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                      placeholder="예: +18%, 42, 85점"
+                      className="flex-1 min-w-[8rem] border border-ink-soft/40 bg-paper px-2 py-1 text-sm font-mono focus:outline-none focus:border-ink"
+                      aria-label={`${k.name} 실측값`}
+                    />
+                  </div>
+                </div>
               </li>
             );
           })}

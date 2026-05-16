@@ -203,7 +203,10 @@ export function BulkPlaybookGenerator({ workspace, hasDiagnosis }: Props) {
       return;
     }
     if (initialDone >= tot) {
-      setPhase("complete");
+      // 이미 모든 playbook 이 캐시된 상태로 진입 → 완료 패널을 띄우지 않음.
+      // 사용자가 이전 세션에서 이미 완료를 봤기 때문에 매번 보일 필요 없음.
+      // 이번 세션에서 running → complete 로 전이된 경우에만 완료 패널이 뜸.
+      setPhase("dismissed");
       return;
     }
   }, [workspace]);

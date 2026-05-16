@@ -661,7 +661,7 @@ function ContextStage({
           <Field label="역할 (자유 기재)">
             <input
               type="text"
-              placeholder="예: Founder/CEO, Head of Product, ..."
+              placeholder="예: 대표/CEO, 제품 책임자, 운영 리드 ..."
               value={context.role}
               onChange={(e) =>
                 setContext((c) => ({ ...c, role: e.target.value }))

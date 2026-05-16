@@ -321,10 +321,10 @@ export const GLOSSARY: Record<string, TermEntry> = {
   },
 
   // ──────────────────────────── Team / Culture ─────────────────────
-  "Founders Alignment": {
-    friendly: "공동대표 정렬",
-    professional: "Founders Alignment",
-    explain: "공동창업자 사이의 비전·역할·의사결정·exit 합의 정도. 4점 이하면 위험.",
+  "Leadership Alignment": {
+    friendly: "리더십 정렬",
+    professional: "Leadership Alignment",
+    explain: "공동 의사결정자 사이의 비전·역할·의사결정·승계 합의 정도. 4점 이하면 위험.",
     category: "ops",
   },
   Westrum: {

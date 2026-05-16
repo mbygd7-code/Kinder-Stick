@@ -8,18 +8,20 @@ import {
   getBoostDomains,
   getBoostPoints,
 } from "@/lib/worklist/catalog";
+import { readKpiProgress } from "../worklist/_task-kpi-checklist";
 
 /**
- * WorklistImpactBanner — 진단 결과 페이지에 워크리스트 진행을 반영한 점수를 표시.
+ * WorklistImpactBanner — 진단 결과 페이지에 워크리스트 KPI 충족을 반영한 점수.
  *
- * 사용자가 워크리스트에서 task 를 완료할 때마다 result page 의 점수가 자동으로
- * 갱신되어 노력의 효과가 즉시 가시화된다.
+ * 3-tier 모델 Phase 5:
+ *  - 이전: task status (done/in_progress/scheduled) 체크박스만으로 부스트
+ *  - 현재: KPI 충족 비율(%) 을 부스트 계수로 사용 → 실측 신뢰
  *
  * 동작:
- *  1. localStorage 에서 모든 task 의 status 읽음 (`worklist:{ws}:{taskId}`)
- *  2. status = "done" 인 task 의 boost_domains 별 boost_points 누적
- *  3. 도메인별 점수 변동 + 전체 점수 변동을 그래픽으로 표시
- *  4. "워크리스트 반영" / "원본 진단만" 토글
+ *  1. localStorage 의 모든 task KPI 체크 비율 읽음
+ *  2. percent/100 × boost_points 를 boost_domains 에 누적
+ *  3. KPI 가 정의되지 않은 task 는 영향 없음 (체크박스만으로는 점수 변동 X)
+ *  4. 도메인별 점수 변동 + 전체 점수 변동 그래픽 표시
  */
 
 interface DomainScore {
@@ -40,6 +42,7 @@ export function WorklistImpactBanner({
   baseline,
   baselineOverall,
 }: Props) {
+  const [kpiFactors, setKpiFactors] = useState<Record<string, number>>({});
   const [statuses, setStatuses] = useState<Record<string, Status>>({});
   const [mounted, setMounted] = useState(false);
 
@@ -47,20 +50,29 @@ export function WorklistImpactBanner({
     setMounted(true);
     const refresh = () => {
       if (typeof window === "undefined") return;
-      const map: Record<string, Status> = {};
+      const kpiMap: Record<string, number> = {};
+      const statusMap: Record<string, Status> = {};
       for (const t of TASKS) {
+        // KPI 충족 비율 (0~1)
+        const prog = readKpiProgress(workspace, t);
+        if (prog && prog.total > 0) {
+          kpiMap[t.id] = prog.checked / prog.total;
+        }
+        // status 는 카운터 표시용으로만 유지
         try {
           const raw = window.localStorage.getItem(
             `worklist:${workspace}:${t.id}`,
           );
-          if (!raw) continue;
-          const parsed = JSON.parse(raw) as { status: Status };
-          if (parsed.status) map[t.id] = parsed.status;
+          if (raw) {
+            const parsed = JSON.parse(raw) as { status: Status };
+            if (parsed.status) statusMap[t.id] = parsed.status;
+          }
         } catch {
           // ignore
         }
       }
-      setStatuses(map);
+      setKpiFactors(kpiMap);
+      setStatuses(statusMap);
     };
     refresh();
     window.addEventListener("worklist:change", refresh);
@@ -73,31 +85,24 @@ export function WorklistImpactBanner({
 
   if (!mounted) return null;
 
-  // 진행 중·완료 task의 boost 계산
-  // - done    : 100% boost
-  // - in_progress : 50% boost
-  // - scheduled : 10% boost
-  // - not_started : 0%
-  const factorFor = (s: Status | undefined): number => {
-    if (s === "done") return 1.0;
-    if (s === "in_progress") return 0.5;
-    if (s === "scheduled") return 0.1;
-    return 0;
-  };
-
+  // Phase 5: KPI 충족 비율 (0~1) 이 부스트 계수.
+  // 체크박스 status 는 더 이상 점수에 영향 X — 표시 카운터로만 유지.
   const boostsByDomain: Record<string, number> = {};
   let doneCount = 0;
   let totalCount = 0;
+  let kpiVerifiedCount = 0;
   for (const t of TASKS) {
     totalCount += 1;
     const s = statuses[t.id] ?? "not_started";
-    const f = factorFor(s);
     if (s === "done") doneCount += 1;
-    if (f === 0) continue;
-    const pts = getBoostPoints(t) * f;
-    const domains = getBoostDomains(t);
-    for (const d of domains) {
-      boostsByDomain[d] = (boostsByDomain[d] ?? 0) + pts;
+    const factor = kpiFactors[t.id] ?? 0;
+    if (factor > 0) {
+      if (factor === 1) kpiVerifiedCount += 1;
+      const pts = getBoostPoints(t) * factor;
+      const domains = getBoostDomains(t);
+      for (const d of domains) {
+        boostsByDomain[d] = (boostsByDomain[d] ?? 0) + pts;
+      }
     }
   }
 
@@ -136,9 +141,20 @@ export function WorklistImpactBanner({
               지금까지 한 일이 점수에 반영된 결과
             </h2>
             <p className="t-meta mt-1">
-              완료한 업무가 진단 도메인 점수에 즉시 가산됩니다 (현재{" "}
-              <strong className="font-semibold text-ink">{doneCount}</strong> /{" "}
-              {totalCount} 완료).
+              <strong className="font-semibold text-ink">KPI 충족</strong>이
+              점수에 반영됩니다 (KPI 모두 충족{" "}
+              <strong className="font-semibold text-ink">
+                {kpiVerifiedCount}
+              </strong>{" "}
+              · 일부 충족{" "}
+              <strong className="font-semibold text-ink">
+                {
+                  Object.values(kpiFactors).filter(
+                    (f) => f > 0 && f < 1,
+                  ).length
+                }
+              </strong>{" "}
+              · 업무 완료 카운트 {doneCount}/{totalCount}).
             </p>
           </div>
           {!hasAnyProgress ? (

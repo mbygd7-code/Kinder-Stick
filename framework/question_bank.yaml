@@ -62,7 +62,7 @@ domains:
   name_en: "Problem-Market Fit"
   tier: critical
   weight: 11
-  owner_role: ["Founder", "PM"]
+  owner_role: ["대표", "PM"]
   framework: "Christensen JTBD · Push of Situation · The Mom Test"
   thresholds: { red: 40, yellow: 60, green: 75 }
   groups:
@@ -138,7 +138,7 @@ domains:
   name_en: "Product-Market Fit"
   tier: critical
   weight: 17
-  owner_role: ["Founder", "PM"]
+  owner_role: ["대표", "PM"]
   framework: "Sean Ellis 40% Rule · Balfour Four Fits · Vohra PMF Engine"
   thresholds: { red: 40, yellow: 60, green: 75 }
   groups:
@@ -218,7 +218,7 @@ domains:
   name_en: "Teacher Buyer Economics"
   tier: critical
   weight: 13
-  owner_role: ["Founder", "PM", "CS"]
+  owner_role: ["대표", "PM", "CS"]
   framework: "교사 시간 절약 측정 · NPS · Continuation Intent · 누리과정 평가제 부합"
   thresholds: { red: 40, yellow: 60, green: 75 }
   groups:
@@ -925,7 +925,7 @@ domains:
               - { v: 3, label: "3.0–3.7" }
               - { v: 4, label: "3.7–4.3" }
               - { v: 5, label: "≥ 4.3" }
-          citation: "Wasserman *The Founder's Dilemmas* (2012); Dharmesh Shah Founders Agreement"
+          citation: "Lencioni 5 Dysfunctions; Westrum Culture; 팀 합의 템플릿"
           failure_trigger: "evidence.v <= 2"
           cadence: quarterly
     - code: A11.RUN
@@ -1029,7 +1029,7 @@ domains:
   name_en: "Competitive Intelligence"
   tier: supporting
   weight: 2
-  owner_role: ["Founder", "PMM"]
+  owner_role: ["대표", "PMM"]
   framework: "Porter Five Forces · Crayon Win/Loss · JTBD Competitive Set"
   thresholds: { red: 35, yellow: 55, green: 70 }
   notes: "한국 EdTech는 대형사(웅진·교원·아이스크림)가 후발 진입하면 1년 안에 장악할 위험."

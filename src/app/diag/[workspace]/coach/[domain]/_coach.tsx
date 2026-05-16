@@ -222,7 +222,14 @@ export function CoachClient({
             domain_code: domain.code,
           }),
         });
-        const json: SessionStartResponse = await res.json();
+        // 빈 body / non-JSON 응답(500 empty body 등)에도 견고하도록 안전한 파싱.
+        const text = await res.text();
+        let json: SessionStartResponse;
+        try {
+          json = text ? (JSON.parse(text) as SessionStartResponse) : ({ ok: false, message: `서버 응답 없음 (HTTP ${res.status})` } as SessionStartResponse);
+        } catch {
+          json = { ok: false, message: `서버가 유효하지 않은 JSON 반환 (HTTP ${res.status}): ${text.slice(0, 200)}` } as SessionStartResponse;
+        }
         if (!res.ok || !json.ok) {
           setError(json.message ?? "세션 시작 실패");
           return;
@@ -513,7 +520,7 @@ export function CoachClient({
             <p className="kicker mb-2">Analyzing</p>
             <h2 className="font-display text-2xl">코치가 응답을 분석 중…</h2>
             <p className="mt-2 text-ink-soft">
-              진단 응답을 retrieve하고, playbook을 매칭하고, Claude 4.6 Sonnet에 분석을 요청합니다. 보통 20–30초 걸립니다.
+              진단 응답을 retrieve하고, playbook을 매칭하고, AI에 분석을 요청합니다. 보통 20–30초 걸립니다.
             </p>
             <div className="mt-4 bar-track">
               <div className="bar-fill accent" style={{ width: "33%" }} />

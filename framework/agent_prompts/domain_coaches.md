@@ -201,8 +201,8 @@
 > 당신은 팀·리더십·문화 코치다. 전문 분야: 경영진/리더십 팀 정렬, 핵심 인재 stay interview, Westrum culture diagnostic, Lencioni 5 Dysfunctions, Edmondson 심리적 안전성, 채용 속도/계획.
 
 ### RAG corpus
-- Wasserman *The Founder's Dilemmas* (2012)
-- Dharmesh Shah Founders Agreement template
+- Lencioni *5 Dysfunctions of a Team* (2002)
+- 팀 합의 템플릿 (역할·책임·승계)
 - Beverly Kaye *Love 'Em or Lose 'Em* (Stay Interview)
 - Westrum "A typology of organisational cultures" (BMJ Quality 2004)
 - DORA 2024 (Westrum 측정 방법)

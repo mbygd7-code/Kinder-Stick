@@ -188,16 +188,23 @@ export default async function HomePage({ params, searchParams }: Props) {
   const { injectActiveSurveyResults } = await import(
     "@/lib/surveys/inject"
   );
-  const surveyInjections = await injectActiveSurveyResults(workspace).catch(
-    () => [],
+  const { injectWorklistKpiResults } = await import(
+    "@/lib/surveys/inject-worklist-kpi"
   );
+  const [surveyInjections, worklistKpiInjections] = await Promise.all([
+    injectActiveSurveyResults(workspace).catch(() => []),
+    injectWorklistKpiResults(workspace).catch(() => []),
+  ]);
+  // 3-tier 모델: 진단 응답 + 자동 설문 + 워크리스트 KPI 충족이 모두 같은 가중평균에 흘러감.
+  // 워크리스트 KPI 는 evidence_recorded_at 의 time decay 로 신선도 가중치 적용됨.
+  const allInjections = [...surveyInjections, ...worklistKpiInjections];
   // 운영 컨텍스트 기반 적응 프로필 — 점수·실패확률에 T1 가중치, T3 추가 카드,
   // inactive 면제 적용. OpsContext 없으면 null (기본 frame 사용 — 적응 없음).
   const adaptationProfile = await fetchDiagnosisProfile(workspace);
   const aggregate = aggregateRespondents(
     framework,
     rows,
-    surveyInjections,
+    allInjections,
     adaptationProfile,
   );
 
@@ -603,10 +610,12 @@ export default async function HomePage({ params, searchParams }: Props) {
             </h2>
           </div>
           <span className="label-mono">
-            {aggregate.fp["6m"].red_critical_domains.length > 0
-              ? `빨강 ${aggregate.fp["6m"].red_critical_domains.length}개 · `
+            {worklistKpiInjections.length > 0
+              ? `KPI 검증 ${worklistKpiInjections.length}건${aggregate.fp["6m"].red_critical_domains.length > 0 ? " · " : ""}`
               : ""}
-            클릭 → AI 코치
+            {aggregate.fp["6m"].red_critical_domains.length > 0
+              ? `빨강 ${aggregate.fp["6m"].red_critical_domains.length}개`
+              : ""}
           </span>
         </div>
 
@@ -645,9 +654,8 @@ export default async function HomePage({ params, searchParams }: Props) {
               const pct = score === null ? 0 : Math.max(0, Math.min(100, score));
               return (
                 <li key={d.code}>
-                  <a
-                    href={`/diag/${workspace}/coach/${d.code}`}
-                    className="grid grid-cols-12 items-center gap-3 py-3.5 hover:bg-paper-soft/50 px-2 -mx-2 transition-colors group"
+                  <div
+                    className="grid grid-cols-12 items-center gap-3 py-3.5 px-2 -mx-2"
                   >
                     {/* 코드 */}
                     <span className="col-span-2 sm:col-span-1 font-mono text-sm text-ink-soft tabular-nums">
@@ -689,7 +697,7 @@ export default async function HomePage({ params, searchParams }: Props) {
 
                     {/* 점수 숫자 */}
                     <span
-                      className={`col-span-2 sm:col-span-2 text-right font-display text-xl sm:text-2xl leading-none tabular-nums ${
+                      className={`col-span-3 sm:col-span-3 text-right font-display text-xl sm:text-2xl leading-none tabular-nums ${
                         tone === "red"
                           ? "text-signal-red"
                           : tone === "amber"
@@ -702,11 +710,7 @@ export default async function HomePage({ params, searchParams }: Props) {
                       {score === null ? "—" : Math.round(score)}
                     </span>
 
-                    {/* 화살표 */}
-                    <span className="col-span-1 text-right font-mono text-base text-ink-soft group-hover:text-ink transition-colors">
-                      →
-                    </span>
-                  </a>
+                  </div>
                 </li>
               );
             })}
@@ -969,12 +973,12 @@ function buildThisWeekList(
     const dom = framework.domains.find((d) => d.code === f.domain_code);
     items.push({
       key: `finding:${f.id}`,
-      href: `/diag/${workspace}/coach/${f.domain_code}`,
-      kind: "긴급 코칭",
+      href: `/diag/${workspace}/worklist`,
+      kind: "우선 점검",
       title: f.summary ?? `${dom?.name_ko ?? f.domain_code} 영역 점검`,
       subtitle: dom
-        ? `${f.domain_code} · ${dom.name_ko} — 코치와 SMART 액션 채택`
-        : "코치 화면에서 SMART 액션 채택",
+        ? `${f.domain_code} · ${dom.name_ko} — 워크리스트에서 우선 업무 확인`
+        : "워크리스트에서 우선 업무 확인",
       meta: `severity ${f.severity}`,
       tone: "red",
       priority: -500 - f.severity,
@@ -1111,7 +1115,7 @@ function NoDiagYet({
         <p className="mt-5 text-lg text-ink-soft leading-relaxed">
           이 카드(<span className="font-mono">{workspace}</span>)는 아직 응답이 없습니다.
           12개 도메인 진단(약 20–30분)을 마치면 종합 건강도·6/12개월 실패확률 ·도메인별 점수가
-          자동 계산되고, 빨간 도메인은 AI 코치가 SMART 액션을 제안합니다.
+          자동 계산되고, 위험 영역은 워크리스트에서 우선 업무로 표시됩니다.
         </p>
         <a
           href={`/diag/${workspace}`}
@@ -1510,27 +1514,14 @@ function DiagnosisSummarySection({
       <div className="mt-14 pt-6 border-t border-ink-soft/30">
         <p className="kicker mb-3">다음 행동</p>
         <div className="flex flex-wrap gap-3 items-center">
-          {redDomains.length > 0 ? (
-            <a
-              href={`/diag/${workspace}/coach/${redDomains[0].code}`}
-              className="btn-primary"
-            >
-              우선순위 1번 — {redDomains[0].code} {redDomains[0].name}
-              <span className="font-mono text-xs">→</span>
-            </a>
-          ) : amberDomains.length > 0 ? (
-            <a
-              href={`/diag/${workspace}/coach/${amberDomains[0].code}`}
-              className="btn-primary"
-            >
-              노랑 영역 점검 — {amberDomains[0].code} {amberDomains[0].name}
-              <span className="font-mono text-xs">→</span>
-            </a>
-          ) : (
-            <a href={`/diag/${workspace}/worklist`} className="btn-primary">
-              워크리스트로 이동 <span className="font-mono text-xs">→</span>
-            </a>
-          )}
+          <a href={`/diag/${workspace}/worklist`} className="btn-primary">
+            {redDomains.length > 0
+              ? `우선순위 — ${redDomains[0].code} ${redDomains[0].name}`
+              : amberDomains.length > 0
+                ? `점검 영역 — ${amberDomains[0].code} ${amberDomains[0].name}`
+                : "워크리스트로 이동"}
+            <span className="font-mono text-xs">→</span>
+          </a>
           <a
             href={`/diag/${workspace}/result`}
             className="label-mono hover:text-ink underline-offset-2 hover:underline"
@@ -1594,10 +1585,7 @@ function DomainTierColumn({
         <ul className="space-y-2">
           {items.slice(0, 5).map((d) => (
             <li key={d.code} className="text-sm leading-snug">
-              <a
-                href={`/diag/${workspace}/coach/${d.code}`}
-                className="hover:text-ink group flex items-baseline gap-2"
-              >
+              <div className="flex items-baseline gap-2">
                 <span
                   className={`font-mono text-xs shrink-0 ${toneColor.split(" ")[0]}`}
                 >
@@ -1607,7 +1595,7 @@ function DomainTierColumn({
                 <span className="label-mono tabular-nums shrink-0">
                   {Math.round(d.score ?? 0)}
                 </span>
-              </a>
+              </div>
             </li>
           ))}
           {items.length > 5 ? (

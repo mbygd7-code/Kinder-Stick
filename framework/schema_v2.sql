@@ -193,7 +193,7 @@ create table if not exists coaching_actions (
   title text not null,
   smart_payload jsonb not null,             -- {specific, measurable, owner_role, deadline_days, verification_metric}
   owner_id uuid references auth.users(id),
-  owner_role text,                          -- "Founder","PM","CTO" 등 — 사람 미배정 시
+  owner_role text,                          -- "대표","PM","CTO" 등 — 사람 미배정 시
   deadline timestamptz,
   status text default 'proposed' check (status in (
     'proposed','accepted','in_progress','completed','verified','failed','abandoned'

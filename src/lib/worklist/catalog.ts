@@ -103,6 +103,12 @@ export interface Task {
   /** 1개 업무 완료 시 boost_domains 각 도메인에 더해질 점수. 기본 8. */
   boost_points?: number;
   /**
+   * 이 task 의 KPI 충족이 evidence 로 흘러갈 sub_item code 목록 (예: "A2.SE.40").
+   * 미설정 시 task.boost_domains/task.domain 의 모든 critical sub_item 으로 자동 확장.
+   * AI 매핑 스크립트(scripts/map-tasks-to-subitems.ts)로 채워질 수 있음.
+   */
+  kpi_sub_items?: string[];
+  /**
    * 이 task 가 가장 우선시 되어야 하는 제품 출시 단계.
    * 없으면 모든 stage 에서 동일 가중치. 우선순위 점수 산정에 사용.
    */
@@ -1826,16 +1832,16 @@ export const TASKS: Task[] = [
     team: "director",
     phase: "foundation",
     funnel_stage: "internal",
-    title: "공동의사결정자 정렬 워크숍 (반기)",
-    why: "리더십 정렬이 4점(5점 만점) 미만이면 다음 분기 결정마다 마찰. 정기 워크숍으로 비전·역할·equity·이탈 시나리오 합의.",
+    title: "공동 의사결정자 정렬 워크숍 (반기)",
+    why: "리더십 정렬이 4점(5점 만점) 미만이면 다음 분기 결정마다 마찰. 정기 워크숍으로 비전·역할·책임 분배·이탈 시나리오 합의.",
     cadence: "semi_annual",
     tier: "must",
     domain: "A11",
     boost_domains: ["A11"],
     auto: { kind: "evidence_recorded_for", code: "A11" },
     description:
-      "1) 반기마다 4–6시간 오프사이트 미팅. 2) 비전·역할·equity·exit 시점 한 페이지로 합의 문서화. 3) 다음 90일 핵심 의사결정 3개를 사전에 합의. 산출물: 정렬 합의문 + 결정 매트릭스.",
-    hint: "Wasserman *Founder's Dilemmas*; Dharmesh Shah Founders Agreement template",
+      "1) 반기마다 4–6시간 오프사이트 미팅. 2) 비전·역할·책임 분배·승계 시점 한 페이지로 합의 문서화. 3) 다음 90일 핵심 의사결정 3개를 사전에 합의. 산출물: 정렬 합의문 + 결정 매트릭스.",
+    hint: "Lencioni 5 Dysfunctions; Westrum Culture; 팀 합의 템플릿",
   },
   {
     id: "dir.g.stay_interview",

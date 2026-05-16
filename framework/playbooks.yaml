@@ -27,9 +27,9 @@ playbooks:
     최근 만난 교사 5명을 떠올려보세요. 그들이 우리 솔루션을 듣고 다음 학기에 직접 쓰겠다고 결정한 분이 몇 명인가요?
     결정 안 한 분들은 무엇을 더 급하다고 느끼고 있었나요?
   smart_actions:
-    - { owner: "Founder", deadline_days: 14, action: "도입 중단·미도입 교사 8명 1:1 인터뷰 — Mom Test §3 push/pull 질문 사용" }
+    - { owner: "대표", deadline_days: 14, action: "도입 중단·미도입 교사 8명 1:1 인터뷰 — Mom Test §3 push/pull 질문 사용" }
     - { owner: "PM",      deadline_days: 21, action: "Push-Pull-Anxiety-Habit 매트릭스로 분류, 'urgent' 표현 추출" }
-    - { owner: "Founder", deadline_days: 30, action: "ICP를 'urgent 교사 케이스'로 좁힌 한 문장 가설 명문화 + 다음 30 deal에서 검증" }
+    - { owner: "대표", deadline_days: 30, action: "ICP를 'urgent 교사 케이스'로 좁힌 한 문장 가설 명문화 + 다음 30 deal에서 검증" }
   verify:
     metric: "A1.JTBD.URGENCY.evidence.v >= 3 AND 신규 deal cycle < 60d"
     after_days: 60
@@ -43,7 +43,7 @@ playbooks:
   diagnostic_q: "지난 분기 활성 교사 사용자 10명의 (지역·기관 유형·연차·담임 학급 규모)를 표로 그려보면, 가장 큰 클러스터가 전체의 몇 %를 차지하나요?"
   smart_actions:
     - { owner: "PM", deadline_days: 7,  action: "활성 교사 코호트 분석 — 가장 큰 클러스터 식별" }
-    - { owner: "Founder", deadline_days: 14, action: "ICP 한 문장 정의 (예: '서울·경기 사립 어린이집의 30대 4–7년차 담임 교사')" }
+    - { owner: "대표", deadline_days: 14, action: "ICP 한 문장 정의 (예: '서울·경기 사립 어린이집의 30대 4–7년차 담임 교사')" }
     - { owner: "Marketing", deadline_days: 30, action: "ICP 외 채널·광고·이벤트 비용 30% 컷, ICP에 재배분" }
   verify:
     metric: "ICP segment의 신규 결제율 +30%"
@@ -57,7 +57,7 @@ playbooks:
     primary: "A1.JTBD.LANG.evidence.v <= 2"
   diagnostic_q: "지난 30일 동안 잠재·활성·이탈 교사와 1:1 대화를 각각 몇 번 했나요?"
   smart_actions:
-    - { owner: "Founder", deadline_days: 7,  action: "다음 21일 안에 교사 8명 인터뷰 일정 잡기 — 활성·미도입·이탈 각 카테고리에서" }
+    - { owner: "대표", deadline_days: 7,  action: "다음 21일 안에 교사 8명 인터뷰 일정 잡기 — 활성·미도입·이탈 각 카테고리에서" }
     - { owner: "PM",      deadline_days: 21, action: "인터뷰 노트 텍스트 분석 — 동일 표현 빈도 카운트" }
     - { owner: "PM",      deadline_days: 30, action: "Top 3 표현으로 product copy 1차 재작성, A/B 테스트" }
   verify:
@@ -77,7 +77,7 @@ playbooks:
   diagnostic_q: "Very disappointed라고 답한 사람들의 직무·기관 유형·사용 빈도가 다른 응답자와 다른 점은 무엇인가요?"
   smart_actions:
     - { owner: "PM",       deadline_days: 14, action: "VD 응답자 8명 1:1 인터뷰 (Mom Test 방식)" }
-    - { owner: "Founder",  deadline_days: 7,  action: "ICP 한 문장 재정의" }
+    - { owner: "대표",  deadline_days: 7,  action: "ICP 한 문장 재정의" }
     - { owner: "PM",       deadline_days: 21, action: "핵심 세그먼트 전용 onboarding 분기 A/B" }
   verify:
     metric: "핵심 세그먼트의 M1 retention >= 60%"
@@ -91,7 +91,7 @@ playbooks:
     primary: "A2.VALUE.ECHO.evidence.v <= 2"
   diagnostic_q: "사용자가 자기 입으로 가치를 말한 5개 quote 중 우리 마케팅 카피와 겹치는 단어는 몇 개인가요?"
   smart_actions:
-    - { owner: "Founder",  deadline_days: 7,  action: "최근 30일 NPS·인터뷰·고객지원 대화에서 30 quote 수집" }
+    - { owner: "대표",  deadline_days: 7,  action: "최근 30일 NPS·인터뷰·고객지원 대화에서 30 quote 수집" }
     - { owner: "PMM",      deadline_days: 14, action: "Top-3 user-language phrase 도출" }
     - { owner: "Marketing", deadline_days: 21, action: "랜딩페이지 카피 전면 교체, 5초 테스트로 검증" }
   verify:
@@ -125,9 +125,9 @@ playbooks:
     primary: "A3.BUYER.WTP.evidence.v == 1 AND stage IN [open_beta, ga_early]"
   diagnostic_q: "지난 6개월 동안 우리 제품을 무료로 쓰던 교사 중에 '다음 학기에도 쓰겠다'고 명시적으로 답했다가 결국 안 쓴 분이 몇 명인가요? 그분들이 든 이유는?"
   smart_actions:
-    - { owner: "Founder", deadline_days: 14, action: "다음 학기 의사 보였던 교사 5명 직접 인터뷰 — 막힌 지점 파악" }
+    - { owner: "대표", deadline_days: 14, action: "다음 학기 의사 보였던 교사 5명 직접 인터뷰 — 막힌 지점 파악" }
     - { owner: "PMM",     deadline_days: 21, action: "교사 ROI 한 페이지 자료 작성 (주당 시간 절감·평가제 부합·학부모 소통 효율)" }
-    - { owner: "Founder", deadline_days: 30, action: "5명에게 paid pilot 제안 — 첫 유료 교사 만들기 (B2C 가격 또는 기관 결제 승인 동반)" }
+    - { owner: "대표", deadline_days: 30, action: "5명에게 paid pilot 제안 — 첫 유료 교사 만들기 (B2C 가격 또는 기관 결제 승인 동반)" }
   verify:
     metric: "유료 전환 교사 ≥ 3명"
     after_days: 60
@@ -338,7 +338,7 @@ playbooks:
   smart_actions:
     - { owner: "Curriculum Lead", deadline_days: 21, action: "전 콘텐츠 5영역 태깅" }
     - { owner: "Curriculum Lead", deadline_days: 30, action: "평가제 지표 매핑 매트릭스 작성" }
-    - { owner: "Founder",         deadline_days: 60, action: "외부 자문 (유아교육 전문가) 검수 1회" }
+    - { owner: "대표",         deadline_days: 60, action: "외부 자문 (유아교육 전문가) 검수 1회" }
   verify:
     metric: "매핑률 >= 80%, 외부 자문 통과"
     after_days: 60
@@ -628,8 +628,8 @@ playbooks:
     primary: "A14.MOAT.DEFINED.evidence.v <= 2"
   diagnostic_q: "고객이 우리를 떠나 경쟁사로 가지 못하는 이유 3가지를 한 문장씩 답할 수 있나요?"
   smart_actions:
-    - { owner: "Founder", deadline_days: 14, action: "7 Powers 워크숍 — 우리에게 해당하는 power 식별" }
-    - { owner: "Founder", deadline_days: 21, action: "moat 3가지 한 문장씩 명문화" }
+    - { owner: "대표", deadline_days: 14, action: "7 Powers 워크숍 — 우리에게 해당하는 power 식별" }
+    - { owner: "대표", deadline_days: 21, action: "moat 3가지 한 문장씩 명문화" }
     - { owner: "PMM",     deadline_days: 30, action: "각 moat 검증 데이터 수집 (정량·정성)" }
   verify:
     metric: "moat 3개 명문화 + 2개 이상 데이터 검증"
@@ -645,7 +645,7 @@ playbooks:
   smart_actions:
     - { owner: "PMM",     deadline_days: 7,  action: "competitive watchlist 5곳 (대형사 + 직접경쟁사) 정의" }
     - { owner: "PMM",     deadline_days: 14, action: "월 1회 watch report — 채용·보도자료·제품 변경 요약" }
-    - { owner: "Founder", deadline_days: 30, action: "대응 시나리오 3개 (대형사가 진입 시) 사전 작성" }
+    - { owner: "대표", deadline_days: 30, action: "대응 시나리오 3개 (대형사가 진입 시) 사전 작성" }
   verify:
     metric: "월 watch report 발행, 시나리오 문서화 완료"
     after_days: 30

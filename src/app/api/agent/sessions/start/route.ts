@@ -120,7 +120,21 @@ export async function POST(req: Request) {
   }
 
   const stage = ((rows[rows.length - 1] as DiagnosisRow).stage ?? "open_beta") as Stage;
-  const org = await ensureWorkspaceOrg(sb, workspace_id, stage);
+  let org;
+  try {
+    org = await ensureWorkspaceOrg(sb, workspace_id, stage);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    // 흔한 원인: organizations_stage_check constraint 가 옛 enum 을 가지고 있어 실패.
+    // 마이그레이션 framework/migrations/2026_05_19_organizations_stage_constraint.sql 실행 안내.
+    return NextResponse.json(
+      {
+        ok: false,
+        message: `organization 초기화 실패: ${msg}. DB 마이그레이션이 필요할 수 있습니다 (framework/migrations/2026_05_19_organizations_stage_constraint.sql).`,
+      },
+      { status: 500 },
+    );
+  }
 
   // Load framework + domain
   const framework = loadFramework();
